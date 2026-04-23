@@ -1,19 +1,25 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from './useAuth'
 import { getApiErrorMessage } from './api'
 import logoPath from './lappui-mark.svg'
 
-function validateLoginForm({ email, password }) {
+interface LoginFormState {
+  email: string
+  password: string
+}
+
+function validateLoginForm({ email, password }: LoginFormState) {
   const normalizedEmail = email.trim()
 
   if (!normalizedEmail) {
-    return 'Informe o e-mail da clínica.'
+    return 'Informe o e-mail da clinica.'
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    return 'Informe um e-mail válido.'
+    return 'Informe um e-mail valido.'
   }
 
   if (!password.trim()) {
@@ -26,19 +32,19 @@ function validateLoginForm({ email, password }) {
 export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ email: '', password: '' })
+  const [form, setForm] = useState<LoginFormState>({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [authError, setAuthError] = useState('')
 
-  function updateField(key) {
-    return event => {
+  function updateField(key: keyof LoginFormState) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value
       setAuthError('')
       setForm(current => ({ ...current, [key]: value }))
     }
   }
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const validationMessage = validateLoginForm(form)
@@ -53,12 +59,13 @@ export default function Login() {
 
     try {
       const authenticatedUser = await login(form.email.trim().toLowerCase(), form.password)
-      toast.success('Sessão iniciada com sucesso')
+      toast.success('Sessao iniciada com sucesso')
       navigate(authenticatedUser?.role === 'SUPPORT' ? '/suporte' : '/painel')
     } catch (error) {
-      const message = error?.response?.status === 404
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const message = status === 404
         ? 'Nenhuma conta encontrada com este e-mail.'
-        : getApiErrorMessage(error, 'Não foi possível entrar')
+        : getApiErrorMessage(error, 'Nao foi possivel entrar')
 
       setAuthError(message)
       toast.error(message)
@@ -76,14 +83,14 @@ export default function Login() {
           </div>
           <div className="login-brand-copy">
             <strong className="login-brand-name">L'Appui</strong>
-            <p className="login-brand-subtitle">Acesso ao painel da clínica</p>
+            <p className="login-brand-subtitle">Acesso ao painel da clinica</p>
           </div>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit} noValidate>
           <div className="login-heading">
             <h1>Entrar</h1>
-            <p>Use seu e-mail e senha para acessar a operação da clínica.</p>
+            <p>Use seu e-mail e senha para acessar a operacao da clinica.</p>
           </div>
 
           <div className="form-group">
@@ -132,7 +139,7 @@ export default function Login() {
           </button>
 
           <p className="login-register-row">
-            Ainda não possui conta? <Link className="login-register-link" to="/register">Cadastrar</Link>
+            Ainda nao possui conta? <Link className="login-register-link" to="/register">Cadastrar</Link>
           </p>
         </form>
       </section>

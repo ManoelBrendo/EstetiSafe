@@ -1,9 +1,11 @@
 ﻿import { Suspense, lazy, useEffect } from 'react'
+import type { ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider, useAuth } from './useAuth'
 import MarketingSite from './MarketingSite'
 import { authStorage } from './api'
+import type { AuthUser } from './types'
 
 const Layout = lazy(() => import('./Layout').then(module => ({ default: module.Layout })))
 const Login = lazy(() => import('./Login'))
@@ -23,7 +25,11 @@ const ProfissionalFicha = lazy(() => import('./ProfissionalFicha'))
 const SupportHub = lazy(() => import('./SupportHub'))
 const SupportContato = lazy(() => import('./SupportContato'))
 
-function RouteLoader({ label = "Preparando sua experiência L'Appui..." }) {
+interface RouteLoaderProps {
+  label?: string
+}
+
+function RouteLoader({ label = "Preparando sua experiencia L'Appui..." }: RouteLoaderProps) {
   return (
     <div className="loading-page loading-page-full">
       <span className="spinner" />
@@ -32,7 +38,12 @@ function RouteLoader({ label = "Preparando sua experiência L'Appui..." }) {
   )
 }
 
-function LazyScreen({ children, label }) {
+interface ScreenWrapperProps {
+  children: ReactNode
+  label?: string
+}
+
+function LazyScreen({ children, label }: ScreenWrapperProps) {
   return (
     <Suspense fallback={<RouteLoader label={label} />}>
       {children}
@@ -40,7 +51,7 @@ function LazyScreen({ children, label }) {
   )
 }
 
-function LayoutScreen({ children, label }) {
+function LayoutScreen({ children, label }: ScreenWrapperProps) {
   return (
     <LazyScreen label={label}>
       <Layout>{children}</Layout>
@@ -48,36 +59,36 @@ function LayoutScreen({ children, label }) {
   )
 }
 
-function getAuthenticatedHome(user) {
+function getAuthenticatedHome(user?: AuthUser | null) {
   return user?.role === 'SUPPORT' ? '/suporte' : '/painel'
 }
 
-function PrivateRoute({ children }) {
+function PrivateRoute({ children }: { children: ReactNode }) {
   const { isAuth, isReady } = useAuth()
   if (!isReady) return <RouteLoader />
-  return isAuth ? children : <Navigate to="/login" replace />
+  return isAuth ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-function ClinicRoute({ children }) {
+function ClinicRoute({ children }: { children: ReactNode }) {
   const { isAuth, isReady, user } = useAuth()
   if (!isReady) return <RouteLoader />
   if (!isAuth) return <Navigate to="/login" replace />
   if (user?.role === 'SUPPORT') return <Navigate to="/suporte" replace />
-  return children
+  return <>{children}</>
 }
 
-function SupportOnlyRoute({ children }) {
+function SupportOnlyRoute({ children }: { children: ReactNode }) {
   const { isAuth, isReady, user } = useAuth()
-  if (!isReady) return <RouteLoader label="Validando acesso técnico..." />
+  if (!isReady) return <RouteLoader label="Validando acesso tecnico..." />
   if (!isAuth) return <Navigate to="/login" replace />
   if (user?.role !== 'SUPPORT') return <Navigate to="/painel" replace />
-  return children
+  return <>{children}</>
 }
 
-function PublicRoute({ children }) {
+function PublicRoute({ children }: { children: ReactNode }) {
   const { isAuth, isReady, user } = useAuth()
   if (!isReady) return <RouteLoader label="Verificando seu acesso..." />
-  return isAuth ? <Navigate to={getAuthenticatedHome(user)} replace /> : children
+  return isAuth ? <Navigate to={getAuthenticatedHome(user)} replace /> : <>{children}</>
 }
 
 function LandingRoute() {
@@ -92,7 +103,7 @@ function HomeRoute() {
   if (user?.role === 'SUPPORT') return <Navigate to="/suporte" replace />
 
   return (
-    <LayoutScreen label="Carregando o painel clínico...">
+    <LayoutScreen label="Carregando o painel clinico...">
       <Dashboard />
     </LayoutScreen>
   )
@@ -114,26 +125,26 @@ function LocalDemoLogin() {
     if (!token) return
 
     const host = window.location.hostname === '127.0.0.1' ? 'localhost' : window.location.hostname
-    const apiBase = window.location.protocol + '//' + host + ':3000'
+    const apiBase = `${window.location.protocol}//${host}:3000`
 
-    fetch(apiBase + '/auth/me', {
+    fetch(`${apiBase}/auth/me`, {
       headers: {
-        Authorization: 'Bearer ' + token,
+        Authorization: `Bearer ${token}`,
       },
     })
       .then(response => {
         if (!response.ok) {
-          throw new Error('Falha ao buscar a sessão da demo local')
+          throw new Error('Falha ao buscar a sessao da demo local')
         }
         return response.json()
       })
-      .then(user => {
+      .then((user: AuthUser) => {
         authStorage.setSession(token, user)
         authStorage.clearSupportSession()
         window.location.replace(redirect)
       })
       .catch(error => {
-        console.error('Não foi possível preparar a demo local', error)
+        console.error('Nao foi possivel preparar a demo local', error)
       })
   }, [])
 
@@ -145,22 +156,22 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingRoute />} />
       <Route path="/site" element={<MarketingSite />} />
-      <Route path="/login" element={<PublicRoute><LazyScreen label="Abrindo acesso da clínica..."><Login /></LazyScreen></PublicRoute>} />
-      <Route path="/register" element={<PublicRoute><LazyScreen label="Preparando o cadastro da clínica..."><Register /></LazyScreen></PublicRoute>} />
+      <Route path="/login" element={<PublicRoute><LazyScreen label="Abrindo acesso da clinica..."><Login /></LazyScreen></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><LazyScreen label="Preparando o cadastro da clinica..."><Register /></LazyScreen></PublicRoute>} />
       <Route path="/local-demo-login" element={<LocalDemoLogin />} />
       <Route path="/painel" element={<PrivateRoute><HomeRoute /></PrivateRoute>} />
       <Route path="/suporte" element={<SupportOnlyRoute><LayoutScreen label="Carregando central de suporte..."><SupportHub /></LayoutScreen></SupportOnlyRoute>} />
       <Route path="/contatar-suporte" element={<PrivateRoute><LayoutScreen label="Abrindo canais de suporte..."><SupportContato /></LayoutScreen></PrivateRoute>} />
-      <Route path="/documentos" element={<ClinicRoute><LayoutScreen label="Abrindo documentos sanitários..."><Documentos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/documentos" element={<ClinicRoute><LayoutScreen label="Abrindo documentos sanitarios..."><Documentos /></LayoutScreen></ClinicRoute>} />
       <Route path="/produtos-e-equipamentos" element={<ClinicRoute><LayoutScreen label="Carregando produtos e equipamentos..."><ProdutosEquipamentos /></LayoutScreen></ClinicRoute>} />
-      <Route path="/clientes" element={<ClinicRoute><LayoutScreen label="Carregando clientes e prontuários..."><Clientes /></LayoutScreen></ClinicRoute>} />
-      <Route path="/clientes/:clientId" element={<ClinicRoute><LayoutScreen label="Abrindo prontuário do cliente..."><ClienteProntuario /></LayoutScreen></ClinicRoute>} />
-      <Route path="/assinatura" element={<ClinicRoute><LayoutScreen label="Carregando assinatura da clínica..."><Assinatura /></LayoutScreen></ClinicRoute>} />
+      <Route path="/clientes" element={<ClinicRoute><LayoutScreen label="Carregando clientes e prontuarios..."><Clientes /></LayoutScreen></ClinicRoute>} />
+      <Route path="/clientes/:clientId" element={<ClinicRoute><LayoutScreen label="Abrindo prontuario do cliente..."><ClienteProntuario /></LayoutScreen></ClinicRoute>} />
+      <Route path="/assinatura" element={<ClinicRoute><LayoutScreen label="Carregando assinatura da clinica..."><Assinatura /></LayoutScreen></ClinicRoute>} />
       <Route path="/pagamentos" element={<Navigate to="/assinatura" replace />} />
       <Route path="/clientes/:clientId/anamnese" element={<ClinicRoute><LayoutScreen label="Abrindo anamnese do cliente..."><ClienteAnamnese /></LayoutScreen></ClinicRoute>} />
       <Route path="/clientes/:clientId/consentimentos/:consentRecordId/assinar" element={<ClinicRoute><LayoutScreen label="Preparando assinatura do consentimento..."><ClienteConsentimentoAssinatura /></LayoutScreen></ClinicRoute>} />
-      <Route path="/agendamentos" element={<ClinicRoute><LayoutScreen label="Carregando agenda da clínica..."><Agendamentos /></LayoutScreen></ClinicRoute>} />
-      <Route path="/servicos" element={<ClinicRoute><LayoutScreen label="Abrindo catálogo de serviços..."><Servicos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/agendamentos" element={<ClinicRoute><LayoutScreen label="Carregando agenda da clinica..."><Agendamentos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/servicos" element={<ClinicRoute><LayoutScreen label="Abrindo catalogo de servicos..."><Servicos /></LayoutScreen></ClinicRoute>} />
       <Route path="/profissionais" element={<ClinicRoute><LayoutScreen label="Carregando equipe profissional..."><Profissionais /></LayoutScreen></ClinicRoute>} />
       <Route path="/profissionais/:professionalId" element={<ClinicRoute><LayoutScreen label="Abrindo ficha da profissional..."><ProfissionalFicha /></LayoutScreen></ClinicRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

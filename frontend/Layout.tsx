@@ -1,39 +1,51 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from './useAuth'
 import { Icon } from './Icon'
 import { getClinicBranding } from './branding'
 import { isImpersonating, isSupportUser } from './support'
+import type { AuthUser } from './types'
+import type { BillingStatusKey } from './operationsTypes'
 
-const clinicNav = [
-  { to: '/', icon: 'dashboard', label: 'Painel Clínico' },
+interface NavigationItem {
+  to: string
+  icon: string
+  label: string
+}
+
+const clinicNav: NavigationItem[] = [
+  { to: '/', icon: 'dashboard', label: 'Painel Clinico' },
   { to: '/documentos', icon: 'fileText', label: 'Documentos' },
   { to: '/produtos-e-equipamentos', icon: 'box', label: 'Produtos e Equipamentos' },
   { to: '/clientes', icon: 'users', label: 'Clientes' },
   { to: '/agendamentos', icon: 'calendar', label: 'Agendamentos' },
-  { to: '/servicos', icon: 'scissors', label: 'Serviços' },
+  { to: '/servicos', icon: 'scissors', label: 'Servicos' },
   { to: '/profissionais', icon: 'person', label: 'Profissionais' },
   { to: '/assinatura', icon: 'dollar', label: 'Assinatura e contas' },
 ]
 
-const supportNav = [
+const supportNav: NavigationItem[] = [
   { to: '/suporte', icon: 'dashboard', label: 'Central de suporte' },
 ]
 
-const billingMeta = {
+const billingMeta: Record<BillingStatusKey, { label: string; className: string }> = {
   TRIAL: { label: 'Cortesia ativa', className: 'badge badge-blue' },
   ACTIVE: { label: 'Pagamento em dia', className: 'badge badge-green' },
   OVERDUE: { label: 'Pagamento pendente', className: 'badge badge-gold' },
   BLOCKED: { label: 'Acesso bloqueado', className: 'badge badge-red' },
 }
 
+interface LayoutProps {
+  children: ReactNode
+}
 
-export function Layout({ children }) {
+export function Layout({ children }: LayoutProps) {
   const { user, logout, returnToSupport, hasSupportSession } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const mainContentRef = useRef(null)
+  const mainContentRef = useRef<HTMLElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -45,7 +57,7 @@ export function Layout({ children }) {
     if (!menuOpen) return undefined
 
     const previousOverflow = document.body.style.overflow
-    const handleKeyDown = event => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false)
       }
@@ -63,13 +75,13 @@ export function Layout({ children }) {
   const supportUser = isSupportUser(user)
   const impersonationActive = isImpersonating(user)
   const { clinicName, brandLogo, brandSubtitle, initials } = useMemo(
-    () => getClinicBranding(user),
+    () => getClinicBranding(user as AuthUser | null | undefined),
     [user]
   )
 
   const billing = supportUser
-    ? { label: 'Operação técnica', className: 'badge badge-gold' }
-    : (billingMeta[user?.billing?.effectiveStatus] || billingMeta.TRIAL)
+    ? { label: 'Operacao tecnica', className: 'badge badge-gold' }
+    : (billingMeta[(user?.billing?.effectiveStatus as BillingStatusKey) || 'TRIAL'] || billingMeta.TRIAL)
 
   const navigation = supportUser ? supportNav : clinicNav
 
@@ -78,7 +90,8 @@ export function Layout({ children }) {
       await returnToSupport()
       navigate('/suporte')
     } catch (error) {
-      toast.error(error.message || 'Não foi possível restaurar a sessão de suporte')
+      const message = error instanceof Error ? error.message : 'Nao foi possivel restaurar a sessao de suporte'
+      toast.error(message)
     }
   }
 
@@ -94,7 +107,7 @@ export function Layout({ children }) {
   return (
     <div className={`app-shell ${menuOpen ? 'menu-open' : ''}`}>
       <a className="skip-link" href="#main-content">
-        Ir para o conteúdo principal
+        Ir para o conteudo principal
       </a>
 
       {menuOpen ? (
@@ -129,14 +142,14 @@ export function Layout({ children }) {
         </div>
 
         <div className="sidebar-clinic">
-          <div className="sidebar-clinic-label">{supportUser ? 'Acesso técnico' : 'Clínica ativa'}</div>
+          <div className="sidebar-clinic-label">{supportUser ? 'Acesso tecnico' : 'Clinica ativa'}</div>
           <strong>{clinicName}</strong>
           <p>
             {supportUser
-              ? 'Localize a conta correta e assuma uma sessão de manutenção com rastreabilidade antes de editar qualquer dado da clínica.'
+              ? 'Localize a conta correta e assuma uma sessao de manutencao com rastreabilidade antes de editar qualquer dado da clinica.'
               : impersonationActive
-                ? 'Sessão de manutenção ativa. Você está navegando como a clínica para realizar ajustes, suporte ou atualização.'
-                : 'Agenda, atendimento, POPs e prontuário com identidade visual da própria clínica.'}
+                ? 'Sessao de manutencao ativa. Voce esta navegando como a clinica para realizar ajustes, suporte ou atualizacao.'
+                : 'Agenda, atendimento, POPs e prontuario com identidade visual da propria clinica.'}
           </p>
           <div className="sidebar-clinic-status">
             <span className={billing.className}>{billing.label}</span>
@@ -144,7 +157,7 @@ export function Layout({ children }) {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section">{supportUser ? 'Suporte' : 'Navegação'}</div>
+          <div className="nav-section">{supportUser ? 'Suporte' : 'Navegacao'}</div>
           {navigation.map(item => (
             <NavLink
               key={item.to}
@@ -170,7 +183,7 @@ export function Layout({ children }) {
           </NavLink>
 
           {impersonationActive && hasSupportSession ? (
-            <button type="button" className="nav-item" onClick={handleReturnToSupport}>
+            <button type="button" className="nav-item" onClick={() => void handleReturnToSupport()}>
               <Icon name="back" />
               <span>Voltar ao suporte</span>
             </button>
@@ -182,9 +195,9 @@ export function Layout({ children }) {
               <div className="user-name">{clinicName}</div>
               <div className="user-role">
                 {supportUser
-                  ? 'Operação técnica'
+                  ? 'Operacao tecnica'
                   : impersonationActive
-                    ? 'Sessão de manutenção'
+                    ? 'Sessao de manutencao'
                     : (user?.email || "Equipe L'Appui")}
               </div>
             </div>
@@ -217,15 +230,14 @@ export function Layout({ children }) {
           </div>
         </header>
 
-
         {impersonationActive ? (
           <div className="support-session-banner">
             <div>
-              <strong>Modo manutenção ativo</strong>
-              <span>Você está no ambiente de {clinicName}. A navegação segue rastreada até o retorno ao suporte.</span>
+              <strong>Modo manutencao ativo</strong>
+              <span>Voce esta no ambiente de {clinicName}. A navegacao segue rastreada ate o retorno ao suporte.</span>
             </div>
             {hasSupportSession ? (
-              <button type="button" className="btn btn-outline btn-sm" onClick={handleReturnToSupport}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => void handleReturnToSupport()}>
                 <Icon name="back" /> Voltar ao suporte
               </button>
             ) : null}
@@ -239,4 +251,3 @@ export function Layout({ children }) {
     </div>
   )
 }
-
