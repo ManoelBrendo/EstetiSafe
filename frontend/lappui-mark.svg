@@ -1,0 +1,37 @@
+﻿<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(194 172) rotate(44.5) scale(300 292)">
+      <stop stop-color="#FFFDF8"/>
+      <stop offset="0.62" stop-color="#F7EFE3"/>
+      <stop offset="1" stop-color="#EBD9BF"/>
+    </radialGradient>
+    <linearGradient id="goldLine" x1="126" y1="104" x2="394" y2="394" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E2C289"/>
+      <stop offset="0.52" stop-color="#B68647"/>
+      <stop offset="1" stop-color="#7C5428"/>
+    </linearGradient>
+    <linearGradient id="goldSoft" x1="142" y1="116" x2="370" y2="378" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8E9C9" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#C79A5A" stop-opacity="0.28"/>
+    </linearGradient>
+    <filter id="shadow" x="38" y="42" width="436" height="436" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#5E4422" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="68" y="72" width="376" height="376" rx="96" fill="url(#bgGlow)"/>
+    <rect x="77" y="81" width="358" height="358" rx="87" stroke="url(#goldLine)" stroke-width="4"/>
+    <rect x="94" y="98" width="324" height="324" rx="68" stroke="url(#goldSoft)" stroke-width="1.5"/>
+  </g>
+
+  <path d="M168 156C168 132.804 186.804 114 210 114H301C324.196 114 343 132.804 343 156V168" stroke="url(#goldSoft)" stroke-width="10" stroke-linecap="round"/>
+  <path d="M194 147V262C194 304.525 168.717 341.379 129 356" stroke="url(#goldLine)" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M217 145C224.5 130.333 236.333 123 252.5 123C267.833 123 279.5 129.667 287.5 143" stroke="url(#goldSoft)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M254 145C281.228 145 302 165.939 302 193.2C302 222.634 277.19 238.733 276 267.6C275.032 291.089 287.624 311.322 313 330" stroke="url(#goldLine)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M310 161C341.779 176.488 355.313 215.059 342.218 247.955C329.123 280.851 293.385 300.601 258.5 296.5" stroke="url(#goldLine)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M292 188C327 196 350 227 350 262C350 279.566 344.293 295.82 334.621 308.985" stroke="url(#goldSoft)" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M230 356C259.479 332.828 293.479 325.495 332 334" stroke="url(#goldLine)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M176 383C214.146 355.662 259.479 341.995 312 342C348.283 342.004 377.95 350.67 401 368" stroke="url(#goldLine)" stroke-width="7.5" stroke-linecap="round"/>
+  <circle cx="223" cy="114" r="8" fill="url(#goldLine)"/>
+</svg>

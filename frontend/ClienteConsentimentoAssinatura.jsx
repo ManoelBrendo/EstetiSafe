@@ -1,0 +1,495 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import api, { downloadApiFile, getApiErrorMessage } from './api'
+import { Icon } from './Icon'
+
+const CANVAS_WIDTH = 960
+const CANVAS_HEIGHT = 280
+
+const consentStatusMeta = {
+  PENDING: { label: 'Pendente de assinatura', className: 'badge badge-gold' },
+  SIGNED: { label: 'Assinado', className: 'badge badge-green' },
+  REVOKED: { label: 'Revogado', className: 'badge badge-red' },
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Ainda não assinado'
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(new Date(value))
+}
+
+function prepareCanvas(canvas) {
+  const context = canvas.getContext('2d')
+  context.fillStyle = '#fffaf4'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.strokeStyle = '#8e6333'
+  context.lineWidth = 3.5
+  context.lineCap = 'round'
+  context.lineJoin = 'round'
+}
+
+function StatusBadge({ status }) {
+  const meta = consentStatusMeta[status] || { label: 'Sem status', className: 'badge badge-muted' }
+  return <span className={meta.className}>{meta.label}</span>
+}
+
+export default function ClienteConsentimentoAssinatura() {
+  const navigate = useNavigate()
+  const { clientId, consentRecordId } = useParams()
+  const canvasRef = useRef(null)
+  const drawingRef = useRef(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [record, setRecord] = useState(null)
+  const [professionals, setProfessionals] = useState([])
+  const [signerName, setSignerName] = useState('')
+  const [signerDocument, setSignerDocument] = useState('')
+  const [professionalId, setProfessionalId] = useState('')
+  const [professionalName, setProfessionalName] = useState('')
+  const [useManualProfessional, setUseManualProfessional] = useState(false)
+  const [accepted, setAccepted] = useState(false)
+  const [hasSignature, setHasSignature] = useState(false)
+
+  const selectedProfessional = useMemo(
+    () => professionals.find(item => String(item.id) === String(professionalId)) || null,
+    [professionalId, professionals]
+  )
+
+  const resolvedProfessionalName = selectedProfessional?.name || professionalName.trim() || record?.professionalName || 'Não informado'
+
+  const loadRecord = useCallback(async () => {
+    setLoading(true)
+
+    try {
+      const [{ data }, { data: professionalsData }] = await Promise.all([
+        api.get('/consent-records/' + consentRecordId),
+        api.get('/professionals'),
+      ])
+
+      if (String(data.clientId) !== String(clientId)) {
+        throw new Error('O termo informado não pertence a este cliente')
+      }
+
+      const matchedProfessional = professionalsData.find(item => String(item.id) === String(data.professionalId || '')) || null
+
+      setRecord(data)
+      setProfessionals(professionalsData)
+      setSignerName(data.signerName || data.client?.name || '')
+      setSignerDocument(data.signerDocument || data.client?.cpf || '')
+      setAccepted(data.status === 'SIGNED')
+      setHasSignature(data.status === 'SIGNED')
+      setProfessionalId(matchedProfessional ? String(matchedProfessional.id) : '')
+      setProfessionalName(matchedProfessional ? matchedProfessional.name : (data.professionalName || ''))
+      setUseManualProfessional(!professionalsData.length || Boolean(data.professionalName && !matchedProfessional))
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível abrir o termo de consentimento'))
+      navigate('/clientes', { replace: true })
+    } finally {
+      setLoading(false)
+    }
+  }, [clientId, consentRecordId, navigate])
+
+  useEffect(() => {
+    loadRecord()
+  }, [loadRecord])
+
+  useEffect(() => {
+    if (loading || record?.status === 'SIGNED') return
+
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    prepareCanvas(canvas)
+    setHasSignature(false)
+  }, [loading, record?.id, record?.status])
+
+  const statusMeta = useMemo(() => consentStatusMeta[record?.status] || consentStatusMeta.PENDING, [record?.status])
+
+  function getCanvasPoint(event) {
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    }
+  }
+
+  function handlePointerDown(event) {
+    if (record?.status === 'SIGNED') return
+
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+
+    event.preventDefault()
+    drawingRef.current = true
+    canvas.setPointerCapture?.(event.pointerId)
+
+    const point = getCanvasPoint(event)
+    context.beginPath()
+    context.moveTo(point.x, point.y)
+    context.lineTo(point.x + 0.1, point.y + 0.1)
+    context.stroke()
+    setHasSignature(true)
+  }
+
+  function handlePointerMove(event) {
+    if (!drawingRef.current || record?.status === 'SIGNED') return
+
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+
+    event.preventDefault()
+    const point = getCanvasPoint(event)
+    context.lineTo(point.x, point.y)
+    context.stroke()
+  }
+
+  function handlePointerUp(event) {
+    if (!drawingRef.current) return
+
+    drawingRef.current = false
+    canvasRef.current?.releasePointerCapture?.(event.pointerId)
+  }
+
+  function clearSignature() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    prepareCanvas(canvas)
+    setHasSignature(false)
+  }
+
+  function handleProfessionalChange(event) {
+    const value = event.target.value
+
+    if (value === 'MANUAL') {
+      setUseManualProfessional(true)
+      setProfessionalId('')
+      return
+    }
+
+    setUseManualProfessional(false)
+    setProfessionalId(value)
+
+    const nextProfessional = professionals.find(item => String(item.id) === String(value)) || null
+    setProfessionalName(nextProfessional ? nextProfessional.name : '')
+  }
+
+  async function handleSubmit() {
+    if (!record) return
+
+    if (!signerName.trim()) {
+      toast.error('Informe o nome de quem está assinando')
+      return
+    }
+
+    const selectedName = useManualProfessional ? professionalName.trim() : (selectedProfessional?.name || '')
+
+    if (!selectedProfessional && !selectedName) {
+      toast.error('Selecione ou informe o profissional responsável')
+      return
+    }
+
+    if (!accepted) {
+      toast.error('Confirme a leitura e concordância com o termo')
+      return
+    }
+
+    if (!hasSignature || !canvasRef.current) {
+      toast.error('Faça a assinatura no campo indicado')
+      return
+    }
+
+    setSaving(true)
+
+    try {
+      const signatureDataUrl = canvasRef.current.toDataURL('image/png')
+      const { data } = await api.post('/consent-records/' + record.id + '/sign', {
+        signerName: signerName.trim(),
+        signerDocument: signerDocument.trim(),
+        professionalId: useManualProfessional ? null : (selectedProfessional ? selectedProfessional.id : null),
+        professionalName: selectedName,
+        signatureDataUrl,
+        accepted: true,
+      })
+
+      setRecord(data)
+      setAccepted(true)
+      setHasSignature(true)
+      setProfessionalId(data.professionalId ? String(data.professionalId) : '')
+      setProfessionalName(data.professionalName || '')
+      setUseManualProfessional(!data.professionalId && Boolean(data.professionalName))
+      toast.success('Termo assinado e salvo no cadastro do cliente')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a assinatura'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDownloadPdf() {
+    if (!record?.id) return
+
+    setDownloadingPdf(true)
+
+    try {
+      await downloadApiFile(
+        '/consent-records/' + record.id + '/pdf',
+        'termo-consentimento-' + (record.client?.name || record.id) + '.pdf'
+      )
+      toast.success('PDF do termo baixado com sucesso')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível baixar o PDF do termo'))
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="loading-page">
+          <span className="spinner" />
+          Preparando o termo de consentimento...
+        </div>
+      </div>
+    )
+  }
+
+  if (!record) return null
+
+  return (
+    <div className="page consent-page">
+      <div className="page-header consent-page-header">
+        <div>
+          <button type="button" className="btn btn-ghost consent-back" onClick={() => navigate('/clientes')}>
+            <Icon name="back" /> Voltar para clientes
+          </button>
+          <h1 className="page-title">Termo de consentimento</h1>
+          <p className="page-subtitle">
+            Assinatura digital vinculada diretamente ao prontuário de {record.client.name}.
+          </p>
+        </div>
+
+        <StatusBadge status={record.status} />
+      </div>
+
+      <div className="consent-layout">
+        <div className="consent-main">
+          <section className="card consent-panel">
+            <div className="section-head consent-panel-head">
+              <div>
+                <h2 className="section-title">{record.title}</h2>
+                <p className="section-copy">
+                  Versão {record.versionLabel} gerada em {formatDateTime(record.createdAt)}.
+                </p>
+              </div>
+              <span className={statusMeta.className}>{statusMeta.label}</span>
+            </div>
+
+            <div className="consent-scroll">
+              {record.termText.split('\n').map((line, index) => (
+                <p key={[record.id, index].join('-')}>{line || '\u00A0'}</p>
+              ))}
+            </div>
+          </section>
+
+          <section className="card consent-panel">
+            <div className="section-head consent-panel-head">
+              <div>
+                <h2 className="section-title">Assinatura digital</h2>
+                <p className="section-copy">
+                  Capture a assinatura com o dedo, mouse ou caneta para arquivar a evidência deste termo.
+                </p>
+              </div>
+            </div>
+
+            <div className="form-grid consent-form-grid">
+              <div className="form-group">
+                <label className="form-label">Nome de quem assina</label>
+                <input
+                  className="form-input"
+                  value={signerName}
+                  onChange={event => setSignerName(event.target.value)}
+                  disabled={record.status === 'SIGNED'}
+                  placeholder="Nome completo"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Documento</label>
+                <input
+                  className="form-input"
+                  value={signerDocument}
+                  onChange={event => setSignerDocument(event.target.value)}
+                  disabled={record.status === 'SIGNED'}
+                  placeholder="CPF ou outro documento"
+                />
+              </div>
+
+              {professionals.length ? (
+                <div className="form-group">
+                  <label className="form-label">Profissional responsável *</label>
+                  <select
+                    className="form-select"
+                    value={useManualProfessional ? 'MANUAL' : professionalId}
+                    onChange={handleProfessionalChange}
+                    disabled={record.status === 'SIGNED'}
+                  >
+                    <option value="">Selecione</option>
+                    {professionals.map(professional => (
+                      <option key={professional.id} value={professional.id}>{professional.name}</option>
+                    ))}
+                    <option value="MANUAL">Profissional não cadastrado</option>
+                  </select>
+                  {!useManualProfessional && selectedProfessional ? (
+                    <p className="text-sm text-muted consent-professional-hint">
+                      {selectedProfessional.specialty || 'Profissional ativo no cadastro da clínica.'}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="form-group form-full">
+                  <label className="form-label">Profissional responsável *</label>
+                  <p className="text-sm text-muted consent-professional-hint">
+                    Nenhum profissional ativo cadastrado. Informe manualmente para concluir o termo.
+                  </p>
+                </div>
+              )}
+
+              {useManualProfessional || !professionals.length ? (
+                <div className="form-group">
+                  <label className="form-label">Nome do profissional *</label>
+                  <input
+                    className="form-input"
+                    value={professionalName}
+                    onChange={event => setProfessionalName(event.target.value)}
+                    disabled={record.status === 'SIGNED'}
+                    placeholder="Quem validou este termo"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {record.status === 'SIGNED' ? (
+              <div className="signature-preview-card">
+                <div className="signature-preview-wrap">
+                  <img src={record.signatureDataUrl} alt="Assinatura do cliente" className="signature-preview" />
+                </div>
+                <div className="signature-meta">
+                  <strong>Assinatura concluída</strong>
+                  <span>Registro salvo em {formatDateTime(record.signedAt)}</span>
+                  <span>Profissional responsável: {resolvedProfessionalName}</span>
+                </div>
+                <div className="consent-actions consent-actions-start">
+                  <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes')}>
+                    Voltar para clientes
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+                    {downloadingPdf ? <span className="spinner" /> : <><Icon name="download" /> Baixar PDF</>}
+                  </button>
+                  <button type="button" className="btn btn-gold" onClick={() => navigate('/clientes/' + record.client.id + '/anamnese')}>
+                    <Icon name="clipboard" /> Abrir anamnese
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="signature-pad">
+                  <canvas
+                    ref={canvasRef}
+                    width={CANVAS_WIDTH}
+                    height={CANVAS_HEIGHT}
+                    className="signature-canvas"
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerLeave={handlePointerUp}
+                  />
+                </div>
+
+                <div className="signature-toolbar">
+                  <span className="signature-note">
+                    Assine no campo acima. O sistema salva a evidência no cadastro do cliente junto do profissional responsável.
+                  </span>
+                  <button type="button" className="btn btn-outline" onClick={clearSignature}>
+                    <Icon name="x" /> Limpar assinatura
+                  </button>
+                </div>
+
+                <label className="consent-checkbox">
+                  <input type="checkbox" checked={accepted} onChange={event => setAccepted(event.target.checked)} />
+                  <span>
+                    Confirmo que o termo foi lido, compreendido e aceito pelo cliente antes da assinatura.
+                  </span>
+                </label>
+
+                <div className="consent-actions">
+                  <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes')}>
+                    Fazer depois
+                  </button>
+                  <button type="button" className="btn btn-gold" onClick={handleSubmit} disabled={saving}>
+                    {saving ? <span className="spinner" /> : <><Icon name="signature" /> Assinar e salvar</>}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+
+        <aside className="consent-sidebar">
+          <section className="card consent-side-card">
+            <div className="eyebrow">Cliente vinculado</div>
+            <h2 className="section-title">{record.client.name}</h2>
+            <div className="detail-list">
+              <div className="detail-row">
+                <span>Telefone</span>
+                <strong>{record.client.phone}</strong>
+              </div>
+              <div className="detail-row">
+                <span>E-mail</span>
+                <strong>{record.client.email || 'Não informado'}</strong>
+              </div>
+              <div className="detail-row">
+                <span>CPF</span>
+                <strong>{record.client.cpf || 'Não informado'}</strong>
+              </div>
+            </div>
+          </section>
+
+          <section className="card consent-side-card">
+            <div className="eyebrow">Rastreabilidade</div>
+            <div className="detail-list">
+              <div className="detail-row">
+                <span>Status atual</span>
+                <strong>{statusMeta.label}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Gerado em</span>
+                <strong>{formatDateTime(record.createdAt)}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Assinado em</span>
+                <strong>{formatDateTime(record.signedAt)}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Profissional responsável</span>
+                <strong>{resolvedProfessionalName}</strong>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  )
+}

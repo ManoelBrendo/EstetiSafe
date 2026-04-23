@@ -1,0 +1,467 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// â”€â”€â”€ AutenticaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model User {
+  id                 Int      @id @default(autoincrement())
+  email              String   @unique
+  hashedPassword     String
+  clinicName         String
+  clinicLogoDataUrl  String?  @db.Text
+  role               Role     @default(ADMIN)
+  billingStatus      BillingStatus @default(TRIAL)
+  billingAmount      Decimal? @db.Decimal(10, 2)
+  billingGraceEndsAt DateTime?
+  billingLastPaidAt  DateTime?
+  billingNextDueAt   DateTime?
+  billingReference   String?
+  billingNotes       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ownedClinic    Clinic?
+  auditLogs      AuditLog[] @relation("UserAuditLogs")
+  clients        Client[]
+  appointments   Appointment[]
+  services       Service[]
+  professionals  Professional[]
+  consentRecords ConsentRecord[]
+  servicePops    ServicePop[]
+  documents      ClinicDocument[]
+  productItems   ProductItem[]
+  equipmentItems EquipmentItem[]
+  clinicBills    ClinicBill[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+enum ConsentStatus {
+  PENDING
+  SIGNED
+  REVOKED
+}
+
+enum BillingStatus {
+  TRIAL
+  ACTIVE
+  OVERDUE
+  BLOCKED
+}
+
+enum ClinicStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MarketingLeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  WON
+  LOST
+}
+
+enum ClinicDocumentCategory {
+  LEGAL
+  SANITARY
+  CLIENTS
+  WASTE
+}
+
+enum InventoryEntryMode {
+  NEW
+  EXISTING
+}
+
+enum ProfessionalContractType {
+  CLT
+  PJ
+  AUTONOMA
+  COMISSIONADA
+  PARCERIA
+}
+
+enum ProfessionalPaymentModel {
+  FIXED
+  COMMISSION
+  HYBRID
+  DAILY
+}
+
+// â”€â”€â”€ Clientes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model MarketingLead {
+  id            Int                 @id @default(autoincrement())
+  clinicName    String
+  contactName   String
+  email         String
+  phone         String
+  city          String?
+  teamSize      String?
+  mainGoal      String?
+  message       String?
+  requestedDemo Boolean             @default(true)
+  source        String?
+  status        MarketingLeadStatus @default(NEW)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+  @@map("marketing_leads")
+}
+
+model Clinic {
+  id          Int          @id @default(autoincrement())
+  ownerUserId Int          @unique
+  name        String
+  logoDataUrl String?      @db.Text
+  status      ClinicStatus @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  ownerUser    User                @relation(fields: [ownerUserId], references: [id])
+  subscription ClinicSubscription?
+  auditLogs    AuditLog[]
+
+  @@index([status, createdAt])
+  @@map("clinics")
+}
+
+model ClinicSubscription {
+  id          Int           @id @default(autoincrement())
+  clinicId    Int           @unique
+  status      BillingStatus @default(TRIAL)
+  amount      Decimal?      @db.Decimal(10, 2)
+  graceEndsAt DateTime?
+  lastPaidAt  DateTime?
+  nextDueAt   DateTime?
+  reference   String?
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+
+  @@index([status, nextDueAt])
+  @@map("clinic_subscriptions")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  clinicId    Int?
+  actorUserId Int?
+  actorEmail  String?
+  actorRole   String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  clinic    Clinic? @relation(fields: [clinicId], references: [id])
+  actorUser User?   @relation("UserAuditLogs", fields: [actorUserId], references: [id])
+
+  @@index([clinicId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model Client {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  name      String
+  email     String?
+  phone     String
+  birthDate DateTime?
+  cpf       String?
+  sex       String?
+  maritalStatus String?
+  profession String?
+  addressFull String?
+  notes     String?
+  isPaid    Boolean  @default(false)
+  isLocked  Boolean  @default(false)
+  lockedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id])
+  appointments   Appointment[]
+  anamneses      Anamnesis[]
+  consentRecords ConsentRecord[]
+
+  @@map("clients")
+}
+
+// â”€â”€â”€ Profissionais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model Professional {
+  id              Int                      @id @default(autoincrement())
+  userId          Int
+  name            String
+  specialty       String
+  phone           String?
+  notes           String?
+  photoDataUrl    String?                 @db.Text
+  availability    Json?
+  contractType    ProfessionalContractType?
+  paymentModel    ProfessionalPaymentModel?
+  salaryAmount    Decimal?                @db.Decimal(10, 2)
+  commissionRate  Decimal?                @db.Decimal(5, 2)
+  paymentDay      Int?
+  payrollNotes    String?
+  active          Boolean                  @default(true)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id])
+  appointments   Appointment[]
+  consentRecords ConsentRecord[]
+
+  @@map("professionals")
+}
+
+model Service {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  name        String
+  description String?
+  duration    Int      // duraÃ§Ã£o em minutos
+  price       Decimal  @db.Decimal(10, 2)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  appointments Appointment[]
+  servicePop   ServicePop?
+
+  @@map("services")
+}
+
+// â”€â”€â”€ Agendamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model Appointment {
+  id             Int               @id @default(autoincrement())
+  userId         Int
+  clientId       Int
+  serviceId      Int
+  professionalId Int
+  startAt        DateTime
+  endAt          DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  notes          String?
+  price          Decimal           @db.Decimal(10, 2)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  client       Client       @relation(fields: [clientId], references: [id])
+  service      Service      @relation(fields: [serviceId], references: [id])
+  professional Professional? @relation(fields: [professionalId], references: [id])
+  payment      Payment?
+
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+// â”€â”€â”€ Pagamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model Payment {
+  id            Int           @id @default(autoincrement())
+  appointmentId Int           @unique
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+// â”€â”€â”€ Anamnese â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+model Anamnesis {
+  id          Int      @id @default(autoincrement())
+  clientId    Int
+  answers     Json     // respostas do formulÃ¡rio em JSON
+  filledAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("anamneses")
+}
+
+model ConsentRecord {
+  id               Int           @id @default(autoincrement())
+  userId           Int
+  clientId         Int
+  professionalId   Int?
+  title            String
+  versionLabel     String        @default("v1")
+  termText         String        @db.Text
+  status           ConsentStatus @default(PENDING)
+  signerName       String?
+  signerDocument   String?
+  professionalName String?
+  signatureDataUrl String?      @db.Text
+  signatureHash    String?
+  signedAt         DateTime?
+  signedIp         String?
+  signedUserAgent  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  client       Client        @relation(fields: [clientId], references: [id])
+  professional Professional? @relation(fields: [professionalId], references: [id])
+
+  @@index([userId, clientId])
+  @@index([clientId, createdAt])
+  @@index([professionalId])
+  @@map("consent_records")
+}
+
+model ServicePop {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  serviceId Int      @unique
+  title     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("service_pops")
+}
+
+model ClinicDocument {
+  id           Int                   @id @default(autoincrement())
+  userId       Int
+  category     ClinicDocumentCategory
+  documentType String
+  title        String
+  notes        String?
+  expiresAt    DateTime?
+  fileName     String
+  fileMimeType String?
+  fileDataUrl  String                @db.Text
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, category, createdAt])
+  @@index([userId, expiresAt])
+  @@map("clinic_documents")
+}
+
+model ProductItem {
+  id         Int                @id @default(autoincrement())
+  userId     Int
+  name       String
+  category   String?
+  brand      String?
+  batch      String?
+  quantity   Int                @default(1)
+  unit       String?
+  entryMode  InventoryEntryMode @default(NEW)
+  purchasedAt DateTime?
+  expiresAt  DateTime?
+  notes      String?
+  active     Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+  @@index([userId, createdAt])
+  @@map("product_items")
+}
+
+model EquipmentItem {
+  id              Int                @id @default(autoincrement())
+  userId          Int
+  name            String
+  category        String?
+  brand           String?
+  model           String?
+  serialNumber    String?
+  anvisaRegistration String?
+  notificationNumber String?
+  processNumber   String?
+  entryMode       InventoryEntryMode @default(NEW)
+  acquiredAt      DateTime?
+  maintenanceDueAt DateTime?
+  warrantyUntil   DateTime?
+  notes           String?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, maintenanceDueAt])
+  @@index([userId, createdAt])
+  @@map("equipment_items")
+}
+
+model ClinicBill {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  title      String
+  category   String?
+  amount     Decimal  @db.Decimal(10, 2)
+  dueAt      DateTime
+  paidAt     DateTime?
+  notes      String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, dueAt])
+  @@index([userId, paidAt])
+  @@map("clinic_bills")
+}

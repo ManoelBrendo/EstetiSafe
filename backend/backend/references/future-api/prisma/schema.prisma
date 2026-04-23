@@ -1,0 +1,345 @@
+// Future API reference schema for the next Prisma/backend refactor.
+// This file is intentionally not wired into the current runtime yet.
+// It stays saved in the project as the agreed base for the complete API.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ClientStatus {
+  active
+  inactive
+  archived
+}
+
+enum ProtocolStatus {
+  draft
+  active
+  completed
+  cancelled
+}
+
+enum AppointmentStatus {
+  scheduled
+  arrived
+  in_service
+  completed
+  cancelled
+}
+
+enum PaymentStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
+enum DocumentType {
+  protocol_summary
+  full_medical_record
+  treatment_report
+}
+
+enum MessageType {
+  appointment_confirmation
+  protocol_summary
+  post_care
+  reminder
+  manual_message
+}
+
+enum DeliveryStatus {
+  pending
+  sent
+  delivered
+  failed
+  read
+}
+
+enum EvaluationType {
+  acne
+  melasma
+  flacidez
+  oleosidade
+  manchas
+  textura
+  poros
+  sensibilidade
+  outro
+}
+
+enum ActionType {
+  create
+  update
+  delete
+  lock
+  unlock
+  generate_pdf
+  send_whatsapp
+  check_in
+  check_out
+}
+
+model Client {
+  id                    String             @id @default(uuid())
+  fullName              String             @map("full_name")
+  cpf                   String?            @db.VarChar(14)
+  birthDate             DateTime?          @map("birth_date")
+  phone                 String?            @db.VarChar(20)
+  email                 String?            @db.VarChar(150)
+  emergencyContactName  String?            @map("emergency_contact_name")
+  emergencyContactPhone String?            @map("emergency_contact_phone")
+  status                ClientStatus       @default(active)
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  medicalRecord         MedicalRecord?
+  protocols             Protocol[]
+  appointments          Appointment[]
+  payments              Payment[]
+  pdfDocuments          PdfDocument[]
+  whatsappMessages      WhatsappMessage[]
+
+  @@index([fullName])
+  @@map("clients")
+}
+
+model MedicalRecord {
+  id         String    @id @default(uuid())
+  clientId   String    @unique @map("client_id")
+  isPaid     Boolean   @default(false) @map("is_paid")
+  isLocked   Boolean   @default(false) @map("is_locked")
+  lockedAt   DateTime? @map("locked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  client               Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  anamnesis            Anamnesis?
+  aestheticEvaluations AestheticEvaluation[]
+  protocols            Protocol[]
+  payments             Payment[]
+  pdfDocuments         PdfDocument[]
+
+  @@map("medical_records")
+}
+
+model Anamnesis {
+  id                         String    @id @default(uuid())
+  medicalRecordId            String    @unique @map("medical_record_id")
+  chiefComplaint             String?   @map("chief_complaint")
+  expectations               String?
+  treatmentObjective         String?   @map("treatment_objective")
+
+  workoutsPerWeek            Int?      @map("workouts_per_week")
+  smoking                    Boolean?
+  alcoholUse                 Boolean?  @map("alcohol_use")
+  waterIntakeLiters          Decimal?  @map("water_intake_liters") @db.Decimal(5, 2)
+  sleepQuality               String?   @map("sleep_quality")
+
+  allergies                  String?
+  medications                String?
+  diseases                   String?
+  surgeries                  String?
+  pregnancyStatus            String?   @map("pregnancy_status")
+
+  createdAt                  DateTime  @default(now()) @map("created_at")
+  updatedAt                  DateTime  @updatedAt @map("updated_at")
+
+  medicalRecord              MedicalRecord      @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  aestheticHistory           AestheticHistory[]
+
+  @@map("anamnesis")
+}
+
+model AestheticHistory {
+  id             String    @id @default(uuid())
+  anamnesisId    String    @map("anamnesis_id")
+  procedureName  String    @map("procedure_name")
+  procedureDate  DateTime? @map("procedure_date")
+  notes          String?
+  complications  String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  anamnesis      Anamnesis @relation(fields: [anamnesisId], references: [id], onDelete: Cascade)
+
+  @@index([anamnesisId])
+  @@map("aesthetic_history")
+}
+
+model AestheticEvaluation {
+  id              String         @id @default(uuid())
+  medicalRecordId String         @map("medical_record_id")
+  evaluationType  EvaluationType @map("evaluation_type")
+  classification  String?
+  intensity       String?
+  level           String?
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  medicalRecord   MedicalRecord  @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+
+  @@index([medicalRecordId])
+  @@index([evaluationType])
+  @@map("aesthetic_evaluations")
+}
+
+model Service {
+  id              String            @id @default(uuid())
+  name            String
+  description     String?
+  defaultSessions Int               @default(1) @map("default_sessions")
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  protocolServices ProtocolService[]
+
+  @@map("services")
+}
+
+model Protocol {
+  id                 String            @id @default(uuid())
+  medicalRecordId    String            @map("medical_record_id")
+  clientId           String            @map("client_id")
+  protocolNumber     String            @unique @map("protocol_number")
+  protocolName       String            @map("protocol_name")
+  recommendations    String?
+  guidelines         String?
+  notes              String?
+  treatmentObjective String?           @map("treatment_objective")
+  status             ProtocolStatus    @default(draft)
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  medicalRecord      MedicalRecord     @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  client             Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  services           ProtocolService[]
+  appointments       Appointment[]
+  payments           Payment[]
+  pdfDocuments       PdfDocument[]
+  whatsappMessages   WhatsappMessage[]
+
+  @@index([clientId])
+  @@index([medicalRecordId])
+  @@map("protocols")
+}
+
+model ProtocolService {
+  id                String   @id @default(uuid())
+  protocolId        String   @map("protocol_id")
+  serviceId         String   @map("service_id")
+  customServiceName String?  @map("custom_service_name")
+  sessions          Int      @default(1)
+  description       String?
+  adverseEffects    String   @map("adverse_effects")
+  sortOrder         Int      @default(0) @map("sort_order")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  protocol          Protocol @relation(fields: [protocolId], references: [id], onDelete: Cascade)
+  service           Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@index([protocolId])
+  @@index([serviceId])
+  @@map("protocol_services")
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  clientId    String            @map("client_id")
+  protocolId  String?           @map("protocol_id")
+  scheduledAt DateTime          @map("scheduled_at")
+  status      AppointmentStatus @default(scheduled)
+  hasArrived  Boolean           @default(false) @map("has_arrived")
+  arrivedAt   DateTime?         @map("arrived_at")
+  notes       String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  protocol    Protocol?         @relation(fields: [protocolId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([scheduledAt])
+  @@map("appointments")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  clientId          String        @map("client_id")
+  medicalRecordId   String        @map("medical_record_id")
+  protocolId        String?       @map("protocol_id")
+  amount            Decimal       @db.Decimal(10, 2)
+  paymentMethod     String?       @map("payment_method")
+  paymentStatus     PaymentStatus @default(pending) @map("payment_status")
+  paidAt            DateTime?     @map("paid_at")
+  externalReference String?       @map("external_reference")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  client            Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  medicalRecord     MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  protocol          Protocol?     @relation(fields: [protocolId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@index([medicalRecordId])
+  @@map("payments")
+}
+
+model PdfDocument {
+  id              String       @id @default(uuid())
+  clientId        String       @map("client_id")
+  medicalRecordId String       @map("medical_record_id")
+  protocolId      String?      @map("protocol_id")
+  fileName        String       @map("file_name")
+  fileUrl         String       @map("file_url")
+  documentType    DocumentType @map("document_type")
+  generatedAt     DateTime     @default(now()) @map("generated_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  client          Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  medicalRecord   MedicalRecord @relation(fields: [medicalRecordId], references: [id], onDelete: Cascade)
+  protocol        Protocol?     @relation(fields: [protocolId], references: [id], onDelete: SetNull)
+
+  @@map("pdf_documents")
+}
+
+model WhatsappMessage {
+  id             String         @id @default(uuid())
+  clientId       String         @map("client_id")
+  protocolId     String?        @map("protocol_id")
+  clinicPhone    String         @map("clinic_phone")
+  clientPhone    String         @map("client_phone")
+  messageType    MessageType    @map("message_type")
+  messageBody    String         @map("message_body")
+  sentAt         DateTime?      @map("sent_at")
+  deliveryStatus DeliveryStatus @default(pending) @map("delivery_status")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  protocol       Protocol?      @relation(fields: [protocolId], references: [id], onDelete: SetNull)
+
+  @@index([clientId])
+  @@map("whatsapp_messages")
+}
+
+model AuditLog {
+  id         String     @id @default(uuid())
+  entityType String     @map("entity_type")
+  entityId   String     @map("entity_id")
+  actionType ActionType @map("action_type")
+  userName   String?    @map("user_name")
+  oldData    Json?      @map("old_data")
+  newData    Json?      @map("new_data")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

@@ -1,0 +1,912 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ClinicStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MANAGER
+  TECHNICAL_RESPONSIBLE
+  TECHNICIAN
+  RECEPTIONIST
+  AUDITOR
+}
+
+enum DocumentCategory {
+  LEGAL
+  SANITARY
+  CLIENT
+  WASTE
+  EQUIPMENT
+  INVENTORY
+  HR
+  OTHER
+}
+
+enum DocumentType {
+  SANITARY_LICENSE
+  OPERATING_LICENSE
+  CNPJ
+  SOCIAL_CONTRACT
+  TECHNICAL_RESPONSIBILITY_TERM
+  TECHNICAL_CERTIFICATE
+  BIOSAFETY_MANUAL
+  PGRSS
+  POP
+  WASTE_CONTRACT
+  WASTE_RECEIPT
+  EQUIPMENT_CERTIFICATE
+  CLIENT_CONSENT
+  OTHER
+}
+
+enum DocumentStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  ARCHIVED
+  PENDING_REVIEW
+  SUPERSEDED
+}
+
+enum DocumentSubjectType {
+  CLINIC
+  CLIENT
+  WASTE_COLLECTOR
+  EQUIPMENT
+  PRODUCT_BATCH
+  PROCEDURE
+  OTHER
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentMethod {
+  CASH
+  CREDIT_CARD
+  DEBIT_CARD
+  PIX
+  BANK_TRANSFER
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELLED
+}
+
+enum ProcedureStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+enum ConsentStatus {
+  DRAFT
+  SENT
+  SIGNED
+  REVOKED
+  EXPIRED
+}
+
+enum SignatureMethod {
+  DRAWN
+  TYPED
+  CLICKWRAP
+  CERTIFICATE
+}
+
+enum EquipmentStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  DISCARDED
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  CALIBRATION
+  VALIDATION
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  COMPLETED
+  OVERDUE
+  CANCELED
+}
+
+enum IndicatorResult {
+  PASS
+  FAIL
+  PENDING
+  NOT_APPLICABLE
+}
+
+enum ChecklistRunStatus {
+  DONE
+  PARTIAL
+  MISSED
+  SKIPPED
+}
+
+enum BatchStatus {
+  ACTIVE
+  EXPIRING
+  EXPIRED
+  QUARANTINED
+  DISCARDED
+}
+
+enum WasteClass {
+  A
+  B
+  C
+  D
+  E
+}
+
+enum WastePickupStatus {
+  SCHEDULED
+  COLLECTED
+  CANCELED
+}
+
+enum ComplianceSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ComplianceStatus {
+  COMPLIANT
+  WARNING
+  NON_COMPLIANT
+  NOT_APPLICABLE
+}
+
+enum ComplianceRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AlertChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
+}
+
+enum AlertStatus {
+  PENDING
+  SENT
+  READ
+  DISMISSED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  SIGN
+  PUBLISH
+  RECALCULATE
+}
+
+model Tenant {
+  id              String           @id @default(uuid()) @db.Uuid
+  tradeName       String
+  legalName       String?
+  status          TenantStatus     @default(TRIAL)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  clinics         Clinic[]
+  complianceRules ComplianceRule[]
+}
+
+model Clinic {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  tenantId               String                    @db.Uuid
+  tradeName              String
+  legalName              String?
+  cnpj                   String?
+  sanitaryLicenseNumber  String?
+  operatingLicenseNumber String?
+  city                   String?
+  state                  String?
+  regulatoryProfile      String?
+  status                 ClinicStatus              @default(ACTIVE)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  tenant                 Tenant                    @relation(fields: [tenantId], references: [id])
+  memberships            ClinicMembership[]
+  documents              Document[]
+  professionals          Professional[]
+  services               Service[]
+  clients                Client[]
+  anamneses              AnamnesisRecord[]
+  appointments           Appointment[]
+  payments               Payment[]
+  consentTemplates       ConsentTemplate[]
+  consentRecords         ConsentRecord[]
+  consentSignatures      ConsentSignature[]
+  procedures             ProcedureRecord[]
+  progressNotes          ClientProgressNote[]
+  equipments             Equipment[]
+  equipmentMaintenances  EquipmentMaintenance[]
+  sterilizationCycles    SterilizationCycle[]
+  cleaningTemplates      CleaningChecklistTemplate[]
+  cleaningRuns           CleaningChecklistRun[]
+  products               Product[]
+  productBatches         ProductBatch[]
+  wasteCollectors        WasteCollector[]
+  wastePickups           WastePickup[]
+  fileObjects            FileObject[]
+  complianceRuns         ComplianceRun[]
+  complianceFindings     ComplianceFinding[]
+  complianceScores       ComplianceScoreSnapshot[]
+  alerts                 Alert[]
+  auditLogs              AuditLog[]
+
+  @@index([tenantId])
+}
+
+model User {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  email                 String                 @unique
+  displayName           String?
+  passwordHash          String
+  status                UserStatus             @default(ACTIVE)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  memberships           ClinicMembership[]
+  uploadedFiles         FileObject[]           @relation("FileUploadedBy")
+  createdDocuments      Document[]             @relation("DocumentCreatedBy")
+  updatedDocuments      Document[]             @relation("DocumentUpdatedBy")
+  documentVersions      DocumentVersion[]      @relation("DocumentVersionCreatedBy")
+  anamneses             AnamnesisRecord[]      @relation("AnamnesisCreatedBy")
+  consentRecords        ConsentRecord[]        @relation("ConsentCreatedBy")
+  signatures            ConsentSignature[]     @relation("SignatureCapturedBy")
+  procedures            ProcedureRecord[]      @relation("ProcedureCreatedBy")
+  progressNotes         ClientProgressNote[]   @relation("ProgressNoteCreatedBy")
+  sterilizationCycles   SterilizationCycle[]   @relation("SterilizationPerformedBy")
+  cleaningRuns          CleaningChecklistRun[] @relation("ChecklistPerformedBy")
+  equipmentMaintenances EquipmentMaintenance[] @relation("MaintenanceCreatedBy")
+  complianceRuns        ComplianceRun[]        @relation("ComplianceRunTriggeredBy")
+  resolvedFindings      ComplianceFinding[]    @relation("FindingResolvedBy")
+  createdAlerts         Alert[]                @relation("AlertCreatedBy")
+  auditLogs             AuditLog[]
+}
+
+model ClinicMembership {
+  id        String         @id @default(uuid()) @db.Uuid
+  clinicId  String         @db.Uuid
+  userId    String         @db.Uuid
+  role      MembershipRole
+  isDefault Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  clinic    Clinic         @relation(fields: [clinicId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+
+  @@unique([clinicId, userId])
+  @@index([userId, isDefault])
+}
+
+model FileObject {
+  id           String            @id @default(uuid()) @db.Uuid
+  clinicId     String            @db.Uuid
+  uploadedById String           @db.Uuid
+  provider     String
+  bucket       String?
+  storageKey   String            @unique
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  encrypted    Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  clinic       Clinic            @relation(fields: [clinicId], references: [id])
+  uploadedBy   User             @relation("FileUploadedBy", fields: [uploadedById], references: [id])
+  versions     DocumentVersion[]
+}
+
+model Document {
+  id               String              @id @default(uuid()) @db.Uuid
+  clinicId         String              @db.Uuid
+  createdById      String             @db.Uuid
+  updatedById      String             @db.Uuid
+  category         DocumentCategory
+  type             DocumentType
+  subjectType      DocumentSubjectType?
+  subjectId        String?
+  title            String
+  description      String?
+  ownerDepartment  String?
+  issueDate        DateTime?
+  effectiveAt      DateTime?
+  reviewDueAt      DateTime?
+  expiresAt        DateTime?
+  status           DocumentStatus      @default(DRAFT)
+  currentVersionId String             @unique @db.Uuid
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  clinic           Clinic              @relation(fields: [clinicId], references: [id])
+  createdBy        User               @relation("DocumentCreatedBy", fields: [createdById], references: [id])
+  updatedBy        User               @relation("DocumentUpdatedBy", fields: [updatedById], references: [id])
+  currentVersion   DocumentVersion    @relation("DocumentCurrentVersion", fields: [currentVersionId], references: [id])
+  versions         DocumentVersion[]   @relation("DocumentVersions")
+
+  @@index([clinicId, category, type])
+  @@index([clinicId, expiresAt])
+}
+
+model DocumentVersion {
+  id            String       @id @default(uuid()) @db.Uuid
+  documentId    String       @db.Uuid
+  createdById   String      @db.Uuid
+  fileObjectId  String      @db.Uuid
+  versionNumber Int
+  changeSummary String?
+  contentJson   Json?
+  isPublished   Boolean      @default(false)
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  document      Document     @relation("DocumentVersions", fields: [documentId], references: [id])
+  createdBy     User        @relation("DocumentVersionCreatedBy", fields: [createdById], references: [id])
+  fileObject    FileObject  @relation(fields: [fileObjectId], references: [id])
+  currentFor    Document    @relation("DocumentCurrentVersion")
+
+  @@unique([documentId, versionNumber])
+}
+
+model Professional {
+  id          String            @id @default(uuid()) @db.Uuid
+  clinicId    String            @db.Uuid
+  name        String
+  specialty   String
+  phone       String?
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  clinic      Clinic            @relation(fields: [clinicId], references: [id])
+  appointments Appointment[]
+  procedures  ProcedureRecord[]
+
+  @@index([clinicId, active])
+}
+
+model Service {
+  id               String            @id @default(uuid()) @db.Uuid
+  clinicId         String            @db.Uuid
+  name             String
+  description      String?
+  duration         Int
+  price            Decimal           @db.Decimal(10, 2)
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  clinic           Clinic            @relation(fields: [clinicId], references: [id])
+  appointments     Appointment[]
+  procedures       ProcedureRecord[]
+  consentTemplates ConsentTemplate[]
+
+  @@index([clinicId, active])
+}
+
+model Client {
+  id             String              @id @default(uuid()) @db.Uuid
+  clinicId       String              @db.Uuid
+  name           String
+  email          String?
+  phone          String
+  birthDate      DateTime?
+  cpf            String?
+  notes          String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  clinic         Clinic              @relation(fields: [clinicId], references: [id])
+  anamneses      AnamnesisRecord[]
+  consentRecords         ConsentRecord[]
+  procedures     ProcedureRecord[]
+  progressNotes  ClientProgressNote[]
+  appointments   Appointment[]
+
+  @@index([clinicId, name])
+}
+
+model AnamnesisRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  clinicId    String   @db.Uuid
+  clientId    String   @db.Uuid
+  createdById String  @db.Uuid
+  answers     Json
+  filledAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  client      Client   @relation(fields: [clientId], references: [id])
+  createdBy   User    @relation("AnamnesisCreatedBy", fields: [createdById], references: [id])
+
+  @@index([clinicId, clientId, filledAt])
+}
+
+model ConsentTemplate {
+  id            String          @id @default(uuid()) @db.Uuid
+  clinicId      String          @db.Uuid
+  serviceId     String         @db.Uuid
+  title         String
+  versionNumber Int             @default(1)
+  contentJson   Json
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  clinic        Clinic          @relation(fields: [clinicId], references: [id])
+  service       Service        @relation(fields: [serviceId], references: [id])
+  consentRecords ConsentRecord[]
+
+  @@index([clinicId, isActive])
+}
+
+model ConsentRecord {
+  id            String             @id @default(uuid()) @db.Uuid
+  clinicId      String             @db.Uuid
+  clientId      String             @db.Uuid
+  createdById   String            @db.Uuid
+  templateId    String            @db.Uuid
+  procedureName String
+  renderedHtml  String
+  status        ConsentStatus      @default(DRAFT)
+  generatedAt   DateTime           @default(now())
+  signedAt      DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  clinic        Clinic             @relation(fields: [clinicId], references: [id])
+  client        Client             @relation(fields: [clientId], references: [id])
+  createdBy     User              @relation("ConsentCreatedBy", fields: [createdById], references: [id])
+  template      ConsentTemplate   @relation(fields: [templateId], references: [id])
+  signatures    ConsentSignature[]
+  procedures    ProcedureRecord[]
+
+  @@index([clinicId, clientId, status])
+}
+
+model ConsentSignature {
+  id             String          @id @default(uuid()) @db.Uuid
+  clinicId       String          @db.Uuid
+  consentRecordId String         @db.Uuid
+  capturedById   String         @db.Uuid
+  method         SignatureMethod
+  signatureHash  String
+  ipAddress      String?
+  deviceInfo     String?
+  signedAt       DateTime
+  createdAt      DateTime        @default(now())
+  clinic         Clinic          @relation(fields: [clinicId], references: [id])
+  consentRecord  ConsentRecord   @relation(fields: [consentRecordId], references: [id])
+  capturedBy     User           @relation("SignatureCapturedBy", fields: [capturedById], references: [id])
+
+  @@index([clinicId, consentRecordId])
+}
+
+model Appointment {
+  id             String            @id @default(uuid()) @db.Uuid
+  clinicId       String            @db.Uuid
+  clientId       String            @db.Uuid
+  serviceId      String            @db.Uuid
+  professionalId String            @db.Uuid
+  startAt        DateTime
+  endAt          DateTime
+  status         AppointmentStatus @default(SCHEDULED)
+  notes          String?
+  price          Decimal           @db.Decimal(10, 2)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  clinic         Clinic            @relation(fields: [clinicId], references: [id])
+  client         Client            @relation(fields: [clientId], references: [id])
+  service        Service           @relation(fields: [serviceId], references: [id])
+  professional   Professional      @relation(fields: [professionalId], references: [id])
+  payment        Payment?
+  procedures     ProcedureRecord[]
+
+  @@index([clinicId, startAt])
+  @@index([clinicId, professionalId, startAt])
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  clinicId      String        @db.Uuid
+  appointmentId String        @unique @db.Uuid
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  clinic        Clinic        @relation(fields: [clinicId], references: [id])
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id])
+
+  @@index([clinicId, status, paidAt])
+}
+
+model ProcedureRecord {
+  id             String             @id @default(uuid()) @db.Uuid
+  clinicId       String             @db.Uuid
+  clientId       String             @db.Uuid
+  professionalId String            @db.Uuid
+  serviceId      String            @db.Uuid
+  appointmentId  String            @db.Uuid
+  consentRecordId String           @db.Uuid
+  createdById    String            @db.Uuid
+  performedAt    DateTime
+  status         ProcedureStatus    @default(COMPLETED)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  clinic         Clinic             @relation(fields: [clinicId], references: [id])
+  client         Client             @relation(fields: [clientId], references: [id])
+  professional   Professional      @relation(fields: [professionalId], references: [id])
+  service        Service           @relation(fields: [serviceId], references: [id])
+  appointment    Appointment       @relation(fields: [appointmentId], references: [id])
+  consentRecord  ConsentRecord     @relation(fields: [consentRecordId], references: [id])
+  createdBy      User              @relation("ProcedureCreatedBy", fields: [createdById], references: [id])
+  productBatches ProcedureProductBatch[]
+
+  @@index([clinicId, clientId, performedAt])
+}
+
+model ProcedureProductBatch {
+  procedureId String       @db.Uuid
+  batchId     String       @db.Uuid
+  procedure   ProcedureRecord @relation(fields: [procedureId], references: [id])
+  batch       ProductBatch    @relation(fields: [batchId], references: [id])
+
+  @@id([procedureId, batchId])
+}
+
+model ClientProgressNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  clinicId    String   @db.Uuid
+  clientId    String   @db.Uuid
+  createdById String  @db.Uuid
+  noteType    String
+  body        String
+  createdAt   DateTime @default(now())
+  clinic      Clinic   @relation(fields: [clinicId], references: [id])
+  client      Client   @relation(fields: [clientId], references: [id])
+  createdBy   User    @relation("ProgressNoteCreatedBy", fields: [createdById], references: [id])
+
+  @@index([clinicId, clientId, createdAt])
+}
+
+model Equipment {
+  id                String                 @id @default(uuid()) @db.Uuid
+  clinicId          String                 @db.Uuid
+  name              String
+  category          String
+  manufacturer      String?
+  model             String?
+  serialNumber      String?
+  status            EquipmentStatus        @default(ACTIVE)
+  lastValidationAt  DateTime?
+  nextMaintenanceAt DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  clinic            Clinic                 @relation(fields: [clinicId], references: [id])
+  maintenances      EquipmentMaintenance[]
+  sterilizationCycles SterilizationCycle[]
+
+  @@index([clinicId, status])
+}
+
+model EquipmentMaintenance {
+  id            String            @id @default(uuid()) @db.Uuid
+  clinicId      String            @db.Uuid
+  equipmentId   String            @db.Uuid
+  createdById   String           @db.Uuid
+  type          MaintenanceType
+  status        MaintenanceStatus @default(SCHEDULED)
+  scheduledAt   DateTime
+  performedAt   DateTime?
+  supplierName  String?
+  cost          Decimal          @db.Decimal(10, 2)
+  findings      String?
+  nextDueAt     DateTime?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  clinic        Clinic            @relation(fields: [clinicId], references: [id])
+  equipment     Equipment         @relation(fields: [equipmentId], references: [id])
+  createdBy     User             @relation("MaintenanceCreatedBy", fields: [createdById], references: [id])
+
+  @@index([clinicId, status, scheduledAt])
+}
+
+model SterilizationCycle {
+  id                      String          @id @default(uuid()) @db.Uuid
+  clinicId                String          @db.Uuid
+  equipmentId             String         @db.Uuid
+  performedById           String         @db.Uuid
+  cycleAt                 DateTime
+  loadDescription         String
+  chemicalIndicatorResult IndicatorResult @default(PENDING)
+  biologicalIndicatorResult IndicatorResult @default(PENDING)
+  releaseStatus           IndicatorResult @default(PENDING)
+  notes                   String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  clinic                  Clinic          @relation(fields: [clinicId], references: [id])
+  equipment               Equipment      @relation(fields: [equipmentId], references: [id])
+  performedBy             User           @relation("SterilizationPerformedBy", fields: [performedById], references: [id])
+
+  @@index([clinicId, cycleAt])
+}
+
+model CleaningChecklistTemplate {
+  id         String               @id @default(uuid()) @db.Uuid
+  clinicId   String               @db.Uuid
+  name       String
+  area       String
+  itemsJson  Json
+  active     Boolean              @default(true)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  clinic     Clinic               @relation(fields: [clinicId], references: [id])
+  runs       CleaningChecklistRun[]
+
+  @@index([clinicId, active])
+}
+
+model CleaningChecklistRun {
+  id            String             @id @default(uuid()) @db.Uuid
+  clinicId      String             @db.Uuid
+  templateId    String             @db.Uuid
+  performedById String            @db.Uuid
+  performedAt   DateTime
+  shift         String?
+  area          String?
+  status        ChecklistRunStatus @default(DONE)
+  score         Int?
+  answersJson   Json
+  notes         String?
+  createdAt     DateTime           @default(now())
+  clinic        Clinic             @relation(fields: [clinicId], references: [id])
+  template      CleaningChecklistTemplate @relation(fields: [templateId], references: [id])
+  performedBy   User              @relation("ChecklistPerformedBy", fields: [performedById], references: [id])
+
+  @@index([clinicId, performedAt])
+}
+
+model Product {
+  id                String         @id @default(uuid()) @db.Uuid
+  clinicId          String         @db.Uuid
+  name              String
+  category          String?
+  manufacturer      String?
+  anvisaRegistration String?
+  unit              String
+  active            Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  clinic            Clinic         @relation(fields: [clinicId], references: [id])
+  batches           ProductBatch[]
+
+  @@index([clinicId, active])
+}
+
+model ProductBatch {
+  id             String                @id @default(uuid()) @db.Uuid
+  clinicId       String                @db.Uuid
+  productId      String                @db.Uuid
+  batchNumber    String
+  manufacturedAt DateTime?
+  expiresAt      DateTime?
+  quantity       Decimal              @db.Decimal(10, 2)
+  unit           String?
+  status         BatchStatus           @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  clinic         Clinic                @relation(fields: [clinicId], references: [id])
+  product        Product               @relation(fields: [productId], references: [id])
+  procedures     ProcedureProductBatch[]
+
+  @@unique([clinicId, productId, batchNumber])
+  @@index([clinicId, expiresAt])
+}
+
+model WasteCollector {
+  id             String        @id @default(uuid()) @db.Uuid
+  clinicId       String        @db.Uuid
+  companyName    String
+  cnpj           String?
+  contactName    String?
+  contactPhone   String?
+  email          String?
+  contractStartAt DateTime?
+  contractEndAt  DateTime?
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  clinic         Clinic        @relation(fields: [clinicId], references: [id])
+  pickups        WastePickup[]
+
+  @@index([clinicId, companyName])
+}
+
+model WastePickup {
+  id             String             @id @default(uuid()) @db.Uuid
+  clinicId       String             @db.Uuid
+  collectorId    String             @db.Uuid
+  pickupAt       DateTime
+  wasteClass     WasteClass
+  weightKg       Decimal           @db.Decimal(10, 2)
+  manifestNumber String?
+  status         WastePickupStatus  @default(COLLECTED)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  clinic         Clinic             @relation(fields: [clinicId], references: [id])
+  collector      WasteCollector     @relation(fields: [collectorId], references: [id])
+
+  @@index([clinicId, pickupAt])
+}
+
+model ComplianceRule {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String             @db.Uuid
+  code             String              @unique
+  title            String
+  description      String
+  moduleKey        String
+  severity         ComplianceSeverity
+  appliesWhenJson  Json?
+  evidenceJson     Json?
+  active           Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  findings         ComplianceFinding[]
+
+  @@index([tenantId, active])
+}
+
+model ComplianceRun {
+  id            String               @id @default(uuid()) @db.Uuid
+  clinicId      String               @db.Uuid
+  triggeredById String              @db.Uuid
+  status        ComplianceRunStatus  @default(RUNNING)
+  startedAt     DateTime             @default(now())
+  finishedAt    DateTime?
+  summaryJson   Json?
+  clinic        Clinic               @relation(fields: [clinicId], references: [id])
+  triggeredBy   User                @relation("ComplianceRunTriggeredBy", fields: [triggeredById], references: [id])
+  findings      ComplianceFinding[]
+  scoreSnapshot ComplianceScoreSnapshot?
+
+  @@index([clinicId, startedAt])
+}
+
+model ComplianceFinding {
+  id                String             @id @default(uuid()) @db.Uuid
+  clinicId          String             @db.Uuid
+  runId             String            @db.Uuid
+  ruleId            String            @db.Uuid
+  resolvedById      String            @db.Uuid
+  status            ComplianceStatus   @default(NON_COMPLIANT)
+  severity          ComplianceSeverity
+  title             String
+  description       String
+  recommendedAction String?
+  entityType        String?
+  entityId          String?
+  dueAt             DateTime?
+  resolvedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  clinic            Clinic             @relation(fields: [clinicId], references: [id])
+  run               ComplianceRun     @relation(fields: [runId], references: [id])
+  rule              ComplianceRule    @relation(fields: [ruleId], references: [id])
+  resolvedBy        User              @relation("FindingResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([clinicId, status, severity])
+}
+
+model ComplianceScoreSnapshot {
+  id            String        @id @default(uuid()) @db.Uuid
+  clinicId      String        @db.Uuid
+  runId         String       @unique @db.Uuid
+  overallScore  Int
+  legalScore    Int?
+  sanitaryScore Int?
+  operationsScore Int?
+  clientScore   Int?
+  inventoryScore Int?
+  wasteScore    Int?
+  createdAt     DateTime      @default(now())
+  clinic        Clinic        @relation(fields: [clinicId], references: [id])
+  run           ComplianceRun @relation(fields: [runId], references: [id])
+
+  @@index([clinicId, createdAt])
+}
+
+model Alert {
+  id          String             @id @default(uuid()) @db.Uuid
+  clinicId    String             @db.Uuid
+  createdById String            @db.Uuid
+  channel     AlertChannel       @default(IN_APP)
+  status      AlertStatus        @default(PENDING)
+  severity    ComplianceSeverity @default(MEDIUM)
+  title       String
+  message     String
+  entityType  String?
+  entityId    String?
+  scheduledFor DateTime?
+  sentAt      DateTime?
+  readAt      DateTime?
+  createdAt   DateTime           @default(now())
+  clinic      Clinic             @relation(fields: [clinicId], references: [id])
+  createdBy   User              @relation("AlertCreatedBy", fields: [createdById], references: [id])
+
+  @@index([clinicId, status, scheduledFor])
+}
+
+model AuditLog {
+  id         String      @id @default(uuid()) @db.Uuid
+  clinicId   String      @db.Uuid
+  userId     String     @db.Uuid
+  action     AuditAction
+  entityType String
+  entityId   String?
+  beforeJson Json?
+  afterJson  Json?
+  metadataJson Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+  clinic     Clinic      @relation(fields: [clinicId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@index([clinicId, entityType, entityId])
+  @@index([clinicId, createdAt])
+}
+
+
+
+

@@ -1,0 +1,75 @@
+﻿const express = require('express')
+const { anamnesisUpsertSchema } = require('../schemas')
+const { asyncHandler, parsePositiveInt } = require('../lib/http')
+const { createAuditLog } = require('../lib/audit')
+const {
+  ensureClientOwnership,
+  buildMedicalRecord,
+  buildMedicalRecordSummary,
+  buildAccessState,
+  summarizeAnamnesis,
+  createAnamnesisVersion,
+} = require('../lib/medical-records')
+
+function createMedicalRecordsRouter(context) {
+  const router = express.Router()
+
+  router.use(context.auth.authMiddleware)
+  router.use(context.auth.requireScopedClinicUser)
+
+  router.get('/by-client/:clientId', asyncHandler(async (req, res) => {
+    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
+    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
+    res.json(buildMedicalRecord(client))
+  }))
+
+  router.get('/by-client/:clientId/summary', asyncHandler(async (req, res) => {
+    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
+    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
+    res.json(buildMedicalRecordSummary(client))
+  }))
+
+  router.get('/by-client/:clientId/access-state', asyncHandler(async (req, res) => {
+    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
+    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
+    res.json({
+      medicalRecordId: `legacy-client-${client.id}`,
+      ...buildAccessState(client),
+    })
+  }))
+
+  router.get('/by-client/:clientId/anamnesis', asyncHandler(async (req, res) => {
+    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
+    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
+    res.json({
+      clientId: client.id,
+      latest: summarizeAnamnesis(client.anamneses?.[0] || null),
+      history: (client.anamneses || []).map(summarizeAnamnesis),
+      accessState: buildAccessState(client),
+    })
+  }))
+
+  router.put('/by-client/:clientId/anamnesis', asyncHandler(async (req, res) => {
+    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
+    const payload = anamnesisUpsertSchema.parse(req.body)
+    const updatedClient = await createAnamnesisVersion(context.prisma, req.currentUser.id, clientId, payload)
+
+    await createAuditLog(context.prisma, req, context.auth, {
+      action: 'API_V2_ANAMNESIS_VERSION_CREATE',
+      entityType: 'Anamnesis',
+      entityId: updatedClient.anamneses?.[0]?.id || null,
+      metadata: {
+        clientId: updatedClient.id,
+        path: `/api/v2/medical-records/by-client/${updatedClient.id}/anamnesis`,
+      },
+    })
+
+    res.json(buildMedicalRecord(updatedClient))
+  }))
+
+  return router
+}
+
+module.exports = {
+  createMedicalRecordsRouter,
+}

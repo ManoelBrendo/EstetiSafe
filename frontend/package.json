@@ -1,0 +1,35 @@
+{
+    "name": "lappui-frontend",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+        "lint": "eslint . --ext js,jsx,ts,tsx",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run --config vitest.config.js",
+        "test:watch": "vitest --config vitest.config.js"
+    },
+    "dependencies": {
+        "@hookform/resolvers": "^3.3.4",
+        "axios": "^1.6.0",
+        "date-fns": "^3.6.0",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-hook-form": "^7.51.0",
+        "react-hot-toast": "^2.4.1",
+        "react-router-dom": "^6.22.0",
+        "zod": "^3.22.4"
+    },
+    "devDependencies": {
+        "@types/react": "^18.3.28",
+        "@types/react-dom": "^18.3.7",
+        "@vitejs/plugin-react": "^4.0.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-react-hooks": "^4.6.2",
+        "typescript": "^5.9.3",
+        "vite": "^5.0.0",
+        "vitest": "^1.6.1"
+    }
+}
