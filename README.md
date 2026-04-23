@@ -1,24 +1,39 @@
 ﻿# L'Appui SaaS
 
-Plataforma web para clinicas de estetica com foco em operacao, prontuario, regularizacao documental e suporte tecnico.
+L'Appui is a web SaaS for aesthetic clinics focused on operational clarity, clinical records, regulatory compliance, and technical support.
 
-## Estrutura do projeto
+## Product focus
+
+The platform is organized around the routines that matter most to a clinic:
+
+- client base, anamnesis, consent, and medical records
+- document control and compliance readiness
+- services, POPs, schedule, and professionals
+- inventory, equipment, billing, and support operations
+
+## Repository layout
 
 ```text
 .
-|- frontend/          # SPA React + Vite
-|- backend/backend/   # API REST Node.js + Express + Prisma
-|- docs/              # Documentacao complementar
-|- .github/           # CI do GitHub Actions
+|- frontend/          # React + Vite web application
+|- backend/backend/   # Node.js + Express + Prisma API
+|- docs/              # Product and implementation notes
+|- .github/           # GitHub Actions workflows
 ```
 
-## Stack principal
+## Main stack
 
-- Frontend: React, Vite, TypeScript progressivo, Axios, React Router
+- Frontend: React, Vite, TypeScript migration in progress, Axios, React Router
 - Backend: Node.js, Express, Prisma, PostgreSQL, Zod, PDFKit
-- Testes: Vitest no frontend e Node test runner no backend
+- Testing: Vitest on the frontend and Node test runner on the backend
 
-## Como rodar localmente
+## Current technical status
+
+- The frontend is being migrated progressively from JavaScript to TypeScript.
+- Core auth, clinical flows, documents, dashboard, billing, and inventory are already typed.
+- CI is configured to lint, test, and build both application layers.
+
+## Local setup
 
 ### 1. Frontend
 
@@ -38,14 +53,14 @@ npm install
 npm run start
 ```
 
-## Variaveis de ambiente
+## Environment variables
 
-- Frontend: veja [frontend/.env.example](frontend/.env.example)
-- Backend: veja [backend/backend/.env.example](backend/backend/.env.example)
+- Frontend example: [frontend/.env.example](frontend/.env.example)
+- Backend example: [backend/backend/.env.example](backend/backend/.env.example)
 
-Nunca suba arquivos `.env` reais para o GitHub.
+Never commit real `.env` files to GitHub.
 
-## Scripts uteis
+## Useful scripts
 
 ### Frontend
 
@@ -69,26 +84,22 @@ npm run test:integration
 
 ## CI
 
-O repositorio ja possui pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml) para:
+The repository already includes [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for:
 
-- lint e testes do backend
-- testes de integracao do backend
-- lint, testes e build do frontend
+- backend lint and tests
+- backend integration tests
+- frontend lint, tests, and build
 
-## Observacoes para publicacao
+## Git workflow
 
-- O frontend usa `.env.example` como base para configuracao local.
-- O backend depende de PostgreSQL e `DATABASE_URL`.
-- A pasta `backend/backend` foi mantida como esta para nao quebrar a estrutura atual do projeto.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
-## Proximo passo para subir ao GitHub
+- branch naming conventions
+- commit message style
+- pull request checklist
 
-Depois desta preparacao, os comandos padrao sao:
+## Notes
 
-```bash
-git init -b main
-git add .
-git commit -m "chore: prepare repository for GitHub"
-git remote add origin <url-do-repositorio>
-git push -u origin main
-```
+- `backend/backend` is intentionally preserved to avoid breaking the current deployment structure.
+- The project is currently desktop-first, with mobile handled as a responsive fallback.
+- The repository ignores local runtime artifacts, logs, screenshots, builds, and `.env` files.
