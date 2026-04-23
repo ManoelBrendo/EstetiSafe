@@ -9,9 +9,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
+        manualChunks(id: string) {
           if (!id.includes('node_modules')) {
-            return
+            return undefined
           }
 
           if (id.includes('react-hook-form') || id.includes('@hookform') || id.includes('zod')) {
@@ -37,6 +37,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['**/*.test.js', '**/*.test.ts', '**/*.test.tsx'],
+    include: ['**/*.test.ts', '**/*.test.tsx'],
   },
 })

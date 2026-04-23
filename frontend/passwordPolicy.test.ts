@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { getPasswordPolicyStatus, hasForbiddenDigitSequence, passwordPolicyHint } from './passwordPolicy'
 
 describe('password policy', () => {

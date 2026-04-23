@@ -1,9 +1,9 @@
-﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { useAuth } from './useAuth'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { getClinicBranding } from './branding'
 import { isImpersonating } from './support'
 import type { Identifier } from './clinicalTypes'
@@ -71,7 +71,7 @@ const clinicStatusMeta: Record<ClinicStatusKey, BadgeMeta> = {
   ARCHIVED: { label: 'ClÃ­nica arquivada', className: 'badge badge-muted' },
 }
 
-const auditActionMeta: Record<string, { label: string; icon: string }> = {
+const auditActionMeta: Record<string, { label: string; icon: IconName }> = {
   AUTH_REGISTER: { label: 'Cadastro inicial', icon: 'sparkles' },
   SUPPORT_ASSUME_CLINIC: { label: 'Acesso do suporte', icon: 'dashboard' },
   BILLING_CONFIG_UPDATED: { label: 'Assinatura ajustada', icon: 'edit' },
@@ -155,7 +155,7 @@ function getClinicStatus(status?: string | null): BadgeMeta {
   return clinicStatusMeta.ACTIVE
 }
 
-function getAuditAction(action?: string | null): { label: string; icon: string } {
+function getAuditAction(action?: string | null): { label: string; icon: IconName } {
   if (action && action in auditActionMeta) {
     return auditActionMeta[action]
   }
@@ -878,3 +878,6 @@ export default function Pagamentos() {
     </div>
   )
 }
+
+
+

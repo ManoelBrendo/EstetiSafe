@@ -1,9 +1,9 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from './useAuth'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { getClinicBranding } from './branding'
 import { isImpersonating, isSupportUser } from './support'
 import type { AuthUser } from './types'
@@ -11,7 +11,7 @@ import type { BillingStatusKey } from './operationsTypes'
 
 interface NavigationItem {
   to: string
-  icon: string
+  icon: IconName
   label: string
 }
 
@@ -251,3 +251,5 @@ export function Layout({ children }: LayoutProps) {
     </div>
   )
 }
+
+

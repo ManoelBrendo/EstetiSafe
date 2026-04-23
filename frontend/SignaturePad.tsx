@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import type { PointerEvent } from 'react'
 import { Icon } from './Icon'
 
 const CANVAS_WIDTH = 960
 const CANVAS_HEIGHT = 280
 
-function prepareCanvas(canvas) {
+export interface SignaturePadProps {
+  label: string
+  description?: string
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+}
+
+function prepareCanvas(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('2d')
   if (!context) return
 
@@ -22,8 +31,8 @@ export function SignaturePad({
   value,
   onChange,
   disabled = false,
-}) {
-  const canvasRef = useRef(null)
+}: SignaturePadProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const [editing, setEditing] = useState(!value)
   const [hasSignature, setHasSignature] = useState(Boolean(value))
@@ -43,8 +52,10 @@ export function SignaturePad({
     setHasSignature(false)
   }, [disabled, editing])
 
-  function getCanvasPoint(event) {
+  function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
+    if (!canvas) return null
+
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
@@ -55,18 +66,20 @@ export function SignaturePad({
     }
   }
 
-  function handlePointerDown(event) {
+  function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (disabled || !editing) return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
 
+    const point = getCanvasPoint(event)
+    if (!point) return
+
     event.preventDefault()
     drawingRef.current = true
     canvas.setPointerCapture?.(event.pointerId)
 
-    const point = getCanvasPoint(event)
     context.beginPath()
     context.moveTo(point.x, point.y)
     context.lineTo(point.x + 0.1, point.y + 0.1)
@@ -74,20 +87,22 @@ export function SignaturePad({
     setHasSignature(true)
   }
 
-  function handlePointerMove(event) {
+  function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || disabled || !editing) return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
 
-    event.preventDefault()
     const point = getCanvasPoint(event)
+    if (!point) return
+
+    event.preventDefault()
     context.lineTo(point.x, point.y)
     context.stroke()
   }
 
-  function handlePointerUp(event) {
+  function handlePointerUp(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || !editing) return
 
     drawingRef.current = false
@@ -128,7 +143,7 @@ export function SignaturePad({
           </div>
           <div className="signature-meta">
             <strong>Assinatura registrada</strong>
-            <span>Você pode manter ou refazer antes de salvar a anamnese.</span>
+            <span>Voce pode manter ou refazer antes de salvar a anamnese.</span>
           </div>
           {disabled ? null : (
             <div className="consent-actions consent-actions-start">

@@ -8,8 +8,8 @@
         "preview": "vite preview",
         "lint": "eslint . --ext js,jsx,ts,tsx",
         "typecheck": "tsc --noEmit",
-        "test": "vitest run --config vitest.config.js",
-        "test:watch": "vitest --config vitest.config.js"
+        "test": "vitest run --config vitest.config.ts",
+        "test:watch": "vitest --config vitest.config.ts"
     },
     "dependencies": {
         "@hookform/resolvers": "^3.3.4",
@@ -33,3 +33,4 @@
         "vitest": "^1.6.1"
     }
 }
+

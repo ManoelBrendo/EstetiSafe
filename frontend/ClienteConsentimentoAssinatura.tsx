@@ -1,20 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, PointerEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { downloadApiFile, getApiErrorMessage } from './api'
 import { Icon } from './Icon'
+import type { Identifier } from './clinicalTypes'
+import type { ProfessionalSummary } from './operationsTypes'
 
 const CANVAS_WIDTH = 960
 const CANVAS_HEIGHT = 280
 
-const consentStatusMeta = {
+type ConsentStatus = 'PENDING' | 'SIGNED' | 'REVOKED'
+
+interface ConsentClientSummary {
+  id: Identifier
+  name: string
+  phone?: string | null
+  email?: string | null
+  cpf?: string | null
+}
+
+interface ConsentRecordDetail {
+  id: Identifier
+  clientId: Identifier
+  title: string
+  versionLabel: string
+  termText: string
+  status: ConsentStatus | string
+  createdAt?: string | null
+  signedAt?: string | null
+  signatureDataUrl?: string | null
+  signerName?: string | null
+  signerDocument?: string | null
+  professionalId?: Identifier | null
+  professionalName?: string | null
+  client: ConsentClientSummary
+}
+
+const consentStatusMeta: Record<ConsentStatus, { label: string; className: string }> = {
   PENDING: { label: 'Pendente de assinatura', className: 'badge badge-gold' },
   SIGNED: { label: 'Assinado', className: 'badge badge-green' },
   REVOKED: { label: 'Revogado', className: 'badge badge-red' },
 }
 
-function formatDateTime(value) {
-  if (!value) return 'Ainda não assinado'
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Ainda nao assinado'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -22,8 +52,10 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
-function prepareCanvas(canvas) {
+function prepareCanvas(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('2d')
+  if (!context) return
+
   context.fillStyle = '#fffaf4'
   context.fillRect(0, 0, canvas.width, canvas.height)
   context.strokeStyle = '#8e6333'
@@ -32,21 +64,25 @@ function prepareCanvas(canvas) {
   context.lineJoin = 'round'
 }
 
-function StatusBadge({ status }) {
-  const meta = consentStatusMeta[status] || { label: 'Sem status', className: 'badge badge-muted' }
+function StatusBadge({ status }: { status?: string | null }) {
+  const meta =
+    status && status in consentStatusMeta
+      ? consentStatusMeta[status as ConsentStatus]
+      : { label: 'Sem status', className: 'badge badge-muted' }
+
   return <span className={meta.className}>{meta.label}</span>
 }
 
 export default function ClienteConsentimentoAssinatura() {
   const navigate = useNavigate()
-  const { clientId, consentRecordId } = useParams()
-  const canvasRef = useRef(null)
+  const { clientId = '', consentRecordId = '' } = useParams<{ clientId: string; consentRecordId: string }>()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
-  const [record, setRecord] = useState(null)
-  const [professionals, setProfessionals] = useState([])
+  const [record, setRecord] = useState<ConsentRecordDetail | null>(null)
+  const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
   const [signerName, setSignerName] = useState('')
   const [signerDocument, setSignerDocument] = useState('')
   const [professionalId, setProfessionalId] = useState('')
@@ -60,22 +96,24 @@ export default function ClienteConsentimentoAssinatura() {
     [professionalId, professionals]
   )
 
-  const resolvedProfessionalName = selectedProfessional?.name || professionalName.trim() || record?.professionalName || 'Não informado'
+  const resolvedProfessionalName =
+    selectedProfessional?.name || professionalName.trim() || record?.professionalName || 'Nao informado'
 
   const loadRecord = useCallback(async () => {
     setLoading(true)
 
     try {
       const [{ data }, { data: professionalsData }] = await Promise.all([
-        api.get('/consent-records/' + consentRecordId),
-        api.get('/professionals'),
+        api.get<ConsentRecordDetail>('/consent-records/' + consentRecordId),
+        api.get<ProfessionalSummary[]>('/professionals'),
       ])
 
       if (String(data.clientId) !== String(clientId)) {
-        throw new Error('O termo informado não pertence a este cliente')
+        throw new Error('O termo informado nao pertence a este cliente')
       }
 
-      const matchedProfessional = professionalsData.find(item => String(item.id) === String(data.professionalId || '')) || null
+      const matchedProfessional =
+        professionalsData.find(item => String(item.id) === String(data.professionalId || '')) || null
 
       setRecord(data)
       setProfessionals(professionalsData)
@@ -84,10 +122,10 @@ export default function ClienteConsentimentoAssinatura() {
       setAccepted(data.status === 'SIGNED')
       setHasSignature(data.status === 'SIGNED')
       setProfessionalId(matchedProfessional ? String(matchedProfessional.id) : '')
-      setProfessionalName(matchedProfessional ? matchedProfessional.name : (data.professionalName || ''))
+      setProfessionalName(matchedProfessional ? matchedProfessional.name : data.professionalName || '')
       setUseManualProfessional(!professionalsData.length || Boolean(data.professionalName && !matchedProfessional))
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível abrir o termo de consentimento'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir o termo de consentimento'))
       navigate('/clientes', { replace: true })
     } finally {
       setLoading(false)
@@ -95,7 +133,7 @@ export default function ClienteConsentimentoAssinatura() {
   }, [clientId, consentRecordId, navigate])
 
   useEffect(() => {
-    loadRecord()
+    void loadRecord()
   }, [loadRecord])
 
   useEffect(() => {
@@ -108,10 +146,18 @@ export default function ClienteConsentimentoAssinatura() {
     setHasSignature(false)
   }, [loading, record?.id, record?.status])
 
-  const statusMeta = useMemo(() => consentStatusMeta[record?.status] || consentStatusMeta.PENDING, [record?.status])
+  const statusMeta = useMemo(() => {
+    if (record?.status && record.status in consentStatusMeta) {
+      return consentStatusMeta[record.status as ConsentStatus]
+    }
 
-  function getCanvasPoint(event) {
+    return consentStatusMeta.PENDING
+  }, [record?.status])
+
+  function getCanvasPoint(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
+    if (!canvas) return null
+
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
@@ -122,18 +168,20 @@ export default function ClienteConsentimentoAssinatura() {
     }
   }
 
-  function handlePointerDown(event) {
+  function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (record?.status === 'SIGNED') return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
 
+    const point = getCanvasPoint(event)
+    if (!point) return
+
     event.preventDefault()
     drawingRef.current = true
     canvas.setPointerCapture?.(event.pointerId)
 
-    const point = getCanvasPoint(event)
     context.beginPath()
     context.moveTo(point.x, point.y)
     context.lineTo(point.x + 0.1, point.y + 0.1)
@@ -141,20 +189,22 @@ export default function ClienteConsentimentoAssinatura() {
     setHasSignature(true)
   }
 
-  function handlePointerMove(event) {
+  function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || record?.status === 'SIGNED') return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
 
-    event.preventDefault()
     const point = getCanvasPoint(event)
+    if (!point) return
+
+    event.preventDefault()
     context.lineTo(point.x, point.y)
     context.stroke()
   }
 
-  function handlePointerUp(event) {
+  function handlePointerUp(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return
 
     drawingRef.current = false
@@ -169,7 +219,7 @@ export default function ClienteConsentimentoAssinatura() {
     setHasSignature(false)
   }
 
-  function handleProfessionalChange(event) {
+  function handleProfessionalChange(event: ChangeEvent<HTMLSelectElement>) {
     const value = event.target.value
 
     if (value === 'MANUAL') {
@@ -189,24 +239,24 @@ export default function ClienteConsentimentoAssinatura() {
     if (!record) return
 
     if (!signerName.trim()) {
-      toast.error('Informe o nome de quem está assinando')
+      toast.error('Informe o nome de quem esta assinando')
       return
     }
 
-    const selectedName = useManualProfessional ? professionalName.trim() : (selectedProfessional?.name || '')
+    const selectedName = useManualProfessional ? professionalName.trim() : selectedProfessional?.name || ''
 
     if (!selectedProfessional && !selectedName) {
-      toast.error('Selecione ou informe o profissional responsável')
+      toast.error('Selecione ou informe o profissional responsavel')
       return
     }
 
     if (!accepted) {
-      toast.error('Confirme a leitura e concordância com o termo')
+      toast.error('Confirme a leitura e concordancia com o termo')
       return
     }
 
     if (!hasSignature || !canvasRef.current) {
-      toast.error('Faça a assinatura no campo indicado')
+      toast.error('Faca a assinatura no campo indicado')
       return
     }
 
@@ -214,10 +264,10 @@ export default function ClienteConsentimentoAssinatura() {
 
     try {
       const signatureDataUrl = canvasRef.current.toDataURL('image/png')
-      const { data } = await api.post('/consent-records/' + record.id + '/sign', {
+      const { data } = await api.post<ConsentRecordDetail>('/consent-records/' + record.id + '/sign', {
         signerName: signerName.trim(),
         signerDocument: signerDocument.trim(),
-        professionalId: useManualProfessional ? null : (selectedProfessional ? selectedProfessional.id : null),
+        professionalId: useManualProfessional ? null : selectedProfessional ? selectedProfessional.id : null,
         professionalName: selectedName,
         signatureDataUrl,
         accepted: true,
@@ -231,7 +281,7 @@ export default function ClienteConsentimentoAssinatura() {
       setUseManualProfessional(!data.professionalId && Boolean(data.professionalName))
       toast.success('Termo assinado e salvo no cadastro do cliente')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a assinatura'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a assinatura'))
     } finally {
       setSaving(false)
     }
@@ -249,7 +299,7 @@ export default function ClienteConsentimentoAssinatura() {
       )
       toast.success('PDF do termo baixado com sucesso')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível baixar o PDF do termo'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel baixar o PDF do termo'))
     } finally {
       setDownloadingPdf(false)
     }
@@ -277,7 +327,7 @@ export default function ClienteConsentimentoAssinatura() {
           </button>
           <h1 className="page-title">Termo de consentimento</h1>
           <p className="page-subtitle">
-            Assinatura digital vinculada diretamente ao prontuário de {record.client.name}.
+            Assinatura digital vinculada diretamente ao prontuario de {record.client.name}.
           </p>
         </div>
 
@@ -291,7 +341,7 @@ export default function ClienteConsentimentoAssinatura() {
               <div>
                 <h2 className="section-title">{record.title}</h2>
                 <p className="section-copy">
-                  Versão {record.versionLabel} gerada em {formatDateTime(record.createdAt)}.
+                  Versao {record.versionLabel} gerada em {formatDateTime(record.createdAt)}.
                 </p>
               </div>
               <span className={statusMeta.className}>{statusMeta.label}</span>
@@ -309,7 +359,7 @@ export default function ClienteConsentimentoAssinatura() {
               <div>
                 <h2 className="section-title">Assinatura digital</h2>
                 <p className="section-copy">
-                  Capture a assinatura com o dedo, mouse ou caneta para arquivar a evidência deste termo.
+                  Capture a assinatura com o dedo, mouse ou caneta para arquivar a evidencia deste termo.
                 </p>
               </div>
             </div>
@@ -339,7 +389,7 @@ export default function ClienteConsentimentoAssinatura() {
 
               {professionals.length ? (
                 <div className="form-group">
-                  <label className="form-label">Profissional responsável *</label>
+                  <label className="form-label">Profissional responsavel *</label>
                   <select
                     className="form-select"
                     value={useManualProfessional ? 'MANUAL' : professionalId}
@@ -348,19 +398,21 @@ export default function ClienteConsentimentoAssinatura() {
                   >
                     <option value="">Selecione</option>
                     {professionals.map(professional => (
-                      <option key={professional.id} value={professional.id}>{professional.name}</option>
+                      <option key={professional.id} value={String(professional.id)}>
+                        {professional.name}
+                      </option>
                     ))}
-                    <option value="MANUAL">Profissional não cadastrado</option>
+                    <option value="MANUAL">Profissional nao cadastrado</option>
                   </select>
                   {!useManualProfessional && selectedProfessional ? (
                     <p className="text-sm text-muted consent-professional-hint">
-                      {selectedProfessional.specialty || 'Profissional ativo no cadastro da clínica.'}
+                      {selectedProfessional.specialty || 'Profissional ativo no cadastro da clinica.'}
                     </p>
                   ) : null}
                 </div>
               ) : (
                 <div className="form-group form-full">
-                  <label className="form-label">Profissional responsável *</label>
+                  <label className="form-label">Profissional responsavel *</label>
                   <p className="text-sm text-muted consent-professional-hint">
                     Nenhum profissional ativo cadastrado. Informe manualmente para concluir o termo.
                   </p>
@@ -384,21 +436,30 @@ export default function ClienteConsentimentoAssinatura() {
             {record.status === 'SIGNED' ? (
               <div className="signature-preview-card">
                 <div className="signature-preview-wrap">
-                  <img src={record.signatureDataUrl} alt="Assinatura do cliente" className="signature-preview" />
+                  <img src={record.signatureDataUrl || ''} alt="Assinatura do cliente" className="signature-preview" />
                 </div>
                 <div className="signature-meta">
-                  <strong>Assinatura concluída</strong>
+                  <strong>Assinatura concluida</strong>
                   <span>Registro salvo em {formatDateTime(record.signedAt)}</span>
-                  <span>Profissional responsável: {resolvedProfessionalName}</span>
+                  <span>Profissional responsavel: {resolvedProfessionalName}</span>
                 </div>
                 <div className="consent-actions consent-actions-start">
                   <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes')}>
                     Voltar para clientes
                   </button>
-                  <button type="button" className="btn btn-outline" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={handleDownloadPdf}
+                    disabled={downloadingPdf}
+                  >
                     {downloadingPdf ? <span className="spinner" /> : <><Icon name="download" /> Baixar PDF</>}
                   </button>
-                  <button type="button" className="btn btn-gold" onClick={() => navigate('/clientes/' + record.client.id + '/anamnese')}>
+                  <button
+                    type="button"
+                    className="btn btn-gold"
+                    onClick={() => navigate('/clientes/' + record.client.id + '/anamnese')}
+                  >
                     <Icon name="clipboard" /> Abrir anamnese
                   </button>
                 </div>
@@ -420,7 +481,8 @@ export default function ClienteConsentimentoAssinatura() {
 
                 <div className="signature-toolbar">
                   <span className="signature-note">
-                    Assine no campo acima. O sistema salva a evidência no cadastro do cliente junto do profissional responsável.
+                    Assine no campo acima. O sistema salva a evidencia no cadastro do cliente junto do profissional
+                    responsavel.
                   </span>
                   <button type="button" className="btn btn-outline" onClick={clearSignature}>
                     <Icon name="x" /> Limpar assinatura
@@ -454,15 +516,15 @@ export default function ClienteConsentimentoAssinatura() {
             <div className="detail-list">
               <div className="detail-row">
                 <span>Telefone</span>
-                <strong>{record.client.phone}</strong>
+                <strong>{record.client.phone || 'Nao informado'}</strong>
               </div>
               <div className="detail-row">
                 <span>E-mail</span>
-                <strong>{record.client.email || 'Não informado'}</strong>
+                <strong>{record.client.email || 'Nao informado'}</strong>
               </div>
               <div className="detail-row">
                 <span>CPF</span>
-                <strong>{record.client.cpf || 'Não informado'}</strong>
+                <strong>{record.client.cpf || 'Nao informado'}</strong>
               </div>
             </div>
           </section>
@@ -483,7 +545,7 @@ export default function ClienteConsentimentoAssinatura() {
                 <strong>{formatDateTime(record.signedAt)}</strong>
               </div>
               <div className="detail-row">
-                <span>Profissional responsável</span>
+                <span>Profissional responsavel</span>
                 <strong>{resolvedProfessionalName}</strong>
               </div>
             </div>

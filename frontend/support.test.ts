@@ -1,5 +1,15 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildMailtoLink, buildPhoneLink, getSupportContact, hasSupportContact, isImpersonating, isSupportUser } from './support'
+import type { AuthUser } from './types'
+
+function createAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return {
+    id: 1,
+    email: 'support@lappui.com',
+    clinicName: 'Clinica Base',
+    ...overrides,
+  }
+}
 
 describe('support helpers', () => {
   it('prefers explicit fallback contact data when provided', () => {
@@ -24,9 +34,9 @@ describe('support helpers', () => {
   it('detects support availability and impersonation state', () => {
     expect(hasSupportContact({ email: 'suporte@clinica.com' })).toBe(true)
     expect(hasSupportContact({})).toBe(false)
-    expect(isSupportUser({ role: 'SUPPORT' })).toBe(true)
-    expect(isSupportUser({ role: 'ADMIN' })).toBe(false)
-    expect(isImpersonating({ supportContext: { active: true } })).toBe(true)
-    expect(isImpersonating({})).toBe(false)
+    expect(isSupportUser(createAuthUser({ role: 'SUPPORT' }))).toBe(true)
+    expect(isSupportUser(createAuthUser({ role: 'ADMIN' }))).toBe(false)
+    expect(isImpersonating(createAuthUser({ supportContext: { active: true } }))).toBe(true)
+    expect(isImpersonating(createAuthUser({ supportContext: null }))).toBe(false)
   })
 })
