@@ -1,9 +1,22 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import toast from 'react-hot-toast'
 import api, { downloadApiFile, getApiErrorMessage } from './api'
+import type { Identifier } from './clinicalTypes'
+import type { ServicePopSummary, ServiceRecord } from './operationsTypes'
 import { Icon } from './Icon'
 
-const emptyForm = {
+interface ServiceFormState {
+  name: string
+  description: string
+  duration: number
+  price: string
+  active: boolean
+}
+
+type ServiceModalMode = 'create' | 'edit' | null
+
+const emptyForm: ServiceFormState = {
   name: '',
   description: '',
   duration: 60,
@@ -11,14 +24,14 @@ const emptyForm = {
   active: true,
 }
 
-function formatPrice(value) {
+function formatPrice(value: number | string | null | undefined) {
   return Number(value || 0).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function downloadTextFile(filename, content) {
+function downloadTextFile(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
   const href = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -30,8 +43,8 @@ function downloadTextFile(filename, content) {
   URL.revokeObjectURL(href)
 }
 
-function buildPopModalFromService(service) {
-  if (!service?.id || !service?.servicePop) return null
+function buildPopModalFromService(service?: ServiceRecord | null): ServicePopSummary | null {
+  if (!service?.id || !service.servicePop) return null
 
   return {
     ...service.servicePop,
@@ -44,7 +57,15 @@ function buildPopModalFromService(service) {
   }
 }
 
-function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }) {
+interface ServiceCardProps {
+  service: ServiceRecord
+  loadingPopId: Identifier | null
+  onOpenPop: (serviceId: Identifier) => Promise<void>
+  onEdit: (service: ServiceRecord) => void
+  onDelete: (serviceId: Identifier) => Promise<void>
+}
+
+function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }: ServiceCardProps) {
   const hasPop = Boolean(service.servicePop)
 
   return (
@@ -73,7 +94,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }) {
       </div>
 
       <div className="service-card-actions">
-        <button type="button" className="btn btn-outline btn-sm" onClick={() => onOpenPop(service.id)} disabled={loadingPopId === service.id}>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => void onOpenPop(service.id)} disabled={loadingPopId === service.id}>
           {loadingPopId === service.id ? <span className="spinner" /> : <><Icon name="fileText" /> {hasPop ? 'Abrir POP' : 'Gerar POP'}</>}
         </button>
 
@@ -84,7 +105,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }) {
         <button type="button" className="btn btn-outline btn-sm" onClick={() => onEdit(service)}>
           <Icon name="edit" /> Editar
         </button>
-        <button type="button" className="btn btn-ghost btn-sm danger-ghost" onClick={() => onDelete(service.id)}>
+        <button type="button" className="btn btn-ghost btn-sm danger-ghost" onClick={() => void onDelete(service.id)}>
           <Icon name="trash" /> Arquivar
         </button>
       </div>
@@ -93,21 +114,21 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }) {
 }
 
 export default function Servicos() {
-  const [services, setServices] = useState([])
+  const [services, setServices] = useState<ServiceRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null)
-  const [popModal, setPopModal] = useState(null)
-  const [form, setForm] = useState(emptyForm)
+  const [modal, setModal] = useState<ServiceModalMode>(null)
+  const [popModal, setPopModal] = useState<ServicePopSummary | null>(null)
+  const [form, setForm] = useState<ServiceFormState>(emptyForm)
   const [saving, setSaving] = useState(false)
-  const [loadingPopId, setLoadingPopId] = useState(null)
+  const [loadingPopId, setLoadingPopId] = useState<Identifier | null>(null)
   const [downloadingPopPdf, setDownloadingPopPdf] = useState(false)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState<ServiceRecord | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
 
     try {
-      const { data } = await api.get('/services')
+      const { data } = await api.get<ServiceRecord[]>('/services')
       setServices(data)
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os servicos'))
@@ -117,7 +138,7 @@ export default function Servicos() {
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
   function openCreate() {
@@ -126,27 +147,30 @@ export default function Servicos() {
     setModal('create')
   }
 
-  function openEdit(service) {
+  function openEdit(service: ServiceRecord) {
     setForm({
-      ...service,
+      name: service.name,
       description: service.description || '',
+      duration: service.duration,
       price: String(service.price),
+      active: service.active ?? true,
     })
     setSelected(service)
     setModal('edit')
   }
 
-  function setField(key) {
-    return event => {
-      setForm(current => ({ ...current, [key]: event.target.value }))
+  function setField<Key extends keyof ServiceFormState>(key: Key) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      const value = key === 'duration' ? Number(event.target.value) : event.target.value
+      setForm(current => ({ ...current, [key]: value }))
     }
   }
 
-  async function openPop(serviceId) {
+  async function openPop(serviceId: Identifier) {
     setLoadingPopId(serviceId)
 
     try {
-      const { data } = await api.get(`/services/${serviceId}/pop`)
+      const { data } = await api.get<ServicePopSummary>(`/services/${serviceId}/pop`)
       setPopModal(data)
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir o POP deste servico'))
@@ -156,7 +180,7 @@ export default function Servicos() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.price) {
+    if (!form.name.trim() || !form.price) {
       toast.error('Nome e valor sao obrigatorios')
       return
     }
@@ -171,7 +195,7 @@ export default function Servicos() {
       }
 
       if (modal === 'create') {
-        const { data } = await api.post('/services', payload)
+        const { data } = await api.post<ServiceRecord>('/services', payload)
         const nextPopModal = buildPopModalFromService(data)
         toast.success('Servico criado com POP automatico')
         setModal(null)
@@ -186,7 +210,7 @@ export default function Servicos() {
         } else {
           toast.error('O servico foi salvo, mas o POP nao retornou com um identificador valido.')
         }
-      } else {
+      } else if (selected) {
         await api.put(`/services/${selected.id}`, payload)
         toast.success('Servico atualizado com sucesso')
         setModal(null)
@@ -201,7 +225,7 @@ export default function Servicos() {
     }
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(id: Identifier) {
     if (!window.confirm('Deseja desativar este servico?')) return
 
     try {

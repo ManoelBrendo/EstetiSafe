@@ -1,33 +1,35 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { useAuth } from './useAuth'
+import type { BillingStatusKey, ClinicStatusKey, SupportClinicRecord, SupportClinicsResponse } from './operationsTypes'
 import { Icon } from './Icon'
 import { getClinicInitials } from './branding'
 
-const billingMeta = {
+const billingMeta: Record<BillingStatusKey, { label: string; className: string }> = {
   TRIAL: { label: 'Cortesia ativa', className: 'badge badge-blue' },
   ACTIVE: { label: 'Pagamento em dia', className: 'badge badge-green' },
   OVERDUE: { label: 'Pagamento pendente', className: 'badge badge-gold' },
   BLOCKED: { label: 'Acesso bloqueado', className: 'badge badge-red' },
 }
 
-const clinicStatusMeta = {
-  ACTIVE: { label: 'Operação ativa' },
-  SUSPENDED: { label: 'Operação suspensa' },
-  ARCHIVED: { label: 'Clínica arquivada' },
+const clinicStatusMeta: Record<ClinicStatusKey, { label: string }> = {
+  ACTIVE: { label: 'Operacao ativa' },
+  SUSPENDED: { label: 'Operacao suspensa' },
+  ARCHIVED: { label: 'Clinica arquivada' },
 }
 
-function formatDate(value) {
-  if (!value) return 'Não informado'
+function formatDate(value?: string | null) {
+  if (!value) return 'Nao informado'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
   }).format(new Date(value))
 }
 
-function formatCurrency(value) {
+function formatCurrency(value?: number | null) {
   if (value == null) return 'A definir'
 
   return Number(value).toLocaleString('pt-BR', {
@@ -36,28 +38,30 @@ function formatCurrency(value) {
   })
 }
 
+const initialData: SupportClinicsResponse = {
+  totalClinics: 0,
+  blockedCount: 0,
+  overdueCount: 0,
+  clinics: [],
+}
+
 export default function SupportHub() {
   const navigate = useNavigate()
   const { assumeClinic, user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [assumingClinicId, setAssumingClinicId] = useState(null)
+  const [assumingClinicId, setAssumingClinicId] = useState<number | null>(null)
   const [query, setQuery] = useState('')
-  const [data, setData] = useState({
-    totalClinics: 0,
-    blockedCount: 0,
-    overdueCount: 0,
-    clinics: [],
-  })
+  const [data, setData] = useState<SupportClinicsResponse>(initialData)
 
   useEffect(() => {
     let active = true
 
-    api.get('/support/clinics')
+    api.get<SupportClinicsResponse>('/support/clinics')
       .then(({ data: response }) => {
         if (active) setData(response)
       })
       .catch(error => {
-        toast.error(getApiErrorMessage(error, 'Não foi possível carregar as clínicas disponíveis para suporte'))
+        toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar as clinicas disponiveis para suporte'))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -72,7 +76,7 @@ export default function SupportHub() {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) return data.clinics
 
-    return data.clinics.filter(clinic => (
+    return data.clinics.filter((clinic: SupportClinicRecord) => (
       clinic.clinicName?.toLowerCase().includes(normalizedQuery)
       || clinic.email?.toLowerCase().includes(normalizedQuery)
       || String(clinic.clinicId || '').toLowerCase().includes(normalizedQuery)
@@ -82,15 +86,15 @@ export default function SupportHub() {
 
   const hasQuery = Boolean(query.trim())
 
-  async function handleAssumeClinic(clinicId) {
+  async function handleAssumeClinic(clinicId: number) {
     setAssumingClinicId(clinicId)
 
     try {
       await assumeClinic(clinicId)
-      toast.success('Sessão da clínica carregada para manutenção')
+      toast.success('Sessao da clinica carregada para manutencao')
       navigate('/')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível assumir esta clínica'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel assumir esta clinica'))
     } finally {
       setAssumingClinicId(null)
     }
@@ -111,45 +115,45 @@ export default function SupportHub() {
         <div>
           <h1 className="page-title">Central de suporte</h1>
           <p className="page-subtitle">
-            {user?.clinicName || 'Central de suporte'} • selecione a clínica correta para manutenção, ajustes e acompanhamento.
+            {user?.clinicName || 'Central de suporte'} - selecione a clinica correta para manutencao, ajustes e acompanhamento.
           </p>
         </div>
 
-        <span className="badge badge-gold">Operação técnica</span>
+        <span className="badge badge-gold">Operacao tecnica</span>
       </div>
 
       <div className="stats-grid compact-stats stats-grid-adaptive">
         <div className="stat-card gold">
-          <div className="stat-label">Clínicas</div>
+          <div className="stat-label">Clinicas</div>
           <div className="stat-value">{data.totalClinics}</div>
-          <div className="stat-sub">Base disponível para suporte e manutenção.</div>
+          <div className="stat-sub">Base disponivel para suporte e manutencao.</div>
         </div>
         <div className="stat-card rose">
           <div className="stat-label">Bloqueadas</div>
           <div className="stat-value">{data.blockedCount}</div>
-          <div className="stat-sub">Acessos suspensos aguardando regularização.</div>
+          <div className="stat-sub">Acessos suspensos aguardando regularizacao.</div>
         </div>
         <div className="stat-card green">
           <div className="stat-label">Pendentes</div>
           <div className="stat-value">{data.overdueCount}</div>
-          <div className="stat-sub">Clínicas com cobrança em atraso e risco de bloqueio.</div>
+          <div className="stat-sub">Clinicas com cobranca em atraso e risco de bloqueio.</div>
         </div>
       </div>
 
       <section className="card section-card support-toolbar">
         <div>
-          <h2 className="section-title">Localizar clínica</h2>
-          <p className="section-copy">Filtre por nome da clínica, e-mail, ID interno ou situação operacional para entrar no ambiente correto sem confusão.</p>
+          <h2 className="section-title">Localizar clinica</h2>
+          <p className="section-copy">Filtre por nome da clinica, e-mail, ID interno ou situacao operacional para entrar no ambiente correto sem confusao.</p>
         </div>
 
         <div className="form-group support-search-group">
-          <label className="form-label">Busca rápida</label>
+          <label className="form-label">Busca rapida</label>
           <div className="toolbar-card clientes-search-row">
             <input
               className="form-input"
               type="search"
               value={query}
-              onChange={event => setQuery(event.target.value)}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
               placeholder="Ex: Le Visage, contato@cliente.com, cln_123"
             />
             {hasQuery ? (
@@ -160,8 +164,8 @@ export default function SupportHub() {
           </div>
           <p className="filter-helper-text" aria-live="polite">
             {hasQuery
-              ? `${filteredClinics.length} clínica(s) correspondem aos critérios atuais.`
-              : 'Use busca por nome, e-mail, ID ou situação operacional para chegar à conta correta com menos risco de erro.'}
+              ? `${filteredClinics.length} clinica(s) correspondem aos criterios atuais.`
+              : 'Use busca por nome, e-mail, ID ou situacao operacional para chegar a conta correta com menos risco de erro.'}
           </p>
         </div>
       </section>
@@ -169,8 +173,8 @@ export default function SupportHub() {
       {filteredClinics.length ? (
         <section className="support-clinic-grid">
           {filteredClinics.map(clinic => {
-            const status = billingMeta[clinic.billing?.effectiveStatus] || billingMeta.TRIAL
-            const clinicStatus = clinicStatusMeta[clinic.clinicStatus] || clinicStatusMeta.ACTIVE
+            const status = billingMeta[(clinic.billing?.effectiveStatus as BillingStatusKey) || 'TRIAL'] || billingMeta.TRIAL
+            const clinicStatus = clinicStatusMeta[(clinic.clinicStatus as ClinicStatusKey) || 'ACTIVE'] || clinicStatusMeta.ACTIVE
 
             return (
               <article key={clinic.id} className="card support-clinic-card">
@@ -199,11 +203,11 @@ export default function SupportHub() {
                     <strong>{formatDate(clinic.createdAt)}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
-                    <span>ID da clínica</span>
-                    <strong>{clinic.clinicId || 'Não definido'}</strong>
+                    <span>ID da clinica</span>
+                    <strong>{clinic.clinicId || 'Nao definido'}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
-                    <span>Próximo vencimento</span>
+                    <span>Proximo vencimento</span>
                     <strong>{formatDate(clinic.billing?.nextDueAt || clinic.billing?.graceEndsAt)}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
@@ -212,13 +216,13 @@ export default function SupportHub() {
                   </div>
                 </div>
 
-                <p className="support-clinic-note"><strong>{clinicStatus.label}</strong> • {clinic.billing?.message || 'Sem observações de cobrança no momento.'}</p>
+                <p className="support-clinic-note"><strong>{clinicStatus.label}</strong> - {clinic.billing?.message || 'Sem observacoes de cobranca no momento.'}</p>
 
                 <div className="support-card-actions">
                   <button
                     type="button"
                     className="btn btn-gold"
-                    onClick={() => handleAssumeClinic(clinic.id)}
+                    onClick={() => void handleAssumeClinic(clinic.id)}
                     disabled={assumingClinicId === clinic.id}
                   >
                     {assumingClinicId === clinic.id ? <span className="spinner" /> : <><Icon name="dashboard" /> Assumir acesso</>}
@@ -230,8 +234,8 @@ export default function SupportHub() {
         </section>
       ) : (
         <section className="card section-card support-empty-state">
-          <h2 className="section-title">Nenhuma clínica encontrada</h2>
-          <p className="section-copy">Ajuste ou limpe a busca para localizar a conta certa antes de iniciar a manutenção.</p>
+          <h2 className="section-title">Nenhuma clinica encontrada</h2>
+          <p className="section-copy">Ajuste ou limpe a busca para localizar a conta certa antes de iniciar a manutencao.</p>
           {hasQuery ? (
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setQuery('')}>
               Limpar busca

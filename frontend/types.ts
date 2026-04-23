@@ -1,4 +1,4 @@
-export interface BillingSnapshot {
+﻿export interface BillingSnapshot {
   status?: string | null
   effectiveStatus?: string | null
   blocked?: boolean
@@ -20,6 +20,12 @@ export interface SupportContext {
   assumedAt?: string | null
 }
 
+export interface SupportContact {
+  name: string
+  email: string
+  phone: string
+}
+
 export interface AuthUser {
   id: number
   email: string
@@ -31,13 +37,8 @@ export interface AuthUser {
   createdAt?: string | Date | null
   billing?: BillingSnapshot | null
   supportContext?: SupportContext | null
+  supportContact?: SupportContact | null
   [key: string]: unknown
-}
-
-export interface SupportContact {
-  name: string
-  email: string
-  phone: string
 }
 
 export interface SupportSession {

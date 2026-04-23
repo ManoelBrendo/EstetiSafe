@@ -346,3 +346,47 @@ export interface ProfessionalDetail extends ProfessionalSummary {
   payroll?: ProfessionalPayrollMetrics | null
   appointments?: ProfessionalRecentAppointment[]
 }
+
+export interface ServicePopSummary {
+  id: Identifier
+  title: string
+  updatedAt?: string | null
+  downloadName?: string | null
+  content?: string
+  service?: {
+    id: Identifier
+    name: string
+    duration?: number | null
+  } | null
+}
+
+export interface ServiceRecord {
+  id: Identifier
+  name: string
+  description?: string | null
+  duration: number
+  price: number
+  active?: boolean
+  createdAt?: string | null
+  updatedAt?: string | null
+  servicePop?: ServicePopSummary | null
+}
+
+export interface SupportClinicRecord {
+  id: number
+  email: string
+  clinicName: string
+  clinicLogoDataUrl?: string | null
+  role?: string | null
+  createdAt?: string | null
+  clinicId?: number | string | null
+  clinicStatus?: ClinicStatusKey | string | null
+  billing?: BillingSnapshot | null
+}
+
+export interface SupportClinicsResponse {
+  totalClinics: number
+  blockedCount: number
+  overdueCount: number
+  clinics: SupportClinicRecord[]
+}
