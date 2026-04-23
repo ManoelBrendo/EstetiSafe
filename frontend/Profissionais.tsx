@@ -1,35 +1,60 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
+import type {
+  ProfessionalAvailabilitySlot,
+  ProfessionalContractType,
+  ProfessionalPaymentModel,
+  ProfessionalSummary,
+  WeekdayValue,
+} from './operationsTypes'
 import { Icon } from './Icon'
 
-const weekdays = [
+const weekdays: Array<{ value: WeekdayValue; label: string }> = [
   { value: 'MONDAY', label: 'Segunda' },
-  { value: 'TUESDAY', label: 'Terça' },
+  { value: 'TUESDAY', label: 'Terca' },
   { value: 'WEDNESDAY', label: 'Quarta' },
   { value: 'THURSDAY', label: 'Quinta' },
   { value: 'FRIDAY', label: 'Sexta' },
-  { value: 'SATURDAY', label: 'Sábado' },
+  { value: 'SATURDAY', label: 'Sabado' },
   { value: 'SUNDAY', label: 'Domingo' },
 ]
 
-const contractTypeOptions = [
+const contractTypeOptions: Array<{ value: ProfessionalContractType; label: string }> = [
   { value: 'CLT', label: 'CLT' },
   { value: 'PJ', label: 'PJ' },
-  { value: 'AUTONOMA', label: 'Autônoma' },
+  { value: 'AUTONOMA', label: 'Autonoma' },
   { value: 'COMISSIONADA', label: 'Comissionada' },
   { value: 'PARCERIA', label: 'Parceria' },
 ]
 
-const paymentModelOptions = [
+const paymentModelOptions: Array<{ value: ProfessionalPaymentModel; label: string }> = [
   { value: 'FIXED', label: 'Fixo' },
-  { value: 'COMMISSION', label: 'Comissão' },
-  { value: 'HYBRID', label: 'Híbrido' },
-  { value: 'DAILY', label: 'Diária' },
+  { value: 'COMMISSION', label: 'Comissao' },
+  { value: 'HYBRID', label: 'Hibrido' },
+  { value: 'DAILY', label: 'Diaria' },
 ]
 
-function createDefaultAvailability() {
+type ProfessionalModalMode = 'create' | 'edit' | null
+
+interface ProfessionalFormState {
+  name: string
+  specialty: string
+  phone: string
+  notes: string
+  photoDataUrl: string | null
+  availability: ProfessionalAvailabilitySlot[]
+  contractType: string
+  paymentModel: string
+  salaryAmount: string
+  commissionRate: string
+  paymentDay: string
+  payrollNotes: string
+}
+
+function createDefaultAvailability(): ProfessionalAvailabilitySlot[] {
   return weekdays.map((weekday, index) => ({
     day: weekday.value,
     label: weekday.label,
@@ -39,7 +64,7 @@ function createDefaultAvailability() {
   }))
 }
 
-function normalizeAvailability(availability) {
+function normalizeAvailability(availability?: ProfessionalAvailabilitySlot[] | null) {
   const fallback = createDefaultAvailability()
   if (!Array.isArray(availability)) return fallback
 
@@ -54,7 +79,7 @@ function normalizeAvailability(availability) {
   })
 }
 
-function createEmptyForm() {
+function createEmptyForm(): ProfessionalFormState {
   return {
     name: '',
     specialty: '',
@@ -71,7 +96,7 @@ function createEmptyForm() {
   }
 }
 
-function getInitials(name) {
+function getInitials(name?: string | null) {
   return (
     name
       ?.split(' ')
@@ -83,8 +108,8 @@ function getInitials(name) {
   )
 }
 
-function formatCurrency(value) {
-  if (value == null || value === '') return 'Não definido'
+function formatCurrency(value?: number | string | null) {
+  if (value == null || value === '') return 'Nao definido'
 
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -92,24 +117,29 @@ function formatCurrency(value) {
   })
 }
 
-function formatAvailabilitySummary(professional) {
-  return professional.availabilitySummary || 'Disponibilidade ainda não configurada.'
+function formatAvailabilitySummary(professional: ProfessionalSummary) {
+  return professional.availabilitySummary || 'Disponibilidade ainda nao configurada.'
 }
 
-function formatCompensationSummary(professional) {
-  return professional.compensationSummary || 'Folha de pagamento ainda não configurada.'
+function formatCompensationSummary(professional: ProfessionalSummary) {
+  return professional.compensationSummary || 'Folha de pagamento ainda nao configurada.'
 }
 
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada'))
+    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada'))
     reader.readAsDataURL(file)
   })
 }
 
-function ProfessionalAvatar({ professional, size = 'default' }) {
+interface ProfessionalAvatarProps {
+  professional: Pick<ProfessionalSummary, 'name' | 'photoDataUrl'>
+  size?: 'default' | 'large'
+}
+
+function ProfessionalAvatar({ professional, size = 'default' }: ProfessionalAvatarProps) {
   const className = size === 'large'
     ? 'user-avatar professional-avatar professional-avatar-large'
     : 'user-avatar professional-avatar'
@@ -125,7 +155,14 @@ function ProfessionalAvatar({ professional, size = 'default' }) {
   return <div className={className}>{getInitials(professional.name)}</div>
 }
 
-function ProfessionalCard({ professional, onEdit, onDelete, onOpen }) {
+interface ProfessionalCardProps {
+  professional: ProfessionalSummary
+  onEdit: (professional: ProfessionalSummary) => void
+  onDelete: (id: number | string) => void
+  onOpen: (id: number | string) => void
+}
+
+function ProfessionalCard({ professional, onEdit, onDelete, onOpen }: ProfessionalCardProps) {
   return (
     <article className="team-card team-card-rich">
       <div className="team-card-head">
@@ -138,21 +175,23 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }) {
           </div>
         </div>
 
-        <span className="badge badge-green">Ativa</span>
+        <span className={`badge ${professional.active === false ? 'badge-muted' : 'badge-green'}`}>
+          {professional.active === false ? 'Inativa' : 'Ativa'}
+        </span>
       </div>
 
       <div className="team-meta-grid team-meta-grid-rich">
         <div className="team-meta-item">
           <span>Telefone</span>
-          <strong>{professional.phone || 'Não informado'}</strong>
+          <strong>{professional.phone || 'Nao informado'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Regime</span>
-          <strong>{professional.contractTypeLabel || 'Não definido'}</strong>
+          <strong>{professional.contractTypeLabel || 'Nao definido'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Modelo</span>
-          <strong>{professional.paymentModelLabel || 'Não definido'}</strong>
+          <strong>{professional.paymentModelLabel || 'Nao definido'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Base fixa</span>
@@ -173,7 +212,7 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }) {
 
         {professional.notes ? (
           <div className="team-card-note">
-            <strong>Observações</strong>
+            <strong>Observacoes</strong>
             <span>{professional.notes}</span>
           </div>
         ) : null}
@@ -196,12 +235,12 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }) {
 
 export default function Profissionais() {
   const navigate = useNavigate()
-  const [professionals, setProfessionals] = useState([])
+  const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null)
-  const [form, setForm] = useState(createEmptyForm())
+  const [modal, setModal] = useState<ProfessionalModalMode>(null)
+  const [form, setForm] = useState<ProfessionalFormState>(createEmptyForm())
   const [saving, setSaving] = useState(false)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState<ProfessionalSummary | null>(null)
   const [search, setSearch] = useState('')
 
   const activeCount = useMemo(() => professionals.length, [professionals])
@@ -213,7 +252,11 @@ export default function Profissionais() {
     () => professionals.filter(professional => Array.isArray(professional.availability) && professional.availability.some(slot => slot.enabled)).length,
     [professionals]
   )
-  const specialtyCount = useMemo(() => new Set(professionals.map(professional => professional.specialty).filter(Boolean)).size, [professionals])
+  const specialtyCount = useMemo(
+    () => new Set(professionals.map(professional => professional.specialty).filter(Boolean)).size,
+    [professionals]
+  )
+
   const filteredProfessionals = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return professionals
@@ -234,10 +277,10 @@ export default function Profissionais() {
     setLoading(true)
 
     try {
-      const { data } = await api.get('/professionals')
+      const { data } = await api.get<ProfessionalSummary[]>('/professionals')
       setProfessionals(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível carregar os profissionais'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os profissionais'))
     } finally {
       setLoading(false)
     }
@@ -253,7 +296,7 @@ export default function Profissionais() {
     setModal('create')
   }
 
-  function openEdit(professional) {
+  function openEdit(professional: ProfessionalSummary) {
     setForm({
       name: professional.name || '',
       specialty: professional.specialty || '',
@@ -272,24 +315,24 @@ export default function Profissionais() {
     setModal('edit')
   }
 
-  function setField(key) {
-    return event => {
+  function setField<Key extends keyof ProfessionalFormState>(key: Key) {
+    return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm(current => ({ ...current, [key]: event.target.value }))
     }
   }
 
-  function updateAvailability(day, key, value) {
+  function updateAvailability(day: WeekdayValue, key: 'enabled' | 'start' | 'end', value: boolean | string) {
     setForm(current => ({
       ...current,
       availability: current.availability.map(slot => (
         slot.day === day
-           ? { ...slot, [key]: value }
+          ? { ...slot, [key]: value }
           : slot
       )),
     }))
   }
 
-  async function handlePhotoChange(event) {
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -297,15 +340,15 @@ export default function Profissionais() {
       const dataUrl = await readFileAsDataUrl(file)
       setForm(current => ({ ...current, photoDataUrl: dataUrl }))
     } catch (error) {
-      toast.error(error.message || 'Não foi possível carregar a foto')
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar a foto')
     } finally {
       event.target.value = ''
     }
   }
 
   async function handleSave() {
-    if (!form.name || !form.specialty) {
-      toast.error('Nome e especialidade são obrigatórios')
+    if (!form.name.trim() || !form.specialty.trim()) {
+      toast.error('Nome e especialidade sao obrigatorios')
       return
     }
 
@@ -330,7 +373,7 @@ export default function Profissionais() {
       if (modal === 'create') {
         await api.post('/professionals', payload)
         toast.success('Profissional cadastrada com sucesso')
-      } else {
+      } else if (selected) {
         await api.put(`/professionals/${selected.id}`, payload)
         toast.success('Profissional atualizada com sucesso')
       }
@@ -340,13 +383,13 @@ export default function Profissionais() {
       setForm(createEmptyForm())
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a profissional'))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(id: number | string) {
     if (!window.confirm('Deseja desativar esta profissional?')) return
 
     try {
@@ -354,7 +397,7 @@ export default function Profissionais() {
       toast.success('Profissional desativada')
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível desativar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel desativar a profissional'))
     }
   }
 
@@ -363,7 +406,7 @@ export default function Profissionais() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Profissionais</h1>
-          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento reunidas em uma apresentação elegante e funcional.</p>
+          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento reunidas em uma apresentacao elegante e funcional.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
@@ -375,12 +418,12 @@ export default function Profissionais() {
         <div className="stat-card">
           <div className="stat-label">Equipe ativa</div>
           <div className="stat-value">{activeCount}</div>
-          <div className="stat-sub">Profissionais disponíveis para atendimento.</div>
+          <div className="stat-sub">Profissionais disponiveis para atendimento.</div>
         </div>
         <div className="stat-card gold">
           <div className="stat-label">Folha configurada</div>
           <div className="stat-value">{payrollConfiguredCount}</div>
-          <div className="stat-sub">Com modelo de repasse já cadastrado.</div>
+          <div className="stat-sub">Com modelo de repasse ja cadastrado.</div>
         </div>
         <div className="stat-card green">
           <div className="stat-label">Agenda configurada</div>
@@ -390,7 +433,7 @@ export default function Profissionais() {
         <div className="stat-card rose">
           <div className="stat-label">Especialidades</div>
           <div className="stat-value">{specialtyCount}</div>
-          <div className="stat-sub">Cobertura técnica distribuída na clínica.</div>
+          <div className="stat-sub">Cobertura tecnica distribuida na clinica.</div>
         </div>
       </div>
 
@@ -398,14 +441,14 @@ export default function Profissionais() {
         <div className="search-bar">
           <Icon name="search" />
           <input
-            placeholder="Buscar nome, especialidade ou observação..."
+            placeholder="Buscar nome, especialidade ou observacao..."
             value={search}
             onChange={event => setSearch(event.target.value)}
           />
         </div>
 
         <div className="toolbar-meta">
-          <span className="badge badge-muted">{filteredProfessionals.length} profissionais visíveis</span>
+          <span className="badge badge-muted">{filteredProfessionals.length} profissionais visiveis</span>
         </div>
       </div>
 
@@ -420,7 +463,7 @@ export default function Profissionais() {
               <Icon name="person" size={24} />
             </div>
             <h3>Nenhuma profissional cadastrada</h3>
-            <p>Adicione a equipe da clínica para acompanhar agenda, repasse e observações com mais clareza.</p>
+            <p>Adicione a equipe da clinica para acompanhar agenda, repasse e observacoes com mais clareza.</p>
           </div>
         </div>
       ) : (
@@ -447,7 +490,7 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Dados principais</h3>
-                    <p className="section-copy">Identificação, especialidade e apresentação da profissional.</p>
+                    <p className="section-copy">Identificacao, especialidade e apresentacao da profissional.</p>
                   </div>
                 </div>
 
@@ -459,7 +502,7 @@ export default function Profissionais() {
 
                   <div className="form-group">
                     <label className="form-label">Especialidade *</label>
-                    <input className="form-input" value={form.specialty} onChange={setField('specialty')} placeholder="Ex: Esteticista, Biomédica" />
+                    <input className="form-input" value={form.specialty} onChange={setField('specialty')} placeholder="Ex: Esteticista, Biomedica" />
                   </div>
 
                   <div className="form-group">
@@ -468,12 +511,12 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observações</label>
+                    <label className="form-label">Observacoes</label>
                     <textarea
                       className="form-textarea"
                       value={form.notes}
                       onChange={setField('notes')}
-                      placeholder="Informações relevantes sobre atendimento, perfil técnico, preferência de agenda ou estilo de cuidado."
+                      placeholder="Informacoes relevantes sobre atendimento, perfil tecnico, preferencia de agenda ou estilo de cuidado."
                     />
                   </div>
                 </div>
@@ -483,14 +526,14 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Foto e disponibilidade</h3>
-                    <p className="section-copy">Imagem de perfil e dias de atendimento para consulta rápida em qualquer tela.</p>
+                    <p className="section-copy">Imagem de perfil e dias de atendimento para consulta rapida em qualquer tela.</p>
                   </div>
                 </div>
 
                 <div className="media-upload-card">
                   <div className="media-upload-preview">
                     {form.photoDataUrl ? (
-                      <img src={form.photoDataUrl} alt="Pré-visualização da profissional" className="media-upload-image" />
+                      <img src={form.photoDataUrl} alt="Pre-visualizacao da profissional" className="media-upload-image" />
                     ) : (
                       <div className="media-upload-fallback">{getInitials(form.name)}</div>
                     )}
@@ -508,7 +551,7 @@ export default function Profissionais() {
                       </button>
                     ) : null}
 
-                    <p className="text-muted media-upload-copy">Use uma foto clara para facilitar identificação em desktop, tablet e celular.</p>
+                    <p className="text-muted media-upload-copy">Use uma foto clara para facilitar identificacao em desktop, tablet e celular.</p>
                   </div>
                 </div>
 
@@ -529,7 +572,7 @@ export default function Profissionais() {
 
                       <div className="availability-time-grid">
                         <div className="form-group">
-                          <label className="form-label">Início</label>
+                          <label className="form-label">Inicio</label>
                           <input
                             className="form-input"
                             type="time"
@@ -558,13 +601,13 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Folha de pagamento</h3>
-                    <p className="section-copy">Defina regime, modelo de repasse e observações financeiras da profissional.</p>
+                    <p className="section-copy">Defina regime, modelo de repasse e observacoes financeiras da profissional.</p>
                   </div>
                 </div>
 
                 <div className="form-grid payroll-grid">
                   <div className="form-group">
-                    <label className="form-label">Regime de contratação</label>
+                    <label className="form-label">Regime de contratacao</label>
                     <select className="form-select" value={form.contractType} onChange={setField('contractType')}>
                       <option value="">Selecione</option>
                       {contractTypeOptions.map(option => (
@@ -589,7 +632,7 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Comissão (%)</label>
+                    <label className="form-label">Comissao (%)</label>
                     <input className="form-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={setField('commissionRate')} placeholder="0" />
                   </div>
 
@@ -599,12 +642,12 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observações da folha</label>
+                    <label className="form-label">Observacoes da folha</label>
                     <textarea
                       className="form-textarea"
                       value={form.payrollNotes}
                       onChange={setField('payrollNotes')}
-                      placeholder="Ex: comissão sobre procedimentos específicos, ajuda de custo, bonificação ou política de repasse."
+                      placeholder="Ex: comissao sobre procedimentos especificos, ajuda de custo, bonificacao ou politica de repasse."
                     />
                   </div>
                 </div>

@@ -1,29 +1,62 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
+import type { ClientRecord, Identifier, ServiceReference } from './clinicalTypes'
+import type {
+  AppointmentRecord,
+  AppointmentStatus,
+  PaymentMethod,
+  ProfessionalSummary,
+} from './operationsTypes'
 import { Icon } from './Icon'
 
-const STATUS_MAP = {
+const STATUS_MAP: Record<string, [string, string]> = {
   SCHEDULED: ['badge-blue', 'Agendado'],
   CONFIRMED: ['badge-green', 'Confirmado'],
   IN_PROGRESS: ['badge-gold', 'Em andamento'],
-  COMPLETED: ['badge-muted', 'Concluído'],
+  COMPLETED: ['badge-muted', 'Concluido'],
   CANCELLED: ['badge-red', 'Cancelado'],
-  NO_SHOW: ['badge-rose', 'Não compareceu'],
+  NO_SHOW: ['badge-rose', 'Nao compareceu'],
 }
 
 const STATUSES = Object.entries(STATUS_MAP).map(([value, [, label]]) => ({ value, label }))
 
-const PAYMENT_METHODS = [
+const PAYMENT_METHODS: Array<{ value: PaymentMethod; label: string }> = [
   { value: 'PIX', label: 'Pix' },
   { value: 'CASH', label: 'Dinheiro' },
-  { value: 'CREDIT_CARD', label: 'Cartão de crédito' },
-  { value: 'DEBIT_CARD', label: 'Cartão de débito' },
-  { value: 'BANK_TRANSFER', label: 'Transferência' },
+  { value: 'CREDIT_CARD', label: 'Cartao de credito' },
+  { value: 'DEBIT_CARD', label: 'Cartao de debito' },
+  { value: 'BANK_TRANSFER', label: 'Transferencia' },
 ]
 
-const emptyForm = {
+interface AppointmentFormState {
+  clientId: string
+  serviceId: string
+  professionalId: string
+  startAt: string
+  endAt: string
+  notes: string
+  price: string
+  status: AppointmentStatus
+}
+
+interface PaymentFormState {
+  method: PaymentMethod
+  amount: string
+}
+
+interface AppointmentFilterState {
+  from: string
+  to: string
+  status: string
+  professionalId: string
+}
+
+type AppointmentModalMode = 'create' | 'edit' | null
+
+const emptyForm: AppointmentFormState = {
   clientId: '',
   serviceId: '',
   professionalId: '',
@@ -34,14 +67,14 @@ const emptyForm = {
   status: 'SCHEDULED',
 }
 
-function toCurrency(value) {
+function toCurrency(value: number | string | null | undefined) {
   return Number(value || 0).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function toInputDateTime(value) {
+function toInputDateTime(value?: string | null) {
   if (!value) return ''
 
   const date = new Date(value)
@@ -49,12 +82,12 @@ function toInputDateTime(value) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
-function localInputToIso(value) {
+function localInputToIso(value: string) {
   if (!value) return ''
   return new Date(value).toISOString()
 }
 
-function addMinutesToInputDateTime(value, minutes) {
+function addMinutesToInputDateTime(value: string, minutes: number) {
   if (!value) return ''
 
   const date = new Date(value)
@@ -73,15 +106,22 @@ function getNextSlot() {
   return toInputDateTime(date.toISOString())
 }
 
-function dateFilterStart(value) {
+function dateFilterStart(value: string) {
   return value ? new Date(`${value}T00:00:00`).toISOString() : undefined
 }
 
-function dateFilterEnd(value) {
+function dateFilterEnd(value: string) {
   return value ? new Date(`${value}T23:59:59`).toISOString() : undefined
 }
 
-function AppointmentCard({ appointment, onEdit, onPay, onCancel }) {
+interface AppointmentCardProps {
+  appointment: AppointmentRecord
+  onEdit: (appointment: AppointmentRecord) => void
+  onPay: (appointment: AppointmentRecord) => void
+  onCancel: (id: Identifier) => void
+}
+
+function AppointmentCard({ appointment, onEdit, onPay, onCancel }: AppointmentCardProps) {
   const [badgeClass, label] = STATUS_MAP[appointment.status] || ['badge-muted', appointment.status]
   const paymentStatus = appointment.payment?.status === 'PAID'
 
@@ -91,7 +131,7 @@ function AppointmentCard({ appointment, onEdit, onPay, onCancel }) {
         <div>
           <h3 className="appointment-card-title">{appointment.client?.name}</h3>
           <p className="appointment-card-subtitle">
-            {format(new Date(appointment.startAt), 'dd/MM/yyyy')} - {format(new Date(appointment.startAt), 'HH:mm')} às {format(new Date(appointment.endAt), 'HH:mm')}
+            {format(new Date(appointment.startAt), 'dd/MM/yyyy')} - {format(new Date(appointment.startAt), 'HH:mm')} as {format(new Date(appointment.endAt), 'HH:mm')}
           </p>
         </div>
 
@@ -103,12 +143,12 @@ function AppointmentCard({ appointment, onEdit, onPay, onCancel }) {
 
       <div className="appointment-meta-grid">
         <div className="appointment-meta-item">
-          <span>Serviço</span>
-          <strong>{appointment.service?.name || 'Não informado'}</strong>
+          <span>Servico</span>
+          <strong>{appointment.service?.name || 'Nao informado'}</strong>
         </div>
         <div className="appointment-meta-item">
           <span>Profissional</span>
-          <strong>{appointment.professional?.name || 'Não informado'}</strong>
+          <strong>{appointment.professional?.name || 'Nao informado'}</strong>
         </div>
         <div className="appointment-meta-item">
           <span>Valor</span>
@@ -140,41 +180,43 @@ function AppointmentCard({ appointment, onEdit, onPay, onCancel }) {
 }
 
 export default function Agendamentos() {
-  const [appointments, setAppointments] = useState([])
-  const [clients, setClients] = useState([])
-  const [services, setServices] = useState([])
-  const [professionals, setProfessionals] = useState([])
+  const [appointments, setAppointments] = useState<AppointmentRecord[]>([])
+  const [clients, setClients] = useState<ClientRecord[]>([])
+  const [services, setServices] = useState<ServiceReference[]>([])
+  const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState(null)
-  const [form, setForm] = useState(emptyForm)
+  const [modal, setModal] = useState<AppointmentModalMode>(null)
+  const [form, setForm] = useState<AppointmentFormState>(emptyForm)
   const [saving, setSaving] = useState(false)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState<AppointmentRecord | null>(null)
   const [payModal, setPayModal] = useState(false)
-  const [payForm, setPayForm] = useState({ method: 'PIX', amount: '' })
-  const [filter, setFilter] = useState({ from: '', to: '', status: '', professionalId: '' })
+  const [payForm, setPayForm] = useState<PaymentFormState>({ method: 'PIX', amount: '' })
+  const [filter, setFilter] = useState<AppointmentFilterState>({ from: '', to: '', status: '', professionalId: '' })
 
-  const scheduledCount = useMemo(() => (
-    appointments.filter(appointment => ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(appointment.status)).length
-  ), [appointments])
+  const scheduledCount = useMemo(
+    () => appointments.filter(appointment => ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(appointment.status)).length,
+    [appointments]
+  )
 
-  const paidCount = useMemo(() => (
-    appointments.filter(appointment => appointment.payment?.status === 'PAID').length
-  ), [appointments])
+  const paidCount = useMemo(
+    () => appointments.filter(appointment => appointment.payment?.status === 'PAID').length,
+    [appointments]
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
 
     try {
-      const params = {}
+      const params: Record<string, string | number | undefined> = {}
       if (filter.from) params.from = dateFilterStart(filter.from)
       if (filter.to) params.to = dateFilterEnd(filter.to)
       if (filter.status) params.status = filter.status
       if (filter.professionalId) params.professionalId = Number(filter.professionalId)
 
-      const { data } = await api.get('/appointments', { params })
+      const { data } = await api.get<AppointmentRecord[]>('/appointments', { params })
       setAppointments(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível carregar os agendamentos'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os agendamentos'))
     } finally {
       setLoading(false)
     }
@@ -186,9 +228,9 @@ export default function Agendamentos() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/clients'),
-      api.get('/services'),
-      api.get('/professionals'),
+      api.get<ClientRecord[]>('/clients'),
+      api.get<ServiceReference[]>('/services'),
+      api.get<ProfessionalSummary[]>('/professionals'),
     ])
       .then(([clientsResponse, servicesResponse, professionalsResponse]) => {
         setClients(clientsResponse.data)
@@ -196,7 +238,7 @@ export default function Agendamentos() {
         setProfessionals(professionalsResponse.data)
       })
       .catch(error => {
-        toast.error(getApiErrorMessage(error, 'Não foi possível carregar as listas de apoio'))
+        toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar as listas de apoio'))
       })
   }, [])
 
@@ -212,7 +254,7 @@ export default function Agendamentos() {
     setModal('create')
   }
 
-  function openEdit(appointment) {
+  function openEdit(appointment: AppointmentRecord) {
     setForm({
       clientId: String(appointment.clientId),
       serviceId: String(appointment.serviceId),
@@ -220,64 +262,64 @@ export default function Agendamentos() {
       startAt: toInputDateTime(appointment.startAt),
       endAt: toInputDateTime(appointment.endAt),
       notes: appointment.notes || '',
-      price: String(appointment.price),
-      status: appointment.status,
+      price: String(appointment.price ?? ''),
+      status: (appointment.status as AppointmentStatus) || 'SCHEDULED',
     })
     setSelected(appointment)
     setModal('edit')
   }
 
-  function openPay(appointment) {
+  function openPay(appointment: AppointmentRecord) {
     setSelected(appointment)
     setPayForm({
-      method: appointment.payment?.method || 'PIX',
+      method: (appointment.payment?.method as PaymentMethod) || 'PIX',
       amount: String(appointment.payment?.amount ?? appointment.price ?? ''),
     })
     setPayModal(true)
   }
 
-  function setField(key) {
-    return event => {
+  function setField<Key extends keyof AppointmentFormState>(key: Key) {
+    return (event: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
       const value = event.target.value
       setForm(current => ({ ...current, [key]: value }))
     }
   }
 
-  function handleServiceChange(event) {
+  function handleServiceChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextServiceId = event.target.value
-    const service = services.find(item => item.id === Number(nextServiceId))
+    const service = services.find(item => Number(item.id) === Number(nextServiceId))
 
     setForm(current => ({
       ...current,
       serviceId: nextServiceId,
       price: service?.price != null ? String(service.price) : current.price,
       endAt: current.startAt && service?.duration
-         ? addMinutesToInputDateTime(current.startAt, service.duration)
+        ? addMinutesToInputDateTime(current.startAt, service.duration)
         : current.endAt,
     }))
   }
 
-  function handleStartChange(event) {
+  function handleStartChange(event: ChangeEvent<HTMLInputElement>) {
     const nextStartAt = event.target.value
-    const service = services.find(item => item.id === Number(form.serviceId))
+    const service = services.find(item => Number(item.id) === Number(form.serviceId))
 
     setForm(current => ({
       ...current,
       startAt: nextStartAt,
       endAt: service?.duration
-         ? addMinutesToInputDateTime(nextStartAt, service.duration)
+        ? addMinutesToInputDateTime(nextStartAt, service.duration)
         : current.endAt || addMinutesToInputDateTime(nextStartAt, 60),
     }))
   }
 
   async function handleSave() {
     if (!form.clientId || !form.serviceId || !form.professionalId || !form.startAt || !form.endAt) {
-      toast.error('Preencha todos os campos obrigatórios')
+      toast.error('Preencha todos os campos obrigatorios')
       return
     }
 
     if (new Date(form.endAt) <= new Date(form.startAt)) {
-      toast.error('O horário final deve ser posterior ao horário inicial')
+      toast.error('O horario final deve ser posterior ao horario inicial')
       return
     }
 
@@ -291,28 +333,29 @@ export default function Agendamentos() {
         startAt: localInputToIso(form.startAt),
         endAt: localInputToIso(form.endAt),
         notes: form.notes,
-        price: Number(form.price),
+        price: Number(form.price || 0),
         status: form.status,
       }
 
       if (modal === 'create') {
         await api.post('/appointments', body)
         toast.success('Agendamento criado com sucesso')
-      } else {
+      } else if (selected) {
         await api.put(`/appointments/${selected.id}`, body)
         toast.success('Agendamento atualizado com sucesso')
       }
 
       setModal(null)
+      setSelected(null)
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível salvar o agendamento'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar o agendamento'))
     } finally {
       setSaving(false)
     }
   }
 
-  async function handleCancel(id) {
+  async function handleCancel(id: Identifier) {
     if (!window.confirm('Deseja cancelar este agendamento?')) return
 
     try {
@@ -320,11 +363,21 @@ export default function Agendamentos() {
       toast.success('Agendamento cancelado')
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível cancelar o agendamento'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel cancelar o agendamento'))
     }
   }
 
   async function handlePay() {
+    if (!selected) {
+      toast.error('Selecione um atendimento antes de registrar o pagamento')
+      return
+    }
+
+    if (!payForm.amount || Number(payForm.amount) <= 0) {
+      toast.error('Informe um valor valido para continuar')
+      return
+    }
+
     setSaving(true)
 
     try {
@@ -337,9 +390,10 @@ export default function Agendamentos() {
 
       toast.success('Pagamento registrado com sucesso')
       setPayModal(false)
+      setSelected(null)
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível registrar o pagamento'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel registrar o pagamento'))
     } finally {
       setSaving(false)
     }
@@ -350,7 +404,7 @@ export default function Agendamentos() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Agendamentos</h1>
-          <p className="page-subtitle">Organize a agenda com mais segurança, contexto e clareza visual.</p>
+          <p className="page-subtitle">Organize a agenda com mais seguranca, contexto e clareza visual.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
@@ -372,7 +426,7 @@ export default function Agendamentos() {
         <div className="stat-card gold">
           <div className="stat-label">Pagos</div>
           <div className="stat-value">{paidCount}</div>
-          <div className="stat-sub">Atendimentos já liquidados.</div>
+          <div className="stat-sub">Atendimentos ja liquidados.</div>
         </div>
       </div>
 
@@ -384,7 +438,7 @@ export default function Agendamentos() {
           </div>
 
           <div className="form-group inline-field">
-            <label className="form-label">Até</label>
+            <label className="form-label">Ate</label>
             <input className="form-input" type="date" value={filter.to} onChange={event => setFilter(current => ({ ...current, to: event.target.value }))} />
           </div>
 
@@ -403,7 +457,7 @@ export default function Agendamentos() {
             <select className="form-select" value={filter.professionalId} onChange={event => setFilter(current => ({ ...current, professionalId: event.target.value }))}>
               <option value="">Todas</option>
               {professionals.map(professional => (
-                <option key={professional.id} value={professional.id}>{professional.name}</option>
+                <option key={professional.id} value={String(professional.id)}>{professional.name}</option>
               ))}
             </select>
           </div>
@@ -455,17 +509,17 @@ export default function Agendamentos() {
                 <select className="form-select" value={form.clientId} onChange={setField('clientId')}>
                   <option value="">Selecione</option>
                   {clients.map(client => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
+                    <option key={client.id} value={String(client.id)}>{client.name}</option>
                   ))}
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Serviço *</label>
+                <label className="form-label">Servico *</label>
                 <select className="form-select" value={form.serviceId} onChange={handleServiceChange}>
                   <option value="">Selecione</option>
                   {services.map(service => (
-                    <option key={service.id} value={service.id}>{service.name}</option>
+                    <option key={service.id} value={String(service.id)}>{service.name}</option>
                   ))}
                 </select>
               </div>
@@ -475,7 +529,7 @@ export default function Agendamentos() {
                 <select className="form-select" value={form.professionalId} onChange={setField('professionalId')}>
                   <option value="">Selecione</option>
                   {professionals.map(professional => (
-                    <option key={professional.id} value={professional.id}>{professional.name}</option>
+                    <option key={professional.id} value={String(professional.id)}>{professional.name}</option>
                   ))}
                 </select>
               </div>
@@ -486,7 +540,7 @@ export default function Agendamentos() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Início *</label>
+                <label className="form-label">Inicio *</label>
                 <input className="form-input" type="datetime-local" value={form.startAt} onChange={handleStartChange} />
               </div>
 
@@ -507,8 +561,8 @@ export default function Agendamentos() {
               ) : null}
 
               <div className="form-group form-full">
-                <label className="form-label">Observações</label>
-                <textarea className="form-textarea" value={form.notes} onChange={setField('notes')} placeholder="Detalhes importantes para a equipe e recepção." />
+                <label className="form-label">Observacoes</label>
+                <textarea className="form-textarea" value={form.notes} onChange={setField('notes')} placeholder="Detalhes importantes para a equipe e recepcao." />
               </div>
             </div>
 
@@ -539,7 +593,7 @@ export default function Agendamentos() {
 
             <div className="form-group">
               <label className="form-label">Forma de pagamento</label>
-              <select className="form-select" value={payForm.method} onChange={event => setPayForm(current => ({ ...current, method: event.target.value }))}>
+              <select className="form-select" value={payForm.method} onChange={event => setPayForm(current => ({ ...current, method: event.target.value as PaymentMethod }))}>
                 {PAYMENT_METHODS.map(method => (
                   <option key={method.value} value={method.value}>{method.label}</option>
                 ))}

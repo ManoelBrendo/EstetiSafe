@@ -220,3 +220,129 @@ export interface ClinicBillsResponse {
   paidThisMonthAmount: number
   bills: ClinicBillItem[]
 }
+
+export type AppointmentStatus = 'SCHEDULED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+export type PaymentMethod = 'PIX' | 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'BANK_TRANSFER'
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED' | 'CANCELLED'
+
+export interface AppointmentClientOption {
+  id: Identifier
+  name: string
+  phone?: string | null
+}
+
+export interface AppointmentServiceOption {
+  id: Identifier
+  name: string
+  duration?: number | null
+  price?: number | null
+}
+
+export interface AppointmentProfessionalOption {
+  id: Identifier
+  name: string
+}
+
+export interface AppointmentPaymentRecord {
+  id?: Identifier
+  amount?: number | null
+  method?: PaymentMethod | string | null
+  status?: PaymentStatus | string | null
+  paidAt?: string | null
+}
+
+export interface AppointmentRecord {
+  id: Identifier
+  clientId: Identifier
+  serviceId: Identifier
+  professionalId: Identifier
+  startAt: string
+  endAt: string
+  notes?: string | null
+  price: number
+  status: AppointmentStatus | string
+  client?: AppointmentClientOption | null
+  service?: AppointmentServiceOption | null
+  professional?: AppointmentProfessionalOption | null
+  payment?: AppointmentPaymentRecord | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type WeekdayValue =
+  | 'MONDAY'
+  | 'TUESDAY'
+  | 'WEDNESDAY'
+  | 'THURSDAY'
+  | 'FRIDAY'
+  | 'SATURDAY'
+  | 'SUNDAY'
+
+export type ProfessionalContractType = 'CLT' | 'PJ' | 'AUTONOMA' | 'COMISSIONADA' | 'PARCERIA'
+export type ProfessionalPaymentModel = 'FIXED' | 'COMMISSION' | 'HYBRID' | 'DAILY'
+
+export interface ProfessionalAvailabilitySlot {
+  day: WeekdayValue
+  label?: string
+  enabled: boolean
+  start: string
+  end: string
+}
+
+export interface ProfessionalSummary {
+  id: Identifier
+  name: string
+  specialty: string
+  phone?: string | null
+  notes?: string | null
+  photoDataUrl?: string | null
+  availability: ProfessionalAvailabilitySlot[]
+  availabilitySummary?: string | null
+  contractType?: ProfessionalContractType | string | null
+  contractTypeLabel?: string | null
+  paymentModel?: ProfessionalPaymentModel | string | null
+  paymentModelLabel?: string | null
+  salaryAmount?: number | null
+  commissionRate?: number | null
+  paymentDay?: number | null
+  payrollNotes?: string | null
+  compensationSummary?: string | null
+  active?: boolean
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export interface ProfessionalMetrics {
+  totalAppointments: number
+  completedAppointments: number
+  upcomingAppointments: number
+}
+
+export interface ProfessionalPayrollMetrics {
+  paidRevenue?: number | null
+  commissionAmount?: number | null
+  projectedPayout?: number | null
+  paidAppointments?: number
+  workedDays?: number
+  lastPaidAt?: string | null
+  periodStart?: string | null
+  periodEnd?: string | null
+}
+
+export interface ProfessionalRecentAppointment {
+  id: Identifier
+  startAt: string
+  endAt?: string | null
+  status: AppointmentStatus | string
+  notes?: string | null
+  price?: number | null
+  client?: AppointmentClientOption | null
+  service?: AppointmentServiceOption | null
+  payment?: AppointmentPaymentRecord | null
+}
+
+export interface ProfessionalDetail extends ProfessionalSummary {
+  metrics?: ProfessionalMetrics | null
+  payroll?: ProfessionalPayrollMetrics | null
+  appointments?: ProfessionalRecentAppointment[]
+}

@@ -1,35 +1,58 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
+import type {
+  ProfessionalAvailabilitySlot,
+  ProfessionalContractType,
+  ProfessionalDetail,
+  ProfessionalPaymentModel,
+  WeekdayValue,
+} from './operationsTypes'
 import { Icon } from './Icon'
 
-const weekdays = [
+const weekdays: Array<{ value: WeekdayValue; label: string }> = [
   { value: 'MONDAY', label: 'Segunda' },
-  { value: 'TUESDAY', label: 'Terça' },
+  { value: 'TUESDAY', label: 'Terca' },
   { value: 'WEDNESDAY', label: 'Quarta' },
   { value: 'THURSDAY', label: 'Quinta' },
   { value: 'FRIDAY', label: 'Sexta' },
-  { value: 'SATURDAY', label: 'Sábado' },
+  { value: 'SATURDAY', label: 'Sabado' },
   { value: 'SUNDAY', label: 'Domingo' },
 ]
 
-const contractTypeOptions = [
+const contractTypeOptions: Array<{ value: ProfessionalContractType; label: string }> = [
   { value: 'CLT', label: 'CLT' },
   { value: 'PJ', label: 'PJ' },
-  { value: 'AUTONOMA', label: 'Autônoma' },
+  { value: 'AUTONOMA', label: 'Autonoma' },
   { value: 'COMISSIONADA', label: 'Comissionada' },
   { value: 'PARCERIA', label: 'Parceria' },
 ]
 
-const paymentModelOptions = [
+const paymentModelOptions: Array<{ value: ProfessionalPaymentModel; label: string }> = [
   { value: 'FIXED', label: 'Fixo' },
-  { value: 'COMMISSION', label: 'Comissão' },
-  { value: 'HYBRID', label: 'Híbrido' },
-  { value: 'DAILY', label: 'Diária' },
+  { value: 'COMMISSION', label: 'Comissao' },
+  { value: 'HYBRID', label: 'Hibrido' },
+  { value: 'DAILY', label: 'Diaria' },
 ]
 
-function normalizeAvailability(availability) {
+interface ProfessionalFormState {
+  name: string
+  specialty: string
+  phone: string
+  notes: string
+  photoDataUrl: string | null
+  availability: ProfessionalAvailabilitySlot[]
+  contractType: string
+  paymentModel: string
+  salaryAmount: string
+  commissionRate: string
+  paymentDay: string
+  payrollNotes: string
+}
+
+function normalizeAvailability(availability?: ProfessionalAvailabilitySlot[] | null) {
   const base = weekdays.map((weekday, index) => ({
     day: weekday.value,
     label: weekday.label,
@@ -52,7 +75,7 @@ function normalizeAvailability(availability) {
   })
 }
 
-function createFormFromProfessional(professional) {
+function createFormFromProfessional(professional?: ProfessionalDetail | null): ProfessionalFormState {
   return {
     name: professional?.name || '',
     specialty: professional?.specialty || '',
@@ -69,17 +92,17 @@ function createFormFromProfessional(professional) {
   }
 }
 
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada'))
+    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada'))
     reader.readAsDataURL(file)
   })
 }
 
-function formatDateTime(value) {
-  if (!value) return 'Não informado'
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Nao informado'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -87,8 +110,8 @@ function formatDateTime(value) {
   }).format(new Date(value))
 }
 
-function formatCurrency(value) {
-  if (value == null || value === '') return 'Não definido'
+function formatCurrency(value?: number | string | null) {
+  if (value == null || value === '') return 'Nao definido'
 
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -96,7 +119,7 @@ function formatCurrency(value) {
   })
 }
 
-function getInitials(name) {
+function getInitials(name?: string | null) {
   return (
     name
       ?.split(' ')
@@ -108,37 +131,48 @@ function getInitials(name) {
   )
 }
 
-function getWeekdayLabel(day) {
+function getWeekdayLabel(day: WeekdayValue) {
   return weekdays.find(item => item.value === day)?.label || day
 }
 
-function ReadonlyField({ label, value }) {
+interface ReadonlyFieldProps {
+  label: string
+  value?: string | number | null
+}
+
+function ReadonlyField({ label, value }: ReadonlyFieldProps) {
   return (
     <div className="prontuario-field">
       <span>{label}</span>
-      <strong>{value || 'Não informado'}</strong>
+      <strong>{value || 'Nao informado'}</strong>
     </div>
   )
 }
 
 export default function ProfissionalFicha() {
   const navigate = useNavigate()
-  const { professionalId } = useParams()
+  const { professionalId } = useParams<{ professionalId: string }>()
   const [loading, setLoading] = useState(true)
-  const [professional, setProfessional] = useState(null)
+  const [professional, setProfessional] = useState<ProfessionalDetail | null>(null)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState(createFormFromProfessional())
+  const [form, setForm] = useState<ProfessionalFormState>(createFormFromProfessional())
 
   const load = useCallback(async () => {
+    if (!professionalId) {
+      toast.error('Nao foi possivel identificar a profissional selecionada')
+      navigate('/profissionais', { replace: true })
+      return
+    }
+
     setLoading(true)
 
     try {
-      const { data } = await api.get(`/professionals/${professionalId}`)
+      const { data } = await api.get<ProfessionalDetail>(`/professionals/${professionalId}`)
       setProfessional(data)
       setForm(createFormFromProfessional(data))
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível abrir a ficha desta profissional'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir a ficha desta profissional'))
       navigate('/profissionais', { replace: true })
     } finally {
       setLoading(false)
@@ -156,7 +190,7 @@ export default function ProfissionalFicha() {
 
   const payrollPeriodLabel = useMemo(() => {
     const periodStart = professional?.payroll?.periodStart
-    if (!periodStart) return 'competência atual'
+    if (!periodStart) return 'competencia atual'
 
     return new Intl.DateTimeFormat('pt-BR', {
       month: 'long',
@@ -164,24 +198,24 @@ export default function ProfissionalFicha() {
     }).format(new Date(periodStart))
   }, [professional])
 
-  function setField(key) {
-    return event => {
+  function setField<Key extends keyof ProfessionalFormState>(key: Key) {
+    return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm(current => ({ ...current, [key]: event.target.value }))
     }
   }
 
-  function updateAvailability(day, key, value) {
+  function updateAvailability(day: WeekdayValue, key: 'enabled' | 'start' | 'end', value: boolean | string) {
     setForm(current => ({
       ...current,
       availability: current.availability.map(slot => (
         slot.day === day
-           ? { ...slot, [key]: value }
+          ? { ...slot, [key]: value }
           : slot
       )),
     }))
   }
 
-  async function handlePhotoChange(event) {
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -189,15 +223,17 @@ export default function ProfissionalFicha() {
       const dataUrl = await readFileAsDataUrl(file)
       setForm(current => ({ ...current, photoDataUrl: dataUrl }))
     } catch (error) {
-      toast.error(error.message || 'Não foi possível carregar a foto')
+      toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar a foto')
     } finally {
       event.target.value = ''
     }
   }
 
   async function handleSave() {
-    if (!form.name || !form.specialty) {
-      toast.error('Nome e especialidade são obrigatórios')
+    if (!professionalId) return
+
+    if (!form.name.trim() || !form.specialty.trim()) {
+      toast.error('Nome e especialidade sao obrigatorios')
       return
     }
 
@@ -223,7 +259,7 @@ export default function ProfissionalFicha() {
       setEditing(false)
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a profissional'))
     } finally {
       setSaving(false)
     }
@@ -251,7 +287,7 @@ export default function ProfissionalFicha() {
           </button>
           <h1 className="page-title">{professional.name}</h1>
           <p className="page-subtitle">
-            Ficha individual com apresentação profissional, agenda semanal, folha de pagamento e histórico recente.
+            Ficha individual com apresentacao profissional, agenda semanal, folha de pagamento e historico recente.
           </p>
         </div>
 
@@ -285,7 +321,7 @@ export default function ProfissionalFicha() {
           <div className="section-head">
             <div>
               <h2 className="section-title">Cadastro profissional</h2>
-              <p className="section-copy">Leitura rápida do perfil operacional e financeiro.</p>
+              <p className="section-copy">Leitura rapida do perfil operacional e financeiro.</p>
             </div>
           </div>
 
@@ -295,7 +331,7 @@ export default function ProfissionalFicha() {
             <ReadonlyField label="Regime" value={professional.contractTypeLabel} />
             <ReadonlyField label="Modelo de pagamento" value={professional.paymentModelLabel} />
             <ReadonlyField label="Base fixa" value={formatCurrency(professional.salaryAmount)} />
-            <ReadonlyField label="Comissão" value={professional.commissionRate != null ? `${professional.commissionRate}%` : ''} />
+            <ReadonlyField label="Comissao" value={professional.commissionRate != null ? `${professional.commissionRate}%` : ''} />
             <ReadonlyField label="Dia do repasse" value={professional.paymentDay != null ? `Dia ${professional.paymentDay}` : ''} />
             <ReadonlyField label="Cadastro" value={formatDateTime(professional.createdAt)} />
           </div>
@@ -304,16 +340,16 @@ export default function ProfissionalFicha() {
         <section className="card section-card">
           <div className="section-head">
             <div>
-              <h2 className="section-title">Visão da operação</h2>
-              <p className="section-copy">Indicadores úteis para gestão da equipe.</p>
+              <h2 className="section-title">Visao da operacao</h2>
+              <p className="section-copy">Indicadores uteis para gestao da equipe.</p>
             </div>
           </div>
 
           <div className="prontuario-grid">
             <ReadonlyField label="Atendimentos totais" value={String(professional.metrics?.totalAppointments ?? 0)} />
-            <ReadonlyField label="Concluídos" value={String(professional.metrics?.completedAppointments ?? 0)} />
-            <ReadonlyField label="Próximos" value={String(professional.metrics?.upcomingAppointments ?? 0)} />
-            <ReadonlyField label="Disponibilidade" value={activeAvailability.length ? `${activeAvailability.length} dia(s) ativo(s)` : 'Não configurada'} />
+            <ReadonlyField label="Concluidos" value={String(professional.metrics?.completedAppointments ?? 0)} />
+            <ReadonlyField label="Proximos" value={String(professional.metrics?.upcomingAppointments ?? 0)} />
+            <ReadonlyField label="Disponibilidade" value={activeAvailability.length ? `${activeAvailability.length} dia(s) ativo(s)` : 'Nao configurada'} />
           </div>
         </section>
       </div>
@@ -324,36 +360,36 @@ export default function ProfissionalFicha() {
             <div className="section-head">
               <div>
                 <h2 className="section-title">Folha de pagamento</h2>
-                <p className="section-copy">Cálculo automático com base nos atendimentos pagos de {payrollPeriodLabel}.</p>
+                <p className="section-copy">Calculo automatico com base nos atendimentos pagos de {payrollPeriodLabel}.</p>
               </div>
             </div>
 
             <div className="prontuario-grid">
               <ReadonlyField label="Receita paga" value={formatCurrency(professional.payroll?.paidRevenue)} />
-              <ReadonlyField label="Comissão calculada" value={formatCurrency(professional.payroll?.commissionAmount)} />
+              <ReadonlyField label="Comissao calculada" value={formatCurrency(professional.payroll?.commissionAmount)} />
               <ReadonlyField label="Repasse projetado" value={formatCurrency(professional.payroll?.projectedPayout)} />
               <ReadonlyField label="Atendimentos pagos" value={String(professional.payroll?.paidAppointments ?? 0)} />
               <ReadonlyField label="Dias trabalhados" value={String(professional.payroll?.workedDays ?? 0)} />
-              <ReadonlyField label="Último pagamento" value={formatDateTime(professional.payroll?.lastPaidAt)} />
+              <ReadonlyField label="Ultimo pagamento" value={formatDateTime(professional.payroll?.lastPaidAt)} />
             </div>
 
             <div className="team-card-note">
-              <strong>Configuração da folha</strong>
-              <span>{professional.payrollNotes || 'Nenhuma observação financeira registrada até o momento.'}</span>
+              <strong>Configuracao da folha</strong>
+              <span>{professional.payrollNotes || 'Nenhuma observacao financeira registrada ate o momento.'}</span>
             </div>
           </section>
 
           <section className="card section-card">
             <div className="section-head">
               <div>
-                <h2 className="section-title">Observações da profissional</h2>
-                <p className="section-copy">Contexto operacional, perfil de atendimento e observações livres.</p>
+                <h2 className="section-title">Observacoes da profissional</h2>
+                <p className="section-copy">Contexto operacional, perfil de atendimento e observacoes livres.</p>
               </div>
             </div>
 
             <div className="team-card-note">
               <strong>Notas internas</strong>
-              <span>{professional.notes || 'Nenhuma observação registrada.'}</span>
+              <span>{professional.notes || 'Nenhuma observacao registrada.'}</span>
             </div>
           </section>
         </section>
@@ -362,13 +398,13 @@ export default function ProfissionalFicha() {
           <section className="card documents-side-card">
             <div className="eyebrow">Agenda semanal</div>
             {!activeAvailability.length ? (
-              <p className="text-muted">Disponibilidade ainda não configurada.</p>
+              <p className="text-muted">Disponibilidade ainda nao configurada.</p>
             ) : (
               <div className="anamnese-history-list">
                 {activeAvailability.map(slot => (
                   <div className="anamnese-history-item" key={slot.day}>
                     <strong>{getWeekdayLabel(slot.day)}</strong>
-                    <span>{slot.start} às {slot.end}</span>
+                    <span>{slot.start} as {slot.end}</span>
                   </div>
                 ))}
               </div>
@@ -383,10 +419,10 @@ export default function ProfissionalFicha() {
               <div className="anamnese-history-list">
                 {professional.appointments.map(appointment => (
                   <div className="anamnese-history-item" key={appointment.id}>
-                    <strong>{appointment.service?.name || 'Serviço'}</strong>
-                    <span>{appointment.client?.name || 'Cliente não informado'}</span>
+                    <strong>{appointment.service?.name || 'Servico'}</strong>
+                    <span>{appointment.client?.name || 'Cliente nao informado'}</span>
                     <small>
-                      {formatDateTime(appointment.startAt)} • {appointment.status} • {formatCurrency(appointment.price)}
+                      {formatDateTime(appointment.startAt)} - {appointment.status} - {formatCurrency(appointment.price)}
                     </small>
                   </div>
                 ))}
@@ -406,7 +442,7 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Dados principais</h3>
-                    <p className="section-copy">Identificação, especialidade e apresentação da profissional.</p>
+                    <p className="section-copy">Identificacao, especialidade e apresentacao da profissional.</p>
                   </div>
                 </div>
 
@@ -418,7 +454,7 @@ export default function ProfissionalFicha() {
 
                   <div className="form-group">
                     <label className="form-label">Especialidade *</label>
-                    <input className="form-input" value={form.specialty} onChange={setField('specialty')} placeholder="Ex: Esteticista, Biomédica" />
+                    <input className="form-input" value={form.specialty} onChange={setField('specialty')} placeholder="Ex: Esteticista, Biomedica" />
                   </div>
 
                   <div className="form-group">
@@ -427,12 +463,12 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observações</label>
+                    <label className="form-label">Observacoes</label>
                     <textarea
                       className="form-textarea"
                       value={form.notes}
                       onChange={setField('notes')}
-                      placeholder="Informações relevantes sobre atendimento, perfil técnico, preferência de agenda ou estilo de cuidado."
+                      placeholder="Informacoes relevantes sobre atendimento, perfil tecnico, preferencia de agenda ou estilo de cuidado."
                     />
                   </div>
                 </div>
@@ -442,14 +478,14 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Foto e disponibilidade</h3>
-                    <p className="section-copy">Imagem de perfil e agenda semanal para leitura rápida em qualquer dispositivo.</p>
+                    <p className="section-copy">Imagem de perfil e agenda semanal para leitura rapida em qualquer dispositivo.</p>
                   </div>
                 </div>
 
                 <div className="media-upload-card">
                   <div className="media-upload-preview">
                     {form.photoDataUrl ? (
-                      <img src={form.photoDataUrl} alt="Pré-visualização da profissional" className="media-upload-image" />
+                      <img src={form.photoDataUrl} alt="Pre-visualizacao da profissional" className="media-upload-image" />
                     ) : (
                       <div className="media-upload-fallback">{getInitials(form.name)}</div>
                     )}
@@ -467,7 +503,7 @@ export default function ProfissionalFicha() {
                       </button>
                     ) : null}
 
-                    <p className="text-muted media-upload-copy">Use uma foto clara para facilitar identificação em desktop, tablet e celular.</p>
+                    <p className="text-muted media-upload-copy">Use uma foto clara para facilitar identificacao em desktop, tablet e celular.</p>
                   </div>
                 </div>
 
@@ -488,7 +524,7 @@ export default function ProfissionalFicha() {
 
                       <div className="availability-time-grid">
                         <div className="form-group">
-                          <label className="form-label">Início</label>
+                          <label className="form-label">Inicio</label>
                           <input
                             className="form-input"
                             type="time"
@@ -517,13 +553,13 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Folha de pagamento</h3>
-                    <p className="section-copy">Defina regime, modelo de repasse e observações financeiras da profissional.</p>
+                    <p className="section-copy">Defina regime, modelo de repasse e observacoes financeiras da profissional.</p>
                   </div>
                 </div>
 
                 <div className="form-grid payroll-grid">
                   <div className="form-group">
-                    <label className="form-label">Regime de contratação</label>
+                    <label className="form-label">Regime de contratacao</label>
                     <select className="form-select" value={form.contractType} onChange={setField('contractType')}>
                       <option value="">Selecione</option>
                       {contractTypeOptions.map(option => (
@@ -548,7 +584,7 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Comissão (%)</label>
+                    <label className="form-label">Comissao (%)</label>
                     <input className="form-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={setField('commissionRate')} placeholder="0" />
                   </div>
 
@@ -558,12 +594,12 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observações da folha</label>
+                    <label className="form-label">Observacoes da folha</label>
                     <textarea
                       className="form-textarea"
                       value={form.payrollNotes}
                       onChange={setField('payrollNotes')}
-                      placeholder="Ex: comissão sobre procedimentos específicos, ajuda de custo, bonificação ou política de repasse."
+                      placeholder="Ex: comissao sobre procedimentos especificos, ajuda de custo, bonificacao ou politica de repasse."
                     />
                   </div>
                 </div>
@@ -575,7 +611,7 @@ export default function ProfissionalFicha() {
                 Cancelar
               </button>
               <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? <span className="spinner" /> : 'Salvar alterações'}
+                {saving ? <span className="spinner" /> : 'Salvar alteracoes'}
               </button>
             </div>
           </div>
