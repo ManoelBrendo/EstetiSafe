@@ -1,4 +1,4 @@
-const test = require('node:test')
+﻿const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
@@ -8,6 +8,7 @@ const {
   getSupportContact,
   hasSupportCredentials,
   isSupportPayload,
+  registerSupportRoutes,
 } = require('../src/legacy/support')
 
 test('hasSupportCredentials validates configured support access', () => {
@@ -96,3 +97,40 @@ test('createSupportLoginResponse rejects wrong support password', () => {
   assert.equal(response.status, 401)
   assert.equal(response.body.error, 'Credenciais invalidas.')
 })
+test('registerSupportRoutes accepts missing optional phone contact', () => {
+  const routes = []
+  const app = {
+    get(path) {
+      routes.push(['GET', path])
+    },
+    post(path) {
+      routes.push(['POST', path])
+    },
+  }
+
+  assert.doesNotThrow(() => registerSupportRoutes({
+    app,
+    prisma: {},
+    authMiddleware() {},
+    handle: handler => handler,
+    requireSupport() {},
+    ensureClinicAggregate() {},
+    userAggregateInclude: {},
+    mergeLegacyUserAggregate: user => user,
+    serializeUser: user => user,
+    createAuditLogFromRequest() {},
+    signToken: payload => payload,
+    supportAdminEmail: 'suporte@empresa.com',
+    supportAdminName: 'Central de suporte',
+    supportContactName: 'Central',
+    supportContactEmail: 'suporte@empresa.com',
+    supportContactPhone: '',
+  }))
+
+  assert.deepEqual(routes, [
+    ['GET', '/public/support-contact'],
+    ['GET', '/support/clinics'],
+    ['POST', '/support/assume'],
+  ])
+})
+

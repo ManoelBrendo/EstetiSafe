@@ -10,12 +10,13 @@ const { z } = require('zod')
 const { passwordPolicyMessage, passwordMeetsPolicy, safeEqualText } = require('./lib/security')
 const { hasSupportBillingControl } = require('./lib/supportAccess')
 const { createApiV2Router } = require('./src/api-v2/createApiV2Router')
-const { registerDocumentRoutes } = require('./src/legacy/documents')
+const { buildDocumentDashboard, registerDocumentRoutes } = require('./src/legacy/documents')
 const { registerBillingRoutes } = require('./src/legacy/billing')
 const { buildSupportUser, createSupportLoginResponse, getSupportBillingSnapshot, getSupportContact, hasSupportCredentials, isSupportPayload, registerSupportRoutes, requireSupport } = require('./src/legacy/support')
 const { buildInventoryDashboard, registerInventoryRoutes } = require('./src/legacy/inventory')
 const { registerAppointmentRoutes } = require('./src/legacy/appointments')
 const { ensureServicePopForService, registerServiceRoutes } = require('./src/legacy/services')
+const { registerPaymentRoutes } = require('./src/legacy/payments')
 
 const app = express()
 const prisma = new PrismaClient()
@@ -1035,22 +1036,6 @@ function normalizeServiceData(data) {
 }
 
 
-function normalizePaymentData(data) {
-  const normalized = {}
-
-  if ('appointmentId' in data) normalized.appointmentId = data.appointmentId
-  if ('amount' in data) normalized.amount = data.amount
-  if ('method' in data) normalized.method = data.method
-  if ('status' in data) normalized.status = data.status
-  if ('paidAt' in data) {
-    normalized.paidAt = data.paidAt ? parseDateTime(data.paidAt, 'paidAt') : null
-  } else if (data.status === 'PAID') {
-    normalized.paidAt = new Date()
-  }
-
-  return normalized
-}
-
 function normalizeOptionalText(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
@@ -1516,6 +1501,270 @@ function renderClientMedicalRecordPdf(doc, { clinicName, client }) {
   })
 }
 
+const registerSchema = z.object({
+  email: emailField,
+  password: z.string().min(15).refine(passwordMeetsPolicy, passwordPolicyMessage),
+  clinicName: z.string().trim().min(2),
+})
+const loginSchema = z.object({ email: emailField, password: z.string() })
+const publicLeadSchema = z.object({
+  clinicName: z.string().trim().min(2).max(120),
+  contactName: z.string().trim().min(2).max(120),
+  email: emailField,
+  phone: z.string().trim().min(8).max(30),
+  city: z.string().trim().max(120).optional(),
+  teamSize: z.string().trim().max(80).optional(),
+  mainGoal: z.string().trim().max(160).optional(),
+  message: z.string().trim().max(1500).optional(),
+  requestedDemo: z.boolean().optional(),
+  source: z.string().trim().max(255).optional(),
+})
+const clinicProfileSchema = z.object({
+  clinicName: z.string().trim().min(2).max(120).optional(),
+  clinicLogoDataUrl: z.union([z.string().trim().startsWith('data:image/').max(1_000_000), z.null()]).optional(),
+})
+const clientSchema = z.object({
+  name: z.string().trim().min(2),
+  phone: z.string().trim().min(8),
+  email: z.union([z.literal(''), emailField]).optional(),
+  birthDate: z.string().optional(),
+  cpf: z.string().trim().optional(),
+  sex: z.string().trim().optional(),
+  maritalStatus: z.string().trim().optional(),
+  profession: z.string().trim().optional(),
+  addressFull: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+})
+const professionalSchema = z.object({
+  name: z.string().trim().min(2),
+  specialty: z.string().trim().min(2),
+  phone: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+  photoDataUrl: z.union([z.string().trim().startsWith('data:image/').max(8_000_000), z.null()]).optional(),
+  availability: z.array(z.object({
+    day: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
+    enabled: z.boolean().optional(),
+    start: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    end: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  })).max(7).optional(),
+  contractType: professionalContractTypeSchema.optional(),
+  paymentModel: professionalPaymentModelSchema.optional(),
+  salaryAmount: z.number().min(0).nullable().optional(),
+  commissionRate: z.number().min(0).max(100).nullable().optional(),
+  paymentDay: z.number().int().min(1).max(31).nullable().optional(),
+  payrollNotes: z.string().trim().max(1200).optional(),
+  active: z.boolean().optional(),
+})
+const serviceSchema = z.object({
+  name: z.string().trim().min(2),
+  description: z.string().trim().optional(),
+  duration: z.number().int().min(5),
+  price: z.number().min(0),
+  active: z.boolean().optional(),
+})
+const appointmentSchema = z.object({
+  clientId: z.number().int().positive(),
+  serviceId: z.number().int().positive(),
+  professionalId: z.number().int().positive(),
+  startAt: z.string().min(1),
+  endAt: z.string().min(1),
+  notes: z.string().trim().optional(),
+  price: z.number().min(0),
+  status: appointmentStatusSchema.optional(),
+})
+const paymentSchema = z.object({
+  appointmentId: z.number().int().positive(),
+  amount: z.number().min(0),
+  method: z.enum(['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'PIX', 'BANK_TRANSFER']),
+  status: paymentStatusSchema.optional(),
+  paidAt: z.string().optional(),
+})
+const anamnesisPhotoSchema = z.object({
+  id: z.string().trim().min(2),
+  caption: z.string().trim().max(160).optional(),
+  dataUrl: z.string().startsWith('data:image/').min(100),
+})
+const optionalLongText = max => z.string().trim().max(max).optional()
+const optionalBoolean = z.boolean().optional()
+const optionalEmail = z.union([z.literal(''), emailField]).optional()
+const optionalImageDataUrl = z.string().trim().startsWith('data:image/').max(1_000_000)
+const anamnesisSexSchema = z.enum(['FEMININO', 'MASCULINO', 'NAO_BINARIO', 'PREFIRO_NAO_INFORMAR', 'OUTRO'])
+const anamnesisMaritalStatusSchema = z.enum(['SOLTEIRO', 'CASADO', 'DIVORCIADO', 'VIUVO', 'UNIAO_ESTAVEL', 'OUTRO'])
+const skinTypeSchema = z.enum(['OLEOSA', 'SECA', 'MISTA', 'NORMAL'])
+const fitzpatrickSchema = z.enum(['I', 'II', 'III', 'IV', 'V', 'VI'])
+const alcoholFrequencySchema = z.enum(['NAO_CONSOME', 'SOCIAL', 'SEMANAL', 'FREQUENTE'])
+const sleepQualitySchema = z.enum(['OTIMA', 'BOA', 'REGULAR', 'RUIM'])
+const anamnesisAestheticHistoryEntrySchema = z.object({
+  id: z.string().trim().min(2),
+  procedureName: optionalLongText(200),
+  procedureDate: optionalLongText(120),
+  notes: optionalLongText(1200),
+  intercurrences: optionalLongText(1200),
+})
+const anamnesisConditionSchema = z.object({
+  type: z.string().trim().min(2).max(60),
+  label: z.string().trim().min(2).max(80),
+  present: optionalBoolean,
+  classification: optionalLongText(120),
+  notes: optionalLongText(800),
+})
+const treatmentPlanServiceSchema = z.object({
+  id: z.string().trim().min(2),
+  name: z.string().trim().min(2).max(200),
+  sessions: z.number().int().min(1).max(99),
+  description: optionalLongText(2000),
+  adverseEffects: z.string().trim().min(2).max(2000),
+})
+const anamnesisAnswersSchema = z.object({
+  identification: z.object({
+    fullName: z.string().trim().min(2).max(160),
+    cpf: z.string().trim().refine(value => value.replace(/\D/g, '').length === 11, 'CPF invalido'),
+    birthDate: z.string().min(1),
+    age: z.number().int().min(0).max(130).optional(),
+    sex: z.union([anamnesisSexSchema, z.literal('')]).optional(),
+    maritalStatus: z.union([anamnesisMaritalStatusSchema, z.literal('')]).optional(),
+    profession: optionalLongText(120),
+    phone: z.string().trim().min(8).max(30),
+    email: optionalEmail,
+    addressFull: optionalLongText(500),
+  }),
+  chiefComplaint: z.object({
+    desiredProcedure: optionalLongText(300),
+    currentDiscomfort: z.string().trim().min(3).max(600),
+    complaintDuration: optionalLongText(200),
+    previousTreatment: optionalLongText(500),
+  }),
+  healthHistory: z.object({
+    preExistingConditions: z.object({
+      hypertension: optionalBoolean,
+      diabetes: optionalBoolean,
+      heartDisease: optionalBoolean,
+      autoimmuneDisease: optionalBoolean,
+      hormonalIssues: optionalBoolean,
+      kidneyIssues: optionalBoolean,
+      liverIssues: optionalBoolean,
+      otherConditions: optionalLongText(500),
+    }),
+    surgeries: z.object({
+      hadSurgeries: optionalBoolean,
+      surgeryDetails: optionalLongText(500),
+      approximateDate: optionalLongText(120),
+      hadComplications: optionalBoolean,
+    }),
+    medications: z.object({
+      continuousMedication: optionalBoolean,
+      medicationDetails: optionalLongText(500),
+      anticoagulants: optionalBoolean,
+      corticosteroids: optionalBoolean,
+      recentAntibiotics: optionalBoolean,
+    }),
+    allergies: z.object({
+      hasAllergies: optionalBoolean,
+      medicationAllergy: optionalBoolean,
+      cosmeticsAllergy: optionalBoolean,
+      anestheticsAllergy: optionalBoolean,
+      notes: optionalLongText(500),
+    }),
+    dermatologicalHistory: z.object({
+      activeAcne: optionalBoolean,
+      rosacea: optionalBoolean,
+      melasma: optionalBoolean,
+      skinSensitivity: optionalBoolean,
+      keloidTendency: optionalBoolean,
+    }),
+    aestheticHistory: z.array(anamnesisAestheticHistoryEntrySchema).optional(),
+  }),
+  lifestyle: z.object({
+    smoking: optionalBoolean,
+    alcoholConsumption: optionalBoolean,
+    alcoholFrequency: z.union([alcoholFrequencySchema, z.literal('')]).optional(),
+    dailyWaterIntake: optionalLongText(120),
+    diet: optionalLongText(300),
+    physicalActivity: optionalBoolean,
+    workoutsPerWeek: z.union([z.number().int().min(0).max(7), z.null()]).optional(),
+    sleepQuality: z.union([sleepQualitySchema, z.literal('')]).optional(),
+  }),
+  aestheticEvaluation: z.object({
+    skinType: z.union([skinTypeSchema, z.literal('')]).optional(),
+    fitzpatrick: z.union([fitzpatrickSchema, z.literal('')]).optional(),
+    conditions: z.array(anamnesisConditionSchema).optional(),
+    observedConditions: z.object({
+      wrinkles: optionalBoolean,
+      sagging: optionalBoolean,
+      spots: optionalBoolean,
+      scars: optionalBoolean,
+      localizedFat: optionalBoolean,
+      cellulite: optionalBoolean,
+      stretchMarks: optionalBoolean,
+    }).optional(),
+  }),
+  aestheticHistory: z.object({
+    hadAestheticProcedures: optionalBoolean,
+    procedureDetails: optionalLongText(600),
+    lastProcedureDate: optionalLongText(120),
+    adverseReaction: optionalBoolean,
+  }).optional(),
+  contraindications: z.object({
+    pregnancy: optionalBoolean,
+    lactation: optionalBoolean,
+    activeInfections: optionalBoolean,
+    recentIsotretinoin: optionalBoolean,
+    activeDermatologicalDiseases: optionalBoolean,
+    metallicImplants: optionalBoolean,
+    additionalNotes: optionalLongText(600),
+  }),
+  expectations: z.object({
+    treatmentExpectations: optionalLongText(600),
+    expectedResultTimeline: optionalLongText(200),
+    awareOfLimitations: optionalBoolean,
+  }),
+  treatmentObjective: optionalLongText(600),
+  photoRecord: z.object({
+    photos: z.array(anamnesisPhotoSchema).max(8).optional(),
+    imageUseAuthorized: optionalBoolean,
+  }),
+  treatmentPlan: z.object({
+    recommendedProcedure: optionalLongText(600),
+    sessionCount: z.union([z.number().int().min(1).max(99), z.null()]).optional(),
+    sessionInterval: optionalLongText(120),
+    productsUsed: optionalLongText(600),
+    equipmentsUsed: optionalLongText(600),
+    services: z.array(treatmentPlanServiceSchema).optional(),
+  }),
+  scienceTerm: z.object({
+    informedHistoryAccurately: optionalBoolean,
+    awareOfRisks: optionalBoolean,
+    receivedPreAndPostGuidance: optionalBoolean,
+  }),
+  signatures: z.object({
+    patientSignatureDataUrl: optionalImageDataUrl,
+    professionalSignatureDataUrl: optionalImageDataUrl,
+    professionalId: z.number().int().positive().nullable().optional(),
+    professionalName: z.string().trim().min(2).max(160),
+    signedAt: z.string().min(1),
+  }),
+}).passthrough()
+const anamnesisSchema = z.union([
+  anamnesisAnswersSchema,
+  z.object({ answers: anamnesisAnswersSchema }),
+])
+const consentRecordSchema = z.object({
+  title: z.string().trim().min(4).optional(),
+  versionLabel: z.string().trim().min(1).max(20).optional(),
+})
+const consentSignatureSchema = z.object({
+  signerName: z.string().trim().min(2),
+  signerDocument: z.string().trim().optional(),
+  professionalId: z.coerce.number().int().positive().nullable().optional(),
+  professionalName: z.string().trim().max(160).optional(),
+  signatureDataUrl: z.string().startsWith('data:image/').min(100),
+  accepted: z.literal(true),
+  status: consentStatusSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (!value.professionalId && !value.professionalName?.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecione ou informe o profissional responsavel', path: ['professionalName'] })
+  }
+})
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date() }))
 
 registerSupportRoutes({
@@ -1706,89 +1955,14 @@ registerBillingRoutes({
   canManageSubscription: hasSupportBillingControl,
 })
 
-app.get('/documents/summary', authMiddleware, handle(async (req, res) => {
-  const records = await prisma.clinicDocument.findMany({
-    where: { userId: req.user.id },
-    select: {
-      id: true,
-      category: true,
-      documentType: true,
-      title: true,
-      notes: true,
-      expiresAt: true,
-      fileName: true,
-      fileMimeType: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  })
-
-  res.json(buildDocumentDashboard(records))
-}))
-
-app.get('/documents', authMiddleware, handle(async (req, res) => {
-  const category = req.query.category ? documentCategorySchema.parse(String(req.query.category)) : null
-
-  const records = await prisma.clinicDocument.findMany({
-    where: {
-      userId: req.user.id,
-      ...(category ? { category } : {}),
-    },
-    orderBy: [
-      { expiresAt: 'asc' },
-      { createdAt: 'desc' },
-    ],
-  })
-
-  res.json(records.map(summarizeDocument))
-}))
-
-app.get('/documents/:id', authMiddleware, handle(async (req, res) => {
-  const documentId = parseId(req.params.id, 'documentId')
-  const document = await ensureDocumentOwnership(req.user.id, documentId)
-
-  res.json({
-    ...summarizeDocument(document),
-    fileDataUrl: document.fileDataUrl,
-  })
-}))
-
-app.post('/documents', authMiddleware, handle(async (req, res) => {
-  const data = clinicDocumentSchema.parse(req.body)
-  const document = await prisma.clinicDocument.create({
-    data: {
-      ...normalizeDocumentData(data),
-      userId: req.user.id,
-    },
-  })
-
-  res.status(201).json(summarizeDocument(document))
-}))
-
-app.put('/documents/:id', authMiddleware, handle(async (req, res) => {
-  const documentId = parseId(req.params.id, 'documentId')
-  const data = clinicDocumentSchema.partial().parse(req.body)
-
-  await ensureDocumentOwnership(req.user.id, documentId)
-
-  const document = await prisma.clinicDocument.update({
-    where: { id: documentId },
-    data: normalizeDocumentData(data),
-  })
-
-  res.json(summarizeDocument(document))
-}))
-
-app.delete('/documents/:id', authMiddleware, handle(async (req, res) => {
-  const documentId = parseId(req.params.id, 'documentId')
-
-  await prisma.clinicDocument.deleteMany({
-    where: { id: documentId, userId: req.user.id },
-  })
-
-  res.json({ ok: true })
-}))
-
+registerDocumentRoutes({
+  app,
+  prisma,
+  authMiddleware,
+  handle,
+  parseId,
+  parseDateOnly,
+})
 registerInventoryRoutes({
   app,
   prisma,
@@ -2023,81 +2197,15 @@ registerAppointmentRoutes({
   assertClientProntuarioEditable,
 })
 
-app.post('/payments', authMiddleware, handle(async (req, res) => {
-  const data = paymentSchema.parse(req.body)
-  const paymentData = normalizePaymentData(data)
-
-  const payment = await prisma.$transaction(async tx => {
-    const appointment = await tx.appointment.findFirstOrThrow({
-      where: { id: data.appointmentId, userId: req.user.id },
-      include: {
-        client: {
-          select: { id: true, isPaid: true, isLocked: true, lockedAt: true },
-        },
-      },
-    })
-
-    const record = await tx.payment.upsert({
-      where: { appointmentId: data.appointmentId },
-      create: { ...paymentData, appointmentId: data.appointmentId },
-      update: paymentData,
-    })
-
-    if (record.status === 'PAID') {
-      await tx.appointment.update({ where: { id: data.appointmentId }, data: { status: 'COMPLETED' } })
-      await tx.client.update({
-        where: { id: appointment.client.id },
-        data: {
-          isPaid: true,
-          isLocked: true,
-          lockedAt: appointment.client.lockedAt || record.paidAt || new Date(),
-        },
-      })
-    }
-
-    return record
-  })
-
-  res.status(201).json(payment)
-}))
-
-app.put('/payments/:id', authMiddleware, handle(async (req, res) => {
-  const paymentId = parseId(req.params.id, 'paymentId')
-  const data = paymentSchema.partial().parse(req.body)
-
-  const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })
-
-  const paymentData = normalizePaymentData(data)
-  const updatedPayment = await prisma.$transaction(async tx => {
-    const appointment = await tx.appointment.findFirstOrThrow({
-      where: { id: payment.appointmentId, userId: req.user.id },
-      include: {
-        client: {
-          select: { id: true, isPaid: true, isLocked: true, lockedAt: true },
-        },
-      },
-    })
-
-    const record = await tx.payment.update({ where: { id: paymentId }, data: paymentData })
-
-    if (record.status === 'PAID') {
-      await tx.appointment.update({ where: { id: payment.appointmentId }, data: { status: 'COMPLETED' } })
-      await tx.client.update({
-        where: { id: appointment.client.id },
-        data: {
-          isPaid: true,
-          isLocked: true,
-          lockedAt: appointment.client.lockedAt || record.paidAt || new Date(),
-        },
-      })
-    }
-
-    return record
-  })
-
-  res.json(updatedPayment)
-}))
-
+registerPaymentRoutes({
+  app,
+  prisma,
+  authMiddleware,
+  handle,
+  parseId,
+  parseDateTime,
+  paymentSchema,
+})
 app.get('/clients/:clientId/anamnesis', authMiddleware, handle(async (req, res) => {
   const clientId = parseId(req.params.clientId, 'clientId')
   await prisma.client.findFirstOrThrow({ where: { id: clientId, userId: req.user.id } })
@@ -2444,6 +2552,8 @@ module.exports = {
   prisma,
   startServer,
 }
+
+
 
 
 

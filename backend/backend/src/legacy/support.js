@@ -1,4 +1,4 @@
-const { z } = require('zod')
+﻿const { z } = require('zod')
 
 const supportAssumeSchema = z.object({ userId: z.coerce.number().int().positive() })
 
@@ -134,7 +134,6 @@ function registerSupportRoutes({
     supportAdminName,
     supportContactName,
     supportContactEmail,
-    supportContactPhone,
   }
 
   for (const [key, value] of Object.entries(requiredDeps)) {
