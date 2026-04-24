@@ -15,6 +15,7 @@ const { registerBillingRoutes } = require('./src/legacy/billing')
 const { buildSupportUser, createSupportLoginResponse, getSupportBillingSnapshot, getSupportContact, hasSupportCredentials, isSupportPayload, registerSupportRoutes, requireSupport } = require('./src/legacy/support')
 const { buildInventoryDashboard, registerInventoryRoutes } = require('./src/legacy/inventory')
 const { registerAppointmentRoutes } = require('./src/legacy/appointments')
+const { ensureServicePopForService, registerServiceRoutes } = require('./src/legacy/services')
 
 const app = express()
 const prisma = new PrismaClient()
@@ -459,66 +460,7 @@ function buildDefaultConsentTerm({ clinicName, clientName }) {
   ].join('\n')
 }
 
-function buildServicePop({ clinicName, serviceName, description, duration }) {
-  const safeClinicName = (clinicName || '').trim() || 'ClÃ¯Â¿Â½nica nÃ¯Â¿Â½o informada'
-  const safeServiceName = (serviceName || '').trim() || 'Procedimento estÃ¯Â¿Â½tico'
-  const descriptionText = (description || '').trim() || 'Descrever tÃ¯Â¿Â½cnica, objetivo clÃ¯Â¿Â½nico, ativos, parÃ¯Â¿Â½metros e cuidados especÃ¯Â¿Â½ficos deste procedimento.'
-  const durationText = duration
-    ? `${duration} minutos`
-    : 'Tempo definido conforme avaliaÃ¯Â¿Â½Ã¯Â¿Â½o profissional e protocolo da clÃ¯Â¿Â½nica.'
 
-  return [
-    'POP - Procedimento Operacional PadrÃ¯Â¿Â½o',
-    '',
-    `ClÃ¯Â¿Â½nica: ${safeClinicName}`,
-    `Procedimento: ${safeServiceName}`,
-    `Tempo mÃ¯Â¿Â½dio de execuÃ¯Â¿Â½Ã¯Â¿Â½o: ${durationText}`,
-    '',
-    '1. Objetivo',
-    `Padronizar a execuÃ¯Â¿Â½Ã¯Â¿Â½o do procedimento ${safeServiceName}, garantindo seguranÃ¯Â¿Â½a, organizaÃ¯Â¿Â½Ã¯Â¿Â½o operacional, rastreabilidade e consistÃ¯Â¿Â½ncia no atendimento.`,
-    '',
-    '2. IndicaÃ¯Â¿Â½Ã¯Â¿Â½o e contexto clÃ¯Â¿Â½nico',
-    descriptionText,
-    '',
-    '3. ResponsÃ¯Â¿Â½veis',
-    'O procedimento deve ser realizado por profissional habilitado, treinado e autorizado pela clÃ¯Â¿Â½nica, seguindo a avaliaÃ¯Â¿Â½Ã¯Â¿Â½o individual da cliente e as normas sanitÃ¯Â¿Â½rias aplicÃ¯Â¿Â½veis.',
-    '',
-    '4. Materiais e recursos necessÃ¯Â¿Â½rios',
-    'Separar EPIs, insumos, equipamentos, ficha de anamnese, termo de consentimento, prontuÃ¯Â¿Â½rio e materiais auxiliares antes do inÃ¯Â¿Â½cio do atendimento.',
-    '',
-    '5. Preparo do ambiente e da cliente',
-    'Confirmar higienizaÃ¯Â¿Â½Ã¯Â¿Â½o da bancada, organizaÃ¯Â¿Â½Ã¯Â¿Â½o dos materiais, validade dos produtos, identificaÃ¯Â¿Â½Ã¯Â¿Â½o dos lotes e orientaÃ¯Â¿Â½Ã¯Â¿Â½es prÃ¯Â¿Â½vias Ã¯Â¿Â½ cliente.',
-    '',
-    '6. ExecuÃ¯Â¿Â½Ã¯Â¿Â½o do procedimento',
-    `Realizar o procedimento ${safeServiceName} conforme protocolo tÃ¯Â¿Â½cnico da clÃ¯Â¿Â½nica, respeitando sequÃ¯Â¿Â½ncia operacional, tempo de exposiÃ¯Â¿Â½Ã¯Â¿Â½o, parÃ¯Â¿Â½metros definidos e resposta clÃ¯Â¿Â½nica observada durante o atendimento.`,
-    '',
-    '7. Cuidados pÃ¯Â¿Â½s-procedimento',
-    'Registrar orientaÃ¯Â¿Â½Ã¯Â¿Â½es pÃ¯Â¿Â½s-atendimento, produtos recomendados, sinais esperados, restriÃ¯Â¿Â½Ã¯Â¿Â½es temporÃ¯Â¿Â½rias e retorno sugerido no prontuÃ¯Â¿Â½rio da cliente.',
-    '',
-    '8. IntercorrÃ¯Â¿Â½ncias e conduta',
-    'Qualquer reaÃ¯Â¿Â½Ã¯Â¿Â½o inesperada, desconforto fora do previsto ou intercorrÃ¯Â¿Â½ncia deve ser registrada imediatamente, com descriÃ¯Â¿Â½Ã¯Â¿Â½o da conduta adotada e comunicaÃ¯Â¿Â½Ã¯Â¿Â½o responsÃ¯Â¿Â½vel Ã¯Â¿Â½ cliente.',
-    '',
-    '9. Registros obrigatÃ¯Â¿Â½rios',
-    'Registrar data, profissional responsÃ¯Â¿Â½vel, descriÃ¯Â¿Â½Ã¯Â¿Â½o resumida da sessÃ¯Â¿Â½o, produtos e equipamentos utilizados, efeitos observados e assinatura quando aplicÃ¯Â¿Â½vel.',
-    '',
-    '10. RevisÃ¯Â¿Â½o do POP',
-    'Este POP deve ser revisto sempre que houver atualizaÃ¯Â¿Â½Ã¯Â¿Â½o tÃ¯Â¿Â½cnica, mudanÃ¯Â¿Â½a de protocolo interno, alteraÃ¯Â¿Â½Ã¯Â¿Â½o regulatÃ¯Â¿Â½ria ou necessidade operacional identificada pela clÃ¯Â¿Â½nica.',
-  ].join('\n')
-}
-
-function buildServicePopPayload({ userId, clinicName, service }) {
-  return {
-    userId,
-    serviceId: service.id,
-    title: `POP - ${service.name}`,
-    content: buildServicePop({
-      clinicName,
-      serviceName: service.name,
-      description: service.description,
-      duration: service.duration,
-    }),
-  }
-}
 
 function summarizeConsentRecord(record) {
   if (!record) return null
@@ -557,16 +499,7 @@ function summarizeAnamnesis(record) {
   }
 }
 
-function summarizeServicePop(record) {
-  if (!record) return null
 
-  return {
-    id: record.id,
-    title: record.title,
-    updatedAt: record.updatedAt,
-    downloadName: `${record.title.toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'pop'}.txt`,
-  }
-}
 
 function normalizeProfessionalAvailability(availability) {
   if (!Array.isArray(availability)) return null
@@ -1049,49 +982,7 @@ async function ensureEditableConsentRecordOwnership(userId, consentRecordId) {
 
 
 
-async function backfillMissingServicePops({ userId, clinicName, services }) {
-  const missingServices = services.filter(service => !service.servicePop)
 
-  if (missingServices.length === 0) {
-    return false
-  }
-
-  await prisma.$transaction(missingServices.map(service => prisma.servicePop.upsert({
-    where: { serviceId: service.id },
-    create: buildServicePopPayload({ userId, clinicName, service }),
-    update: {
-      title: `POP - ${service.name}`,
-      content: buildServicePop({
-        clinicName,
-        serviceName: service.name,
-        description: service.description,
-        duration: service.duration,
-      }),
-    },
-  })))
-
-  return true
-}
-
-async function ensureServicePopForService({ userId, clinicName, service }) {
-  if (service.servicePop) {
-    return service.servicePop
-  }
-
-  return prisma.servicePop.upsert({
-    where: { serviceId: service.id },
-    create: buildServicePopPayload({ userId, clinicName, service }),
-    update: {
-      title: `POP - ${service.name}`,
-      content: buildServicePop({
-        clinicName,
-        serviceName: service.name,
-        description: service.description,
-        duration: service.duration,
-      }),
-    },
-  })
-}
 
 
 function normalizeClientData(data) {
@@ -2103,170 +1994,19 @@ app.delete('/professionals/:id', authMiddleware, handle(async (req, res) => {
   res.json({ ok: true })
 }))
 
-app.get('/services', authMiddleware, handle(async (req, res) => {
-  const getServices = () => prisma.service.findMany({
-    where: { userId: req.user.id, active: true },
-    include: {
-      servicePop: {
-        select: { id: true, title: true, updatedAt: true, content: true },
-      },
-    },
-    orderBy: { name: 'asc' },
-  })
+registerServiceRoutes({
+  app,
+  prisma,
+  authMiddleware,
+  handle,
+  parseId,
+  serviceSchema,
+  normalizeServiceData,
+  sanitizeFileName,
+  sendPdfDocument,
+  renderServicePopPdf,
+})
 
-  let list = await getServices()
-  const backfilled = await backfillMissingServicePops({
-    userId: req.user.id,
-    clinicName: req.currentUser?.clinicName || "L'Appui",
-    services: list,
-  })
-
-  if (backfilled) {
-    list = await getServices()
-  }
-
-  res.json(list.map(({ servicePop, ...service }) => ({
-    ...service,
-    servicePop: summarizeServicePop(servicePop),
-  })))
-}))
-
-app.post('/services', authMiddleware, handle(async (req, res) => {
-  const data = serviceSchema.parse(req.body)
-  const normalized = normalizeServiceData(data)
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: req.user.id },
-    select: { clinicName: true },
-  })
-
-  const service = await prisma.$transaction(async tx => {
-    const createdService = await tx.service.create({ data: { ...normalized, userId: req.user.id } })
-
-    const pop = await tx.servicePop.create({
-      data: buildServicePopPayload({
-        userId: req.user.id,
-        clinicName: user.clinicName,
-        service: createdService,
-      }),
-    })
-
-    return {
-      ...createdService,
-      servicePop: {
-        ...summarizeServicePop(pop),
-        content: pop.content,
-        service: {
-          id: createdService.id,
-          name: createdService.name,
-          duration: createdService.duration,
-        },
-      },
-    }
-  })
-
-  res.status(201).json(service)
-}))
-
-app.put('/services/:id', authMiddleware, handle(async (req, res) => {
-  const serviceId = parseId(req.params.id, 'serviceId')
-  const data = serviceSchema.partial().parse(req.body)
-
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: req.user.id },
-    select: { clinicName: true },
-  })
-
-  const currentService = await prisma.service.findFirstOrThrow({ where: { id: serviceId, userId: req.user.id } })
-  const updateData = normalizeServiceData(data)
-  const nextService = { ...currentService, ...updateData }
-
-  const service = await prisma.$transaction(async tx => {
-    const updatedService = await tx.service.update({ where: { id: serviceId }, data: updateData })
-
-    const pop = await tx.servicePop.upsert({
-      where: { serviceId },
-      create: {
-        ...buildServicePopPayload({
-          userId: req.user.id,
-          clinicName: user.clinicName,
-          service: nextService,
-        }),
-      },
-      update: {
-        title: `POP - ${nextService.name}`,
-        content: buildServicePop({
-          clinicName: user.clinicName,
-          serviceName: nextService.name,
-          description: nextService.description,
-          duration: nextService.duration,
-        }),
-      },
-    })
-
-    return {
-      ...updatedService,
-      servicePop: summarizeServicePop(pop),
-    }
-  })
-
-  res.json(service)
-}))
-
-app.get('/services/:id/pop', authMiddleware, handle(async (req, res) => {
-  const serviceId = parseId(req.params.id, 'serviceId')
-  const service = await prisma.service.findFirstOrThrow({
-    where: { id: serviceId, userId: req.user.id },
-    include: { servicePop: true },
-  })
-
-  const pop = await ensureServicePopForService({
-    userId: req.user.id,
-    clinicName: req.currentUser?.clinicName || "L'Appui",
-    service,
-  })
-
-  res.json({
-    ...summarizeServicePop(pop),
-    content: pop.content,
-    service: {
-      id: service.id,
-      name: service.name,
-      duration: service.duration,
-    },
-  })
-}))
-
-app.get('/services/:id/pop/pdf', authMiddleware, handle(async (req, res) => {
-  const serviceId = parseId(req.params.id, 'serviceId')
-  const service = await prisma.service.findFirstOrThrow({
-    where: { id: serviceId, userId: req.user.id },
-    include: { servicePop: true },
-  })
-
-  const pop = await ensureServicePopForService({
-    userId: req.user.id,
-    clinicName: req.currentUser?.clinicName || "L'Appui",
-    service,
-  })
-
-  const filename = `${sanitizeFileName(pop.title || `pop-${service.name}`, 'pop')}.pdf`
-  sendPdfDocument(res, filename, doc => {
-    renderServicePopPdf(doc, {
-      clinicName: req.currentUser?.clinicName,
-      service: {
-        name: service.name,
-        duration: service.duration,
-      },
-      pop,
-    })
-  })
-}))
-
-app.delete('/services/:id', authMiddleware, handle(async (req, res) => {
-  const serviceId = parseId(req.params.id, 'serviceId')
-  await prisma.service.updateMany({ where: { id: serviceId, userId: req.user.id }, data: { active: false } })
-  res.json({ ok: true })
-}))
 
 registerAppointmentRoutes({
   app,
