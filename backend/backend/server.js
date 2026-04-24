@@ -12,6 +12,7 @@ const { hasSupportBillingControl } = require('./lib/supportAccess')
 const { createApiV2Router } = require('./src/api-v2/createApiV2Router')
 const { registerDocumentRoutes } = require('./src/legacy/documents')
 const { registerBillingRoutes } = require('./src/legacy/billing')
+const { buildSupportUser, createSupportLoginResponse, getSupportBillingSnapshot, getSupportContact, hasSupportCredentials, isSupportPayload, registerSupportRoutes, requireSupport } = require('./src/legacy/support')
 
 const app = express()
 const prisma = new PrismaClient()
@@ -43,7 +44,6 @@ const consentStatusSchema = z.enum(['PENDING', 'SIGNED', 'REVOKED'])
 const inventoryEntryModeSchema = z.enum(['NEW', 'EXISTING'])
 const professionalContractTypeSchema = z.enum(['CLT', 'PJ', 'AUTONOMA', 'COMISSIONADA', 'PARCERIA'])
 const professionalPaymentModelSchema = z.enum(['FIXED', 'COMMISSION', 'HYBRID', 'DAILY'])
-const supportAssumeSchema = z.object({ userId: z.coerce.number().int().positive() })
 
 const professionalWeekdayLabels = {
   MONDAY: 'Segunda',
@@ -87,46 +87,6 @@ const SUPPORT_CONTACT_PHONE = (process.env.SUPPORT_CONTACT_PHONE || '').trim()
 
 function signToken(payload) {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
-}
-
-function hasSupportCredentials() {
-  return Boolean(SUPPORT_ADMIN_EMAIL && SUPPORT_ADMIN_PASSWORD)
-}
-
-function getSupportContact() {
-  return {
-    name: SUPPORT_CONTACT_NAME,
-    email: SUPPORT_CONTACT_EMAIL,
-    phone: SUPPORT_CONTACT_PHONE,
-  }
-}
-
-function getSupportBillingSnapshot() {
-  return {
-    status: 'ACTIVE',
-    effectiveStatus: 'ACTIVE',
-    blocked: false,
-    amount: null,
-    reference: null,
-    notes: null,
-    graceEndsAt: null,
-    lastPaidAt: null,
-    nextDueAt: null,
-    blockAt: null,
-    daysRemaining: null,
-    message: 'Acesso tecnico liberado para manutencao, diagnostico e suporte.',
-  }
-}
-
-function buildSupportUser() {
-  return {
-    id: 0,
-    email: SUPPORT_ADMIN_EMAIL,
-    clinicName: SUPPORT_ADMIN_NAME,
-    clinicLogoDataUrl: null,
-    role: 'SUPPORT',
-    createdAt: new Date(0),
-  }
 }
 
 const userAggregateInclude = {
@@ -311,66 +271,6 @@ function serializeAuditLog(log) {
     metadata: log.metadata,
     createdAt: log.createdAt,
   }
-}
-
-function isSupportPayload(payload) {
-  return Boolean(payload?.support === true && payload?.role === 'SUPPORT' && payload?.email === SUPPORT_ADMIN_EMAIL)
-}
-
-function authMiddleware(req, res, next) {
-  const header = req.headers.authorization
-
-  if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token ausente' })
-  }
-
-  try {
-    req.user = jwt.verify(header.slice(7), JWT_SECRET)
-  } catch {
-    return res.status(401).json({ error: 'Token invalido' })
-  }
-
-  if (isSupportPayload(req.user)) {
-    req.billing = getSupportBillingSnapshot()
-    req.supportContext = {
-      active: false,
-      supportEmail: SUPPORT_ADMIN_EMAIL || '',
-      supportName: SUPPORT_ADMIN_NAME,
-    }
-    return next()
-  }
-
-  ensureClinicAggregate(req.user.id)
-    .then(user => {
-      req.currentUser = user
-      req.billing = getBillingSnapshot(user)
-      req.supportContext = req.user.impersonatedBySupport
-        ? {
-          active: true,
-          supportEmail: req.user.supportEmail || SUPPORT_ADMIN_EMAIL || '',
-          supportName: req.user.supportName || SUPPORT_ADMIN_NAME,
-        }
-        : null
-
-      const bypassBillingBlock = Boolean(req.user?.impersonatedBySupport)
-      const allowBlockedRoute = bypassBillingBlock || req.path === '/auth/me' || req.path.startsWith('/billing')
-      if (req.billing.blocked && !allowBlockedRoute) {
-        return res.status(402).json({
-          error: 'Acesso da clinica bloqueado ate a confirmacao do pagamento.',
-          billing: req.billing,
-        })
-      }
-
-      next()
-    })
-    .catch(next)
-}
-function requireSupport(req, res, next) {
-  if (!req.user?.support) {
-    return res.status(403).json({ error: 'Acesso restrito ao suporte tecnico.' })
-  }
-
-  next()
 }
 
 function requireSupportBillingControl(req, res, next) {
@@ -1133,15 +1033,26 @@ function serializeUser(user, options = {}) {
     clinicStatus: aggregateUser.ownedClinic?.status || mapBillingStatusToClinicStatus(billing.status),
     billing,
     supportContext: options.supportContext || null,
-    supportContact: options.supportContact || getSupportContact(),
+    supportContact: options.supportContact || getSupportContact({
+      supportContactName: SUPPORT_CONTACT_NAME,
+      supportContactEmail: SUPPORT_CONTACT_EMAIL,
+      supportContactPhone: SUPPORT_CONTACT_PHONE,
+    }),
   }
 }
 
 function serializeSupportUser() {
   return {
-    ...serializeUser(buildSupportUser(), {
+    ...serializeUser(buildSupportUser({
+      supportAdminEmail: SUPPORT_ADMIN_EMAIL,
+      supportAdminName: SUPPORT_ADMIN_NAME,
+    }), {
       billing: getSupportBillingSnapshot(),
-      supportContact: getSupportContact(),
+      supportContact: getSupportContact({
+        supportContactName: SUPPORT_CONTACT_NAME,
+        supportContactEmail: SUPPORT_CONTACT_EMAIL,
+        supportContactPhone: SUPPORT_CONTACT_PHONE,
+      }),
     }),
     support: true,
   }
@@ -2166,7 +2077,25 @@ const equipmentItemSchema = z.object({
 })
 
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date() }))
-app.get('/public/support-contact', (req, res) => res.json(getSupportContact()))
+
+registerSupportRoutes({
+  app,
+  prisma,
+  authMiddleware,
+  handle,
+  requireSupport,
+  ensureClinicAggregate,
+  userAggregateInclude,
+  mergeLegacyUserAggregate,
+  serializeUser,
+  createAuditLogFromRequest,
+  signToken,
+  supportAdminEmail: SUPPORT_ADMIN_EMAIL,
+  supportAdminName: SUPPORT_ADMIN_NAME,
+  supportContactName: SUPPORT_CONTACT_NAME,
+  supportContactEmail: SUPPORT_CONTACT_EMAIL,
+  supportContactPhone: SUPPORT_CONTACT_PHONE,
+})
 
 app.post('/public/leads', handle(async (req, res) => {
   const data = publicLeadSchema.parse(req.body)
@@ -2239,25 +2168,19 @@ app.post('/auth/register', handle(async (req, res) => {
 app.post('/auth/login', handle(async (req, res) => {
   const data = loginSchema.parse(req.body)
   const email = data.email.toLowerCase()
+  const supportLoginResponse = createSupportLoginResponse({
+    email,
+    password: data.password,
+    supportAdminEmail: SUPPORT_ADMIN_EMAIL,
+    supportAdminPassword: SUPPORT_ADMIN_PASSWORD,
+    supportAdminName: SUPPORT_ADMIN_NAME,
+    safeEqualText,
+    signToken,
+    serializeSupportUser,
+  })
 
-  if (hasSupportCredentials() && email === SUPPORT_ADMIN_EMAIL) {
-    const passwordMatches = safeEqualText(data.password, SUPPORT_ADMIN_PASSWORD)
-
-    if (!passwordMatches) {
-      return res.status(401).json({ error: 'Credenciais invalidas.' })
-    }
-
-    const token = signToken({
-      support: true,
-      role: 'SUPPORT',
-      email: SUPPORT_ADMIN_EMAIL,
-      supportName: SUPPORT_ADMIN_NAME,
-    })
-
-    return res.json({
-      token,
-      user: serializeSupportUser(),
-    })
+  if (supportLoginResponse) {
+    return res.status(supportLoginResponse.status).json(supportLoginResponse.body)
   }
 
   const userRecord = await prisma.user.findUnique({ where: { email } })
@@ -2324,63 +2247,6 @@ app.put('/clinic/profile', authMiddleware, handle(async (req, res) => {
 
   res.json(serializeUser(user, { supportContext: req.supportContext }))
 }))
-app.get('/support/clinics', authMiddleware, requireSupport, handle(async (req, res) => {
-  const clinicUsers = await prisma.user.findMany({
-    where: {
-      role: {
-        in: ['ADMIN', 'STAFF'],
-      },
-    },
-    orderBy: [{ clinicName: 'asc' }],
-    include: userAggregateInclude,
-  })
-
-  const clinics = clinicUsers.map(user => serializeUser(mergeLegacyUserAggregate(user)))
-
-  res.json({
-    totalClinics: clinics.length,
-    blockedCount: clinics.filter(item => item.billing?.effectiveStatus === 'BLOCKED').length,
-    overdueCount: clinics.filter(item => item.billing?.effectiveStatus === 'OVERDUE').length,
-    clinics,
-  })
-}))
-
-app.post('/support/assume', authMiddleware, requireSupport, handle(async (req, res) => {
-  const { userId } = supportAssumeSchema.parse(req.body)
-  const clinicUser = await ensureClinicAggregate(userId)
-
-  const supportContext = {
-    active: true,
-    supportEmail: SUPPORT_ADMIN_EMAIL,
-    supportName: SUPPORT_ADMIN_NAME,
-  }
-
-  await createAuditLogFromRequest(req, {
-    clinicId: clinicUser.ownedClinic?.id || null,
-    action: 'SUPPORT_ASSUME_CLINIC',
-    entityType: 'Clinic',
-    entityId: clinicUser.ownedClinic?.id || null,
-    metadata: {
-      userId: clinicUser.id,
-      clinicEmail: clinicUser.email,
-    },
-  })
-
-  const token = signToken({
-    id: clinicUser.id,
-    email: clinicUser.email,
-    role: clinicUser.role,
-    impersonatedBySupport: true,
-    supportEmail: SUPPORT_ADMIN_EMAIL,
-    supportName: SUPPORT_ADMIN_NAME,
-  })
-
-  res.json({
-    token,
-    user: serializeUser(clinicUser, { supportContext }),
-  })
-}))
-
 registerBillingRoutes({
   app,
   prisma,
