@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
@@ -479,6 +479,9 @@ export default function Pagamentos() {
       : latestGatewayIntentStatus === 'FAILED' || latestGatewayIntentStatus === 'CANCELLED' || latestGatewayIntentStatus === 'EXPIRED'
         ? 'badge badge-red'
         : 'badge badge-muted'
+  const gatewayAutomation = gatewayStatus?.automation || null
+  const gatewayAutomationLabel = gatewayAutomation?.enabled ? 'Ativa' : 'Pausada'
+  const gatewayAutomationBadge = gatewayAutomation?.enabled ? 'badge badge-green' : 'badge badge-muted'
 
   function setField(key: keyof BillingConfigFormState) {
     return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -862,6 +865,22 @@ export default function Pagamentos() {
             <p className="billing-gateway-copy">
               {gatewayStatus?.message || 'Camada preparada para conectar Pix dinamico, cartao e recorrencia sem mudar a experiencia da clinica.'}
             </p>
+            {gatewayAutomation ? (
+              <div className="detail-list billing-gateway-details billing-automation-details">
+                <div className="detail-row">
+                  <span>Automacao</span>
+                  <strong><span className={gatewayAutomationBadge}>{gatewayAutomationLabel}</span></strong>
+                </div>
+                <div className="detail-row">
+                  <span>Metodo padrao</span>
+                  <strong>{gatewayAutomation.method || 'PIX'}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>Janela de geracao</span>
+                  <strong>{gatewayAutomation.lookAheadDays} dia(s)</strong>
+                </div>
+              </div>
+            ) : null}
             {latestGatewayIntent ? (
               <div className="detail-list billing-gateway-details">
                 <div className="detail-row">

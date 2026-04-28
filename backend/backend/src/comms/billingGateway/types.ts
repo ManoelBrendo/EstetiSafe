@@ -45,12 +45,21 @@ export type BillingGatewayWebhookEvent = {
   metadata?: Record<string, unknown>
 }
 
+export type BillingGatewayAutomationConfig = {
+  enabled: boolean
+  method: BillingGatewayPaymentMethod
+  lookAheadDays: number
+  intervalMinutes: number
+  message: string
+}
+
 export type BillingGatewayStatusSnapshot = {
   provider: string
   mode: BillingGatewayMode
   persistence: BillingGatewayPersistenceMode
   configured: boolean
   webhookConfigured: boolean
+  automation: BillingGatewayAutomationConfig
   latestIntent: BillingGatewayIntent | null
   message: string
 }

@@ -1,4 +1,4 @@
-﻿require('dotenv').config()
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
 const bcrypt = require('bcryptjs')
@@ -13,6 +13,7 @@ const { createApiV2Router } = require('./src/api-v2/createApiV2Router')
 const { buildDocumentDashboard, registerDocumentRoutes } = require('./src/legacy/documents')
 const { registerBillingRoutes } = require('./src/legacy/billing')
 const { registerBillingGatewayRoutes } = require('./src/legacy/billingGateway')
+const { startAutomaticBillingJob } = require('./src/legacy/billingAutomation')
 const { buildSupportUser, createSupportLoginResponse, getSupportBillingSnapshot, getSupportContact, hasSupportCredentials, isSupportPayload, registerSupportRoutes, requireSupport } = require('./src/legacy/support')
 const { buildInventoryDashboard, registerInventoryRoutes } = require('./src/legacy/inventory')
 const { registerAppointmentRoutes } = require('./src/legacy/appointments')
@@ -2319,6 +2320,10 @@ if (process.env.WHATSAPP_CONFIRMATION_JOB_ENABLED === 'true') {
   }, intervalMs)
 
   interval.unref?.()
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  startAutomaticBillingJob({ prisma, logger: console })
 }
 app.get('/clients/:clientId/anamnesis', authMiddleware, handle(async (req, res) => {
   const clientId = parseId(req.params.clientId, 'clientId')

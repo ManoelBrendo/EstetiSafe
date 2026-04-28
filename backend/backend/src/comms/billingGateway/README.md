@@ -15,3 +15,9 @@ Production checklist:
 - Persist provider ids and webhook payloads for reconciliation.
 - Keep webhook secrets outside source control.
 - Add provider-specific signature validation before accepting payment events.
+Automatic billing:
+- `src/legacy/billingAutomation.js` runs an interval job when the backend starts.
+- It creates a charge intent for subscriptions due within `BILLING_AUTO_LOOKAHEAD_DAYS`.
+- It skips cycles that already have a `PENDING` or `PAID` intent for the same due date.
+- It marks stale pending intents as `EXPIRED` before generating new ones.
+- Disable with `BILLING_AUTO_CHARGE_ENABLED=false`.

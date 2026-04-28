@@ -1,4 +1,4 @@
-﻿import type { Identifier } from './clinicalTypes'
+import type { Identifier } from './clinicalTypes'
 import type { BillingSnapshot } from './types'
 
 export type DocumentCategory = 'LEGAL' | 'SANITARY' | 'CLIENTS' | 'WASTE'
@@ -201,12 +201,21 @@ export interface BillingGatewayIntent {
   eventCount?: number
 }
 
+export interface BillingGatewayAutomationConfig {
+  enabled: boolean
+  method: PaymentMethod | string
+  lookAheadDays: number
+  intervalMinutes: number
+  message?: string | null
+}
+
 export interface BillingGatewayStatusResponse {
   provider: string
   mode: string
   persistence?: string | null
   configured: boolean
   webhookConfigured: boolean
+  automation?: BillingGatewayAutomationConfig | null
   latestIntent?: BillingGatewayIntent | null
   message?: string | null
 }

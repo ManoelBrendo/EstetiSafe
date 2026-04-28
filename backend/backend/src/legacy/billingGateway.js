@@ -1,4 +1,4 @@
-﻿const crypto = require('crypto')
+const crypto = require('crypto')
 const { z } = require('zod')
 
 const gatewayIntentStatuses = ['PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED']
@@ -328,6 +328,52 @@ async function updateSubscriptionReference({ prisma, user, clinicId, amount, due
   ])
 }
 
+async function createGatewayIntentForSubscription({
+  prisma,
+  user,
+  clinicId,
+  amount,
+  dueAt,
+  method = 'PIX',
+  reference,
+  source = 'manual',
+}) {
+  if (!user?.id) throw new Error('Usuario da assinatura nao informado')
+  if (!clinicId) throw new Error('Clinica da assinatura nao informada')
+
+  const billingReference = reference || createGatewayReference(clinicId)
+  const intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
+
+  if (source === 'automatic') {
+    intent.message = 'Cobranca automatica de assinatura gerada pelo LAppui. O pagamento sera confirmado por webhook quando o provedor retornar sucesso.'
+  }
+
+  intent.source = source
+
+  await updateSubscriptionReference({ prisma, user, clinicId, amount, dueAt, reference: billingReference })
+
+  const persistedIntent = await createIntentRecord({ prisma, user, clinicId, intent })
+  return persistedIntent || intent
+}
+
+function getGatewayAutomationSnapshot(env = process.env) {
+  const enabledValue = String(env.BILLING_AUTO_CHARGE_ENABLED ?? 'true').trim().toLowerCase()
+  const enabled = !['false', '0', 'off', 'no'].includes(enabledValue)
+  const lookAheadDays = Number(env.BILLING_AUTO_LOOKAHEAD_DAYS || 3)
+  const intervalMinutes = Number(env.BILLING_AUTO_CHARGE_INTERVAL_MINUTES || 60)
+  const method = normalizeGatewayMethod(env.BILLING_AUTO_METHOD || 'PIX')
+
+  return {
+    enabled,
+    method,
+    lookAheadDays: Number.isFinite(lookAheadDays) ? Math.max(0, Math.min(lookAheadDays, 30)) : 3,
+    intervalMinutes: Number.isFinite(intervalMinutes) ? Math.max(5, Math.min(intervalMinutes, 1440)) : 60,
+    message: enabled
+      ? 'Cobranca automatica ativa: o servidor prepara intencoes de pagamento para assinaturas proximas do vencimento.'
+      : 'Cobranca automatica pausada por configuracao de ambiente.',
+  }
+}
+
 async function applyGatewayPayment({
   prisma,
   user,
@@ -498,6 +544,7 @@ function registerBillingGatewayRoutes({
       persistence: gatewayPersistenceAvailable(prisma) ? 'database' : 'audit_log_fallback',
       configured: Boolean(process.env.BILLING_GATEWAY_PROVIDER && process.env.BILLING_WEBHOOK_SECRET),
       webhookConfigured: Boolean(process.env.BILLING_WEBHOOK_SECRET),
+      automation: getGatewayAutomationSnapshot(),
       latestIntent,
       message: 'Camada de gateway preparada para conectar Pix dinamico, cartao e recorrencia sem alterar a tela financeira.',
     })
@@ -521,13 +568,15 @@ function registerBillingGatewayRoutes({
       ? parseDateOnly(data.dueAt, 'dueAt')
       : (subscription?.nextDueAt || user.billingNextDueAt || addDays(new Date(), 1))
     const method = data.method || 'PIX'
-    const reference = createGatewayReference(clinicId)
-    const intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference })
-
-    await updateSubscriptionReference({ prisma, user, clinicId, amount, dueAt, reference })
-
-    const persistedIntent = await createIntentRecord({ prisma, user, clinicId, intent })
-    const responseIntent = persistedIntent || intent
+    const responseIntent = await createGatewayIntentForSubscription({
+      prisma,
+      user,
+      clinicId,
+      amount,
+      dueAt,
+      method,
+      source: 'manual',
+    })
 
     await createAuditLogFromRequest(req, {
       clinicId,
@@ -702,7 +751,10 @@ function registerBillingGatewayRoutes({
 module.exports = {
   applyGatewayPayment,
   buildIntentPayload,
+  createGatewayIntentForSubscription,
   createGatewayReference,
+  getGatewayAutomationSnapshot,
   getLatestGatewayIntent,
   registerBillingGatewayRoutes,
+  toNumber,
 }
