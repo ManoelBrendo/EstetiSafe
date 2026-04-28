@@ -17,7 +17,8 @@
     "noEmit": true
   },
   "include": [
-    "src/comms/**/*.ts"
+    "src/comms/**/*.ts",
+    "src/ai/**/*.ts"
   ],
   "exclude": [
     "node_modules",
