@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPPORT_NAME?: string
   readonly VITE_SUPPORT_EMAIL?: string
   readonly VITE_SUPPORT_PHONE?: string
+  readonly VITE_ENABLE_PWA?: string
   readonly VITE_MARKETING_BRAND_NAME?: string
   readonly VITE_MARKETING_BRAND_TAGLINE?: string
   readonly VITE_MARKETING_CLINIC_LABEL?: string
@@ -15,4 +16,3 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
-

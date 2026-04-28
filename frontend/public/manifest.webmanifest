@@ -1,0 +1,51 @@
+{
+  "name": "L'Appui | Gestao de Estetica",
+  "short_name": "L'Appui",
+  "description": "Gestao premium para clinicas de estetica com agenda, clientes, documentos, prontuarios e operacao financeira.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "background_color": "#fffaf3",
+  "theme_color": "#2a1f17",
+  "prefer_related_applications": false,
+  "categories": ["business", "medical", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Agenda",
+      "short_name": "Agenda",
+      "description": "Abrir a agenda da clinica.",
+      "url": "/agendamentos",
+      "icons": [
+        {
+          "src": "/pwa-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Clientes",
+      "short_name": "Clientes",
+      "description": "Abrir a central de clientes e prontuarios.",
+      "url": "/clientes",
+      "icons": [
+        {
+          "src": "/pwa-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}
