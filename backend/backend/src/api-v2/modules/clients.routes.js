@@ -55,7 +55,7 @@ function createClientsRouter(context) {
         take: pagination.take,
         include: {
           anamneses: { orderBy: { filledAt: 'desc' }, take: 1 },
-          consentRecords: { orderBy: { createdAt: 'desc' }, take: 1 },
+          consentRecords: { orderBy: { createdAt: 'desc' }, take: 10 },
           appointments: {
             orderBy: { startAt: 'desc' },
             take: 1,

@@ -1650,21 +1650,25 @@ tbody td {
 
 .checkbox-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 12px;
 }
 
 .checkbox-card {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
   gap: 10px;
   min-height: 56px;
+  min-width: 0;
+  max-width: 100%;
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid rgba(139, 98, 50, 0.1);
   background: rgba(255, 255, 255, 0.72);
   color: var(--ink-soft);
   cursor: pointer;
+  overflow: hidden;
   transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
@@ -1680,14 +1684,19 @@ tbody td {
 }
 
 .checkbox-card input {
-  width: 18px;
+  flex: 0 0 auto;
   height: 18px;
+  margin-top: 2px;
+  width: 18px;
   accent-color: var(--gold-deep);
-  flex-shrink: 0;
 }
 
 .checkbox-card span {
+  display: block;
   line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .brand-plaque {
@@ -8484,3 +8493,402 @@ tbody td {
 }
 /* nielsen heuristic pass end */
 
+
+
+/* Nielsen clinic panel pass */
+.sidebar-clinic {
+  padding: 14px;
+  border-radius: 20px;
+}
+
+.sidebar-clinic strong {
+  margin-bottom: 6px;
+}
+
+.sidebar-clinic p {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.sidebar-clinic-status {
+  margin-top: 10px;
+}
+
+.nav-item-finance {
+  background: linear-gradient(90deg, rgba(182, 137, 77, 0.16), rgba(182, 137, 77, 0.04));
+  border-color: rgba(230, 203, 159, 0.14);
+  color: #fff8ee;
+}
+
+.nav-item-finance svg {
+  color: rgba(237, 204, 154, 0.95);
+}
+
+.dashboard-brand-card {
+  grid-template-columns: minmax(0, 1fr);
+  padding: clamp(22px, 3vw, 34px);
+}
+
+.dashboard-brand-copy {
+  max-width: 940px;
+}
+
+.dashboard-brand-copy-text {
+  max-width: 64ch;
+}
+
+.dashboard-focus-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.dashboard-focus-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 104px;
+  padding: 18px;
+  border: 1px solid rgba(96, 76, 56, 0.14);
+  border-radius: 24px;
+  background: rgba(255, 252, 247, 0.86);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-soft);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.dashboard-focus-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(182, 137, 77, 0.34);
+  box-shadow: var(--shadow-card);
+}
+
+.dashboard-focus-card svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--gold);
+}
+
+.dashboard-focus-card strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.dashboard-focus-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.dashboard-focus-card.attention {
+  border-color: rgba(182, 137, 77, 0.42);
+  background: linear-gradient(135deg, rgba(255, 248, 236, 0.96), rgba(255, 252, 247, 0.9));
+}
+
+.dashboard-focus-card.finance {
+  background: linear-gradient(135deg, rgba(41, 31, 25, 0.95), rgba(72, 52, 38, 0.92));
+  color: #fff8ee;
+}
+
+.dashboard-focus-card.finance p,
+.dashboard-focus-card.finance svg {
+  color: rgba(237, 204, 154, 0.9);
+}
+
+.billing-empty-state {
+  max-width: 640px;
+  margin: 10vh auto 0;
+  text-align: center;
+}
+
+.billing-empty-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+@media (max-width: 980px) {
+  .dashboard-focus-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+.photo-upload-btn.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.photo-consent-panel {
+  border: 1px solid rgba(168, 120, 55, 0.24);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(247, 238, 224, 0.72));
+  padding: 18px;
+  box-shadow: 0 14px 34px rgba(67, 46, 27, 0.08);
+}
+
+.photo-consent-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.photo-consent-head strong {
+  color: var(--text-strong);
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.photo-consent-head p,
+.photo-consent-guidance,
+.photo-consent-warning {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.anamnesis-photo-consent-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.photo-consent-guidance {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-top: 12px;
+}
+
+.photo-consent-warning,
+.prontuario-consent-alert {
+  border: 1px solid rgba(177, 116, 25, 0.28);
+  border-radius: 16px;
+  background: rgba(255, 244, 225, 0.82);
+  color: #7b4a13;
+  font-weight: 700;
+  line-height: 1.45;
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+
+.image-consent-card {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 251, 244, 0.96), rgba(245, 231, 209, 0.72));
+  border: 1px solid rgba(159, 111, 58, 0.24);
+  border-radius: 22px;
+  box-shadow: 0 18px 42px rgba(48, 33, 20, 0.08);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin: 18px 0;
+  padding: 18px;
+}
+
+.image-consent-copy {
+  display: grid;
+  gap: 6px;
+  max-width: 720px;
+}
+
+.image-consent-copy strong {
+  color: #2d2117;
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+}
+
+.image-consent-copy p,
+.image-consent-copy small {
+  color: #7d6d61;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.image-consent-actions {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+@media (max-width: 720px) {
+  .photo-consent-head {
+    flex-direction: column;
+  }
+
+  .anamnesis-photo-consent-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .image-consent-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .image-consent-actions {
+    align-items: stretch;
+    min-width: 0;
+  }
+}
+
+/* checkbox safety pass */
+.checkbox-card,
+.consent-checkbox,
+.marketing-consent-row,
+.leadv2-consent-row,
+.availability-toggle {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.checkbox-card {
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  overflow: visible;
+  width: 100%;
+}
+
+.checkbox-card input {
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 2px 0 0;
+  min-width: 18px;
+  width: 18px;
+}
+
+.checkbox-card span {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+  overflow-wrap: break-word;
+  white-space: normal !important;
+  word-break: normal;
+}
+
+.anamnesis-panel .checkbox-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+}
+
+.anamnesis-health-layout .checkbox-grid-health,
+.checkbox-grid-health {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+
+.anamnesis-toggle-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+}
+
+.anamnesis-single-toggle-grid,
+.anamnesis-photo-consent-grid,
+.anamnesis-science-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.anamnesis-contraindications-layout .checkbox-card span,
+.anamnesis-expectations-layout .checkbox-card span,
+.anamnesis-science-grid .checkbox-card span,
+.anamnesis-photo-layout .checkbox-card span,
+.anamnesis-health-layout .checkbox-grid-health .checkbox-card span,
+.checkbox-grid-health .checkbox-card span {
+  line-height: 1.45;
+  white-space: normal !important;
+}
+
+.consent-checkbox,
+.marketing-consent-row,
+.leadv2-consent-row {
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.consent-checkbox input,
+.marketing-consent-row input,
+.leadv2-consent-row input,
+.availability-toggle input {
+  flex: 0 0 auto;
+  min-width: 16px;
+}
+
+.consent-checkbox span,
+.marketing-consent-row span,
+.leadv2-consent-row span,
+.availability-toggle span {
+  min-width: 0;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+
+/* consent revocation pass */
+.consent-revoked-card {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(178, 74, 72, 0.2);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 249, 246, 0.98), rgba(250, 238, 232, 0.9));
+  color: var(--ink-soft);
+}
+
+.consent-revoked-card h3 {
+  margin: 0;
+  color: var(--danger);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.consent-revoked-card p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.consent-revoked-details {
+  margin-top: 4px;
+}
+
+
+.billing-gateway-card {
+  gap: 14px;
+}
+
+.billing-gateway-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.billing-gateway-head strong {
+  color: var(--color-text-strong, #261f1a);
+  font-size: 1rem;
+}
+
+.billing-gateway-copy {
+  color: var(--color-text-muted, #8c7a6d);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.billing-gateway-details .detail-row strong {
+  max-width: 180px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.billing-gateway-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}

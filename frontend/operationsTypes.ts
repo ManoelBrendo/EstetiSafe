@@ -179,6 +179,43 @@ export interface BillingSummaryResponse {
   permissions: BillingPermissions
 }
 
+export type BillingGatewayIntentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'EXPIRED'
+
+export interface BillingGatewayIntent {
+  id?: Identifier
+  provider?: string | null
+  reference?: string | null
+  clinicId?: Identifier | null
+  amount?: number | null
+  currency?: string | null
+  status?: BillingGatewayIntentStatus | string | null
+  paymentMethod?: PaymentMethod | string | null
+  dueAt?: string | null
+  expiresAt?: string | null
+  checkoutUrl?: string | null
+  pixCopyPaste?: string | null
+  message?: string | null
+  createdAt?: string | null
+  paidAt?: string | null
+  providerPaymentId?: string | null
+  eventCount?: number
+}
+
+export interface BillingGatewayStatusResponse {
+  provider: string
+  mode: string
+  persistence?: string | null
+  configured: boolean
+  webhookConfigured: boolean
+  latestIntent?: BillingGatewayIntent | null
+  message?: string | null
+}
+
+export interface BillingGatewayIntentResponse {
+  intent: BillingGatewayIntent
+  billing: BillingSnapshot
+}
+
 export interface AuditLogItem {
   id: Identifier
   clinicId?: Identifier | null

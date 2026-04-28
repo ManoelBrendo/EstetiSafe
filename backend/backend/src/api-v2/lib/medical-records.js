@@ -1,5 +1,7 @@
 ﻿const { httpError, parseOptionalDate, sanitizeCpf, compactObject } = require('./http')
 
+const PHOTO_CONSENT_VERSION = 'photo-consent-v1'
+
 const clientDetailInclude = {
   anamneses: {
     orderBy: { filledAt: 'desc' },
@@ -47,6 +49,11 @@ async function ensureEditableClientOwnership(prisma, userId, clientId) {
   const client = await ensureClientOwnership(prisma, userId, clientId)
   assertEditableClient(client)
   return client
+}
+
+function isImageConsentRecord(record) {
+  const title = typeof record?.title === 'string' ? record.title : ''
+  return title.toLowerCase().includes('uso de imagem')
 }
 
 function summarizeConsentRecord(record) {
@@ -134,6 +141,12 @@ function summarizeAnamnesis(record) {
       mainComplaint: chiefComplaint.currentDiscomfort || answers.mainComplaint || '',
       skinType: aestheticEvaluation.skinType || answers.skinProfile || '',
       photoCount: photos.length,
+      photoConsent: {
+        clinicalUseAuthorized: Boolean(photoRecord.clinicalUseAuthorized || photoRecord.imageUseAuthorized),
+        marketingUseAuthorized: Boolean(photoRecord.marketingUseAuthorized || photoRecord.imageUseAuthorized),
+        consentVersion: photoRecord.consentVersion || null,
+        consentAcceptedAt: photoRecord.consentAcceptedAt || null,
+      },
     },
     answers,
   }
@@ -180,12 +193,14 @@ function serializeClientBase(client) {
 function serializeClientListItem(client) {
   const latestAppointment = Array.isArray(client.appointments) ? client.appointments[0] : null
   const latestAnamnesis = Array.isArray(client.anamneses) ? client.anamneses[0] : null
-  const latestConsent = Array.isArray(client.consentRecords) ? client.consentRecords[0] : null
+  const consentRecords = Array.isArray(client.consentRecords) ? client.consentRecords : []
+  const latestConsent = consentRecords.find(record => !isImageConsentRecord(record)) || consentRecords[0] || null
 
   return {
     ...serializeClientBase(client),
     latestAnamnesis: summarizeAnamnesis(latestAnamnesis),
     latestConsentRecord: summarizeConsentRecord(latestConsent),
+    consentRecords: consentRecords.map(summarizeConsentRecord),
     latestAppointment: latestAppointment ? summarizeAppointment(latestAppointment) : null,
     counts: {
       appointments: client._count?.appointments ?? client.appointments?.length ?? 0,
@@ -390,9 +405,48 @@ async function resolveProfessionalSignature(prisma, userId, answers) {
   return clonedAnswers
 }
 
+function normalizePhotoRecordConsent(answers) {
+  const clonedAnswers = JSON.parse(JSON.stringify(answers || {}))
+  const photoRecord = clonedAnswers.photoRecord && typeof clonedAnswers.photoRecord === 'object'
+    ? clonedAnswers.photoRecord
+    : {}
+  const photos = Array.isArray(photoRecord.photos)
+    ? photoRecord.photos
+    : Array.isArray(clonedAnswers.photos)
+      ? clonedAnswers.photos
+      : []
+  const legacyImageUseAuthorized = Boolean(photoRecord.imageUseAuthorized)
+  const clinicalUseAuthorized = Boolean(photoRecord.clinicalUseAuthorized || legacyImageUseAuthorized)
+  const marketingUseAuthorized = Boolean(photoRecord.marketingUseAuthorized || legacyImageUseAuthorized)
+
+  if (photos.length > 0 && !clinicalUseAuthorized) {
+    throw httpError(400, 'Para anexar fotos ao prontuario, registre o consentimento clinico de imagem.')
+  }
+
+  if (marketingUseAuthorized && !clinicalUseAuthorized) {
+    throw httpError(400, 'O uso de imagem em marketing depende do consentimento clinico registrado no prontuario.')
+  }
+
+  clonedAnswers.photoRecord = {
+    ...photoRecord,
+    photos,
+    imageUseAuthorized: marketingUseAuthorized,
+    clinicalUseAuthorized,
+    marketingUseAuthorized,
+    consentVersion: typeof photoRecord.consentVersion === 'string' && photoRecord.consentVersion.trim()
+      ? photoRecord.consentVersion.trim()
+      : PHOTO_CONSENT_VERSION,
+    consentAcceptedAt: clinicalUseAuthorized
+      ? (photoRecord.consentAcceptedAt || new Date().toISOString())
+      : null,
+  }
+
+  return clonedAnswers
+}
+
 async function createAnamnesisVersion(prisma, userId, clientId, payload) {
   const currentClient = await ensureEditableClientOwnership(prisma, userId, clientId)
-  const resolvedAnswers = await resolveProfessionalSignature(prisma, userId, payload.answers)
+  const resolvedAnswers = normalizePhotoRecordConsent(await resolveProfessionalSignature(prisma, userId, payload.answers))
   const clientPatch = {
     ...extractClientPatchFromAnswers(resolvedAnswers),
     ...extractExplicitClientPatch(payload.client || {}),

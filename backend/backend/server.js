@@ -12,11 +12,13 @@ const { hasSupportBillingControl } = require('./lib/supportAccess')
 const { createApiV2Router } = require('./src/api-v2/createApiV2Router')
 const { buildDocumentDashboard, registerDocumentRoutes } = require('./src/legacy/documents')
 const { registerBillingRoutes } = require('./src/legacy/billing')
+const { registerBillingGatewayRoutes } = require('./src/legacy/billingGateway')
 const { buildSupportUser, createSupportLoginResponse, getSupportBillingSnapshot, getSupportContact, hasSupportCredentials, isSupportPayload, registerSupportRoutes, requireSupport } = require('./src/legacy/support')
 const { buildInventoryDashboard, registerInventoryRoutes } = require('./src/legacy/inventory')
 const { registerAppointmentRoutes } = require('./src/legacy/appointments')
 const { ensureServicePopForService, registerServiceRoutes } = require('./src/legacy/services')
 const { registerPaymentRoutes } = require('./src/legacy/payments')
+const { createAppointmentConfirmationJob, registerWhatsAppRoutes } = require('./src/legacy/whatsapp')
 
 const app = express()
 const prisma = new PrismaClient()
@@ -36,7 +38,14 @@ app.use(cors({
   },
   credentials: false,
 }))
-app.use(express.json({ limit: '8mb' }))
+app.use(express.json({
+  limit: '8mb',
+  verify(req, _res, buf) {
+    if (req.originalUrl?.startsWith('/webhooks/whatsapp')) {
+      req.rawBody = Buffer.from(buf)
+    }
+  },
+}))
 
 const JWT_SECRET = process.env.JWT_SECRET
 if (!JWT_SECRET) throw new Error('JWT_SECRET nao definido no .env')
@@ -223,6 +232,10 @@ async function ensureClinicAggregate(userId) {
   return mergeLegacyUserAggregate(hydrated)
 }
 
+function getRequestClinicId(req) {
+  return req.currentUser?.ownedClinic?.id || req.currentUser?.clinicId || null
+}
+
 function getAuditActorData(req) {
   if (req.user?.impersonatedBySupport || req.user?.support) {
     return {
@@ -323,6 +336,7 @@ async function authMiddleware(req, res, next) {
         supportAdminEmail: SUPPORT_ADMIN_EMAIL,
         supportAdminName: SUPPORT_ADMIN_NAME,
       })
+      req.billing = getSupportBillingSnapshot()
       req.supportContext = null
       return next()
     }
@@ -338,6 +352,7 @@ async function authMiddleware(req, res, next) {
       support: false,
     }
     req.currentUser = aggregateUser
+    req.billing = getBillingSnapshot(aggregateUser)
     req.supportContext = payload.impersonatedBySupport
       ? {
         active: true,
@@ -462,6 +477,43 @@ function buildDefaultConsentTerm({ clinicName, clientName }) {
 }
 
 
+
+
+const IMAGE_CONSENT_TITLE = 'Termo de autorizacao de uso de imagem'
+const IMAGE_CONSENT_VERSION = 'imagem-v1'
+
+function buildImageConsentTerm({ clinicName, clientName, clinicalUseAuthorized = true, marketingUseAuthorized = false }) {
+  const resolvedClinicName = clinicName || "L'Appui"
+  const resolvedClientName = clientName || 'cliente'
+  const clinicalDecision = clinicalUseAuthorized
+    ? 'AUTORIZO o registro, armazenamento e uso das minhas imagens exclusivamente para acompanhamento clinico, evolucao do tratamento, prontuario e documentacao tecnica interna.'
+    : 'NAO AUTORIZO o uso das minhas imagens para acompanhamento clinico, salvo quando exigido por obrigacao legal ou regulatoria.'
+  const marketingDecision = marketingUseAuthorized
+    ? 'AUTORIZO tambem o uso das imagens para comunicacao institucional, portifolio, redes sociais e materiais de divulgacao da clinica, desde que respeitados dignidade, contexto e privacidade.'
+    : 'NAO AUTORIZO o uso das minhas imagens em marketing, redes sociais, anuncios, portifolio publico ou qualquer divulgacao externa.'
+
+  return [
+    'Eu, ' + resolvedClientName + ', declaro que recebi explicacao clara da ' + resolvedClinicName + ' sobre o uso de imagens no contexto do atendimento estetico.',
+    '',
+    '1. Uso clinico e prontuario',
+    clinicalDecision,
+    '',
+    '2. Uso externo, divulgacao e marketing',
+    marketingDecision,
+    '',
+    '3. Guarda, sigilo e seguranca',
+    'As imagens devem permanecer vinculadas ao prontuario da cliente, com acesso restrito aos profissionais autorizados e registro de finalidade.',
+    '',
+    '4. Revogacao',
+    'A cliente pode solicitar a revogacao futura desta autorizacao. A revogacao nao altera registros clinicos ja produzidos de forma legitima, mas impede novos usos nao autorizados.',
+    '',
+    '5. Ciencia',
+    'Declaro que li, compreendi e assino este termo de forma livre, consciente e informada.',
+    '',
+    'Clinica responsavel: ' + resolvedClinicName + '.',
+    'Versao do termo: ' + IMAGE_CONSENT_VERSION + '.',
+  ].join('\n')
+}
 
 function summarizeConsentRecord(record) {
   if (!record) return null
@@ -1232,6 +1284,13 @@ function normalizeAnamnesisData(data) {
     aestheticEvaluation.observedConditions,
     dermatologicalHistory
   )
+  const normalizedPhotos = normalizeAnamnesisPhotos(photoRecord.photos)
+  const clinicalUseAuthorized = normalizeOptionalBoolean(photoRecord.clinicalUseAuthorized || photoRecord.imageUseAuthorized)
+  const marketingUseAuthorized = normalizeOptionalBoolean(photoRecord.marketingUseAuthorized || photoRecord.imageUseAuthorized)
+
+  if (normalizedPhotos.length && !clinicalUseAuthorized) {
+    throw httpError(400, 'Para anexar fotos ao prontuario, registre o consentimento clinico de imagem.')
+  }
 
   const normalizedAnswers = {
     identification: {
@@ -1324,8 +1383,14 @@ function normalizeAnamnesisData(data) {
     },
     treatmentObjective: normalizeOptionalText(answers.treatmentObjective),
     photoRecord: {
-      photos: normalizeAnamnesisPhotos(photoRecord.photos),
-      imageUseAuthorized: normalizeOptionalBoolean(photoRecord.imageUseAuthorized),
+      photos: normalizedPhotos,
+      imageUseAuthorized: marketingUseAuthorized,
+      clinicalUseAuthorized,
+      marketingUseAuthorized,
+      consentVersion: normalizeOptionalText(photoRecord.consentVersion) || 'photo-consent-v1',
+      consentAcceptedAt: clinicalUseAuthorized
+        ? (normalizeOptionalText(photoRecord.consentAcceptedAt) || new Date().toISOString())
+        : null,
     },
     treatmentPlan: {
       recommendedProcedure: normalizeOptionalText(treatmentPlan.recommendedProcedure),
@@ -1387,6 +1452,8 @@ function renderClientMedicalRecordPdf(doc, { clinicName, client }) {
   const latestConsent = client.consentRecords?.[0] || null
   const prontuarioStatus = getClientProntuarioStatus(client)
   const photoCount = Array.isArray(photoRecord.photos) ? photoRecord.photos.length : 0
+  const clinicalPhotoConsent = Boolean(photoRecord.clinicalUseAuthorized || photoRecord.imageUseAuthorized)
+  const marketingPhotoConsent = Boolean(photoRecord.marketingUseAuthorized || photoRecord.imageUseAuthorized)
 
   renderPdfHeader(doc, {
     eyebrow: 'ProntuÃ¯Â¿Â½rio clÃ¯Â¿Â½nico',
@@ -1441,7 +1508,8 @@ function renderClientMedicalRecordPdf(doc, { clinicName, client }) {
         : 'Nenhuma condiÃ¯Â¿Â½Ã¯Â¿Â½o classificada'
     )
     renderPdfField(doc, 'Fotos clÃ¯Â¿Â½nicas anexadas', photoCount ? `${photoCount} registro(s)` : 'Nenhum registro')
-    renderPdfField(doc, 'AutorizaÃ¯Â¿Â½Ã¯Â¿Â½o de uso de imagem', photoRecord.imageUseAuthorized ? 'Sim' : 'NÃ¯Â¿Â½o')
+    renderPdfField(doc, 'Uso clinico de imagem', clinicalPhotoConsent ? 'Sim' : 'Nao')
+    renderPdfField(doc, 'Uso em marketing', marketingPhotoConsent ? 'Sim' : 'Nao')
   }
 
   if (aestheticHistory.length) {
@@ -1722,6 +1790,10 @@ const anamnesisAnswersSchema = z.object({
   photoRecord: z.object({
     photos: z.array(anamnesisPhotoSchema).max(8).optional(),
     imageUseAuthorized: optionalBoolean,
+    clinicalUseAuthorized: optionalBoolean,
+    marketingUseAuthorized: optionalBoolean,
+    consentVersion: optionalLongText(80),
+    consentAcceptedAt: optionalLongText(80),
   }),
   treatmentPlan: z.object({
     recommendedProcedure: optionalLongText(600),
@@ -1751,6 +1823,13 @@ const anamnesisSchema = z.union([
 const consentRecordSchema = z.object({
   title: z.string().trim().min(4).optional(),
   versionLabel: z.string().trim().min(1).max(20).optional(),
+})
+const imageConsentRecordSchema = z.object({
+  clinicalUseAuthorized: optionalBoolean,
+  marketingUseAuthorized: optionalBoolean,
+})
+const consentRevocationSchema = z.object({
+  reason: z.string().trim().max(600).optional(),
 })
 const consentSignatureSchema = z.object({
   signerName: z.string().trim().min(2),
@@ -1953,6 +2032,20 @@ registerBillingRoutes({
   supportAdminName: SUPPORT_ADMIN_NAME,
   supportAdminEmail: SUPPORT_ADMIN_EMAIL,
   canManageSubscription: hasSupportBillingControl,
+})
+
+registerBillingGatewayRoutes({
+  app,
+  prisma,
+  authMiddleware,
+  requireSupportBillingControl,
+  handle,
+  parseDateOnly,
+  addDays,
+  ensureClinicAggregate,
+  getBillingSnapshot,
+  createAuditLogFromRequest,
+  httpError,
 })
 
 registerDocumentRoutes({
@@ -2206,6 +2299,27 @@ registerPaymentRoutes({
   parseDateTime,
   paymentSchema,
 })
+
+registerWhatsAppRoutes({
+  app,
+  prisma,
+  handle,
+  verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+  appSecret: process.env.WHATSAPP_APP_SECRET,
+  logger: console,
+})
+
+if (process.env.WHATSAPP_CONFIRMATION_JOB_ENABLED === 'true') {
+  const runWhatsAppConfirmationJob = createAppointmentConfirmationJob({ prisma, logger: console })
+  const intervalMs = Number(process.env.WHATSAPP_CONFIRMATION_JOB_INTERVAL_MS || 15 * 60 * 1000)
+  const interval = setInterval(() => {
+    runWhatsAppConfirmationJob().catch(error => {
+      console.error('[whatsapp] confirmation job failed', error)
+    })
+  }, intervalMs)
+
+  interval.unref?.()
+}
 app.get('/clients/:clientId/anamnesis', authMiddleware, handle(async (req, res) => {
   const clientId = parseId(req.params.clientId, 'clientId')
   await prisma.client.findFirstOrThrow({ where: { id: clientId, userId: req.user.id } })
@@ -2311,7 +2425,7 @@ app.post('/clients/:clientId/consent-records/generate-default', authMiddleware, 
       select: { clinicName: true },
     }),
     prisma.consentRecord.findFirst({
-      where: { clientId, userId: req.user.id, status: 'PENDING' },
+      where: { clientId, userId: req.user.id, status: 'PENDING', title: { not: IMAGE_CONSENT_TITLE } },
       include: {
         client: {
           select: { id: true, name: true, email: true, phone: true, cpf: true },
@@ -2343,6 +2457,62 @@ app.post('/clients/:clientId/consent-records/generate-default', authMiddleware, 
   res.status(201).json(record)
 }))
 
+
+app.post('/clients/:clientId/consent-records/generate-image-use', authMiddleware, handle(async (req, res) => {
+  const clientId = parseId(req.params.clientId, 'clientId')
+  const options = imageConsentRecordSchema.parse(req.body || {})
+  await ensureEditableClientOwnership(req.user.id, clientId)
+
+  const [client, user, pendingRecord] = await Promise.all([
+    prisma.client.findFirstOrThrow({
+      where: { id: clientId, userId: req.user.id },
+      select: { id: true, name: true, email: true, phone: true, cpf: true },
+    }),
+    prisma.user.findUniqueOrThrow({
+      where: { id: req.user.id },
+      select: { clinicName: true },
+    }),
+    prisma.consentRecord.findFirst({
+      where: { clientId, userId: req.user.id, status: 'PENDING', title: IMAGE_CONSENT_TITLE },
+      include: {
+        client: {
+          select: { id: true, name: true, email: true, phone: true, cpf: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
+  if (pendingRecord) {
+    return res.json(pendingRecord)
+  }
+
+  const clinicalUseAuthorized = options.clinicalUseAuthorized !== false
+  const marketingUseAuthorized = Boolean(options.marketingUseAuthorized)
+
+  const record = await prisma.consentRecord.create({
+    data: {
+      userId: req.user.id,
+      clientId,
+      title: IMAGE_CONSENT_TITLE,
+      versionLabel: IMAGE_CONSENT_VERSION,
+      termText: buildImageConsentTerm({
+        clinicName: user.clinicName,
+        clientName: client.name,
+        clinicalUseAuthorized,
+        marketingUseAuthorized,
+      }),
+    },
+    include: {
+      client: {
+        select: { id: true, name: true, email: true, phone: true, cpf: true },
+      },
+    },
+  })
+
+  res.status(201).json(record)
+}))
+
 app.get('/consent-records/:id', authMiddleware, handle(async (req, res) => {
   const consentRecordId = parseId(req.params.id, 'consentRecordId')
   const record = await ensureConsentRecordOwnership(req.user.id, consentRecordId)
@@ -2359,6 +2529,48 @@ app.get('/consent-records/:id/pdf', authMiddleware, handle(async (req, res) => {
       record,
     })
   })
+}))
+
+
+app.post('/consent-records/:id/revoke', authMiddleware, handle(async (req, res) => {
+  const consentRecordId = parseId(req.params.id, 'consentRecordId')
+  const data = consentRevocationSchema.parse(req.body || {})
+  const record = await ensureConsentRecordOwnership(req.user.id, consentRecordId)
+
+  if (record.status === 'REVOKED') {
+    throw httpError(409, 'Este termo ja foi revogado')
+  }
+
+  const revokedAt = new Date()
+  const updatedRecord = await prisma.consentRecord.update({
+    where: { id: consentRecordId },
+    data: {
+      status: 'REVOKED',
+    },
+    include: {
+      client: {
+        select: { id: true, name: true, email: true, phone: true, cpf: true },
+      },
+    },
+  })
+
+  await createAuditLogFromRequest(req, {
+    clinicId: getRequestClinicId(req),
+    action: 'CONSENT_RECORD_REVOKE',
+    entityType: 'ConsentRecord',
+    entityId: updatedRecord.id,
+    metadata: {
+      clientId: updatedRecord.clientId,
+      title: updatedRecord.title,
+      previousStatus: record.status,
+      nextStatus: updatedRecord.status,
+      reason: data.reason?.trim() || null,
+      revokedAt: revokedAt.toISOString(),
+      signedAt: record.signedAt,
+    },
+  })
+
+  res.json(updatedRecord)
 }))
 
 app.post('/consent-records/:id/sign', authMiddleware, handle(async (req, res) => {
@@ -2415,6 +2627,21 @@ app.post('/consent-records/:id/sign', authMiddleware, handle(async (req, res) =>
       client: {
         select: { id: true, name: true, email: true, phone: true, cpf: true },
       },
+    },
+  })
+
+  await createAuditLogFromRequest(req, {
+    clinicId: getRequestClinicId(req),
+    action: 'CONSENT_RECORD_SIGN',
+    entityType: 'ConsentRecord',
+    entityId: updatedRecord.id,
+    metadata: {
+      clientId: updatedRecord.clientId,
+      title: updatedRecord.title,
+      status: updatedRecord.status,
+      signedAt: updatedRecord.signedAt,
+      professionalId: updatedRecord.professionalId,
+      professionalName: updatedRecord.professionalName,
     },
   })
 
@@ -2552,12 +2779,3 @@ module.exports = {
   prisma,
   startServer,
 }
-
-
-
-
-
-
-
-
-

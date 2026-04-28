@@ -182,6 +182,10 @@ export interface ExpectationsSection {
 export interface PhotoRecordSection {
   photos: PhotoRecordEntry[]
   imageUseAuthorized: boolean
+  clinicalUseAuthorized: boolean
+  marketingUseAuthorized: boolean
+  consentVersion: string
+  consentAcceptedAt: string | null
 }
 
 export interface TreatmentPlanSection {
@@ -302,7 +306,10 @@ export interface AppointmentSummary {
 
 export interface ConsentRecordSummary {
   id?: Identifier
+  title?: string | null
+  versionLabel?: string | null
   status?: string | null
+  createdAt?: string | null
   signedAt?: string | null
   professionalName?: string | null
   [key: string]: unknown

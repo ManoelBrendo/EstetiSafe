@@ -257,7 +257,7 @@ export default function Dashboard() {
     []
   )
 
-  const { clinicName: authenticatedClinicName, brandLogo: clinicBrandLogo, hasCustomLogo } = useMemo(
+  const { clinicName: authenticatedClinicName, brandLogo: clinicBrandLogo } = useMemo(
     () => getClinicBranding(user),
     [user]
   )
@@ -354,20 +354,15 @@ export default function Dashboard() {
           </div>
 
           <p className="section-copy dashboard-brand-copy-text">
-            Operação refinada com foco em apresentação, rastreabilidade e clareza para a rotina da clínica.
+            Comece pelo que mais impacta a operacao: agenda, documentos criticos e assinatura. O restante continua acessivel, mas sem disputar atencao no primeiro olhar.
           </p>
 
           <div className="dashboard-brand-meta">
-            <span className={`badge ${hasCustomLogo ? 'badge-green' : 'badge-muted'}`}>
-              {hasCustomLogo ? 'Logo da clínica ativa' : 'Marca padrão da plataforma'}
-            </span>
             <span className={billing.className}>{billing.label}</span>
             <span className={clinicStatus.className}>{clinicStatus.label}</span>
             {criticalDocumentsCount ? (
-              <span className="badge badge-gold">{criticalDocumentsCount} alerta(s) regulatório(s)</span>
-            ) : (
-              <span className="badge badge-blue">Painel organizado para uso diário</span>
-            )}
+              <span className="badge badge-gold">{criticalDocumentsCount} alerta(s) documental(is)</span>
+            ) : null}
           </div>
 
           <div className="dashboard-brand-actions">
@@ -375,17 +370,10 @@ export default function Dashboard() {
               <Icon name="camera" /> Personalizar marca
             </button>
             <Link to="/assinatura" className="btn btn-ghost btn-sm">
-              <Icon name="dollar" /> Ajustar financeiro
+              <Icon name="dollar" /> Abrir assinatura
             </Link>
           </div>
         </div>
-
-        <BrandPreviewPanel
-          clinicName={authenticatedClinicName}
-          brandLogo={clinicBrandLogo}
-          hasCustomLogo={hasCustomLogo}
-          billingLabel={billing.label}
-        />
       </section>
 
       <div className="stats-grid stats-grid-adaptive">
@@ -408,21 +396,27 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <section className="dashboard-quick-grid">
-        <Link to="/documentos" className="card quick-link-card quick-link-card-gold">
-          <span className="eyebrow">Compliance</span>
-          <strong>Documentos</strong>
-          <p>Veja pendências, vencimentos e anexos regulatórios.</p>
+      <section className="dashboard-focus-row" aria-label="Acoes principais do painel clinico">
+        <Link to="/agendamentos" className="dashboard-focus-card">
+          <Icon name="calendar" />
+          <span>
+            <strong>Agenda</strong>
+            <p>Veja a proxima rotina da clinica.</p>
+          </span>
         </Link>
-        <Link to="/produtos-e-equipamentos" className="card quick-link-card">
-          <span className="eyebrow">Operação</span>
-          <strong>Produtos e Equipamentos</strong>
-          <p>Controle validade, manutenção e cadastro técnico.</p>
+        <Link to="/documentos" className={`dashboard-focus-card ${criticalDocumentsCount ? 'attention' : ''}`}>
+          <Icon name="fileText" />
+          <span>
+            <strong>Documentos</strong>
+            <p>{criticalDocumentsCount ? `${criticalDocumentsCount} alerta(s) para revisar.` : 'Tudo visivel para auditoria.'}</p>
+          </span>
         </Link>
-        <Link to="/assinatura" className="card quick-link-card quick-link-card-dark">
-          <span className="eyebrow">Financeiro</span>
-          <strong>Assinatura e contas</strong>
-          <p>Acompanhe assinatura, vencimento, carência e bloqueio da clínica.</p>
+        <Link to="/assinatura" className="dashboard-focus-card finance">
+          <Icon name="dollar" />
+          <span>
+            <strong>Assinatura e contas</strong>
+            <p>Status, vencimentos e despesas em um lugar.</p>
+          </span>
         </Link>
       </section>
 

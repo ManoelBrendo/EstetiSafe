@@ -77,6 +77,7 @@ npm run test
 ```bash
 cd backend/backend
 npm run start
+npm run typecheck
 npm run lint
 npm test
 npm run test:integration
@@ -86,9 +87,9 @@ npm run test:integration
 
 The repository already includes [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for:
 
-- backend lint and tests
+- backend typecheck, lint, and tests
 - backend integration tests
-- frontend lint, tests, and build
+- frontend typecheck, lint, tests, and build
 
 ## Git workflow
 

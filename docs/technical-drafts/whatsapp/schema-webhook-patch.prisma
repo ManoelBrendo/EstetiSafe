@@ -1,0 +1,75 @@
+// ─── Trecho a adicionar / alterar no seu schema.prisma ───────────────────────
+//
+// 1. Campos novos no model Appointment
+// 2. Novo model WhatsAppNotificationLog
+//
+// Após editar, rode:
+//   npx prisma migrate dev --name add_webhook_fields
+
+// ── 1. Additions ao model Appointment ────────────────────────────────────────
+
+model Appointment {
+  id                  String            @id @default(cuid())
+  clinicId            String
+  clientId            String
+  professionalId      String
+  serviceId           String
+  scheduledAt         DateTime
+  status              AppointmentStatus @default(PENDING)
+
+  // Do job de confirmação (arquivo anterior)
+  confirmationSentAt  DateTime?
+
+  // ← ADICIONE ESTES CAMPOS para o webhook:
+  clientConfirmedAt   DateTime?         // quando o cliente respondeu SIM
+  clientCancelledAt   DateTime?         // quando o cliente respondeu NÃO
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  clinic              Clinic            @relation(fields: [clinicId], references: [id])
+  client              Client            @relation(fields: [clientId], references: [id])
+  professional        Professional      @relation(fields: [professionalId], references: [id])
+  service             Service           @relation(fields: [serviceId], references: [id])
+
+  notificationLogs    WhatsAppNotificationLog[]
+
+  @@index([scheduledAt])
+  @@index([clinicId, scheduledAt])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// ── 2. Novo model: Log de notificações enviadas via WhatsApp ──────────────────
+//
+// Guarda o wamid retornado pela Meta ao enviar cada mensagem.
+// O webhook POST usa esse wamid para atualizar o status de entrega.
+
+model WhatsAppNotificationLog {
+  id              String   @id @default(cuid())
+  clinicId        String
+  appointmentId   String
+
+  // Identificador único da mensagem retornado pela Meta Cloud API
+  wamid           String   @unique
+
+  // Status de entrega atualizado pelo webhook
+  deliveryStatus  String   @default("SENT")
+  // Valores possíveis: SENT | DELIVERED | READ | FAILED
+
+  errorDetails    String?  // JSON com detalhes de erro da Meta, se houver
+
+  sentAt          DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointment     Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([wamid])
+  @@index([appointmentId])
+  @@index([clinicId])
+}

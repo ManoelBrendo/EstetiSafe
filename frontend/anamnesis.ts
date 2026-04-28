@@ -11,7 +11,7 @@ import type {
   TreatmentService,
 } from './clinicalTypes'
 
-﻿export const ANAMNESIS_SEX_OPTIONS: SelectOption[] = [
+export const ANAMNESIS_SEX_OPTIONS: SelectOption[] = [
   { value: 'FEMININO', label: 'Feminino' },
   { value: 'MASCULINO', label: 'Masculino' },
   { value: 'NAO_BINARIO', label: 'Não binário' },
@@ -169,6 +169,8 @@ function digitsOnly(value) {
 function createLocalId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
+
+export const PHOTO_CONSENT_VERSION = 'photo-consent-v1'
 
 export function todayDateInput() {
   return new Date().toISOString().slice(0, 10)
@@ -604,6 +606,10 @@ export function createEmptyAnamnesisForm(client: ClientSeed = {}): AnamnesisForm
     photoRecord: {
       photos: [],
       imageUseAuthorized: false,
+      clinicalUseAuthorized: false,
+      marketingUseAuthorized: false,
+      consentVersion: PHOTO_CONSENT_VERSION,
+      consentAcceptedAt: null,
     },
     treatmentPlan: {
       recommendedProcedure: '',
@@ -695,7 +701,11 @@ function mapLegacyAnamnesis(answers: Record<string, any> = {}, client: ClientSee
     treatmentObjective: '',
     photoRecord: {
       photos: Array.isArray(answers.photos) ? answers.photos : [],
-      imageUseAuthorized: false,
+      imageUseAuthorized: safeBoolean(answers.imageUseAuthorized),
+      clinicalUseAuthorized: safeBoolean(answers.clinicalUseAuthorized || answers.imageUseAuthorized),
+      marketingUseAuthorized: safeBoolean(answers.marketingUseAuthorized || answers.imageUseAuthorized),
+      consentVersion: PHOTO_CONSENT_VERSION,
+      consentAcceptedAt: null,
     },
     treatmentPlan: {},
     scienceTerm: {},
@@ -755,6 +765,10 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
     observedConditions: buildObservedConditionsFromConditions(normalizedConditions),
   }
 
+  const legacyImageUseAuthorized = safeBoolean(merged.photoRecord?.imageUseAuthorized)
+  const clinicalUseAuthorized = safeBoolean(merged.photoRecord?.clinicalUseAuthorized || legacyImageUseAuthorized)
+  const marketingUseAuthorized = safeBoolean(merged.photoRecord?.marketingUseAuthorized || legacyImageUseAuthorized)
+
   merged.photoRecord = {
     ...merged.photoRecord,
     photos: Array.isArray(merged.photoRecord?.photos)
@@ -765,7 +779,11 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
         dataUrl: photo.dataUrl,
       }))
       : [],
-    imageUseAuthorized: safeBoolean(merged.photoRecord?.imageUseAuthorized),
+    imageUseAuthorized: marketingUseAuthorized,
+    clinicalUseAuthorized,
+    marketingUseAuthorized,
+    consentVersion: safeText(merged.photoRecord?.consentVersion) || PHOTO_CONSENT_VERSION,
+    consentAcceptedAt: merged.photoRecord?.consentAcceptedAt ? safeText(merged.photoRecord.consentAcceptedAt) : null,
   }
 
   merged.treatmentPlan = {
@@ -835,6 +853,11 @@ export function buildAnamnesisPayload(form: AnamnesisForm): Record<string, unkno
     form.aestheticEvaluation.observedConditions,
     form.healthHistory.dermatologicalHistory
   )
+  const clinicalUseAuthorized = safeBoolean(form.photoRecord.clinicalUseAuthorized || form.photoRecord.imageUseAuthorized)
+  const marketingUseAuthorized = safeBoolean(form.photoRecord.marketingUseAuthorized || form.photoRecord.imageUseAuthorized)
+  const consentAcceptedAt = clinicalUseAuthorized
+    ? safeText(form.photoRecord.consentAcceptedAt) || new Date().toISOString()
+    : null
 
   return {
     identification: {
@@ -911,7 +934,11 @@ export function buildAnamnesisPayload(form: AnamnesisForm): Record<string, unkno
     },
     treatmentObjective: safeText(form.treatmentObjective).trim(),
     photoRecord: {
-      imageUseAuthorized: safeBoolean(form.photoRecord.imageUseAuthorized),
+      imageUseAuthorized: marketingUseAuthorized,
+      clinicalUseAuthorized,
+      marketingUseAuthorized,
+      consentVersion: safeText(form.photoRecord.consentVersion) || PHOTO_CONSENT_VERSION,
+      consentAcceptedAt,
       photos: (form.photoRecord.photos || []).map(photo => ({
         id: photo.id,
         caption: safeText(photo.caption).trim(),

@@ -53,6 +53,8 @@ function createMedicalRecordsRouter(context) {
     const clientId = parsePositiveInt(req.params.clientId, 'clientId')
     const payload = anamnesisUpsertSchema.parse(req.body)
     const updatedClient = await createAnamnesisVersion(context.prisma, req.currentUser.id, clientId, payload)
+    const latestAnamnesis = updatedClient.anamneses?.[0] || null
+    const latestPhotoRecord = latestAnamnesis?.answers?.photoRecord || {}
 
     await createAuditLog(context.prisma, req, context.auth, {
       action: 'API_V2_ANAMNESIS_VERSION_CREATE',
@@ -61,6 +63,12 @@ function createMedicalRecordsRouter(context) {
       metadata: {
         clientId: updatedClient.id,
         path: `/api/v2/medical-records/by-client/${updatedClient.id}/anamnesis`,
+        photoConsent: {
+          clinicalUseAuthorized: Boolean(latestPhotoRecord.clinicalUseAuthorized || latestPhotoRecord.imageUseAuthorized),
+          marketingUseAuthorized: Boolean(latestPhotoRecord.marketingUseAuthorized || latestPhotoRecord.imageUseAuthorized),
+          photoCount: Array.isArray(latestPhotoRecord.photos) ? latestPhotoRecord.photos.length : 0,
+          consentVersion: latestPhotoRecord.consentVersion || null,
+        },
       },
     })
 

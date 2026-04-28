@@ -8,7 +8,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// â”€â”€â”€ AutenticaÃ§Ã£o â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Authentication
 model User {
   id                 Int      @id @default(autoincrement())
   email              String   @unique
@@ -38,6 +38,9 @@ model User {
   productItems   ProductItem[]
   equipmentItems EquipmentItem[]
   clinicBills    ClinicBill[]
+  billingGatewayIntents BillingGatewayIntent[]
+  whatsappConfig WhatsappClinicConfig?
+  whatsappLogs   WhatsappLog[]
 
   @@map("users")
 }
@@ -101,7 +104,7 @@ enum ProfessionalPaymentModel {
   DAILY
 }
 
-// â”€â”€â”€ Clientes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Leads and clients
 model MarketingLead {
   id            Int                 @id @default(autoincrement())
   clinicName    String
@@ -135,6 +138,8 @@ model Clinic {
   ownerUser    User                @relation(fields: [ownerUserId], references: [id])
   subscription ClinicSubscription?
   auditLogs    AuditLog[]
+  billingGatewayIntents BillingGatewayIntent[]
+  billingGatewayEvents BillingGatewayEvent[]
 
   @@index([status, createdAt])
   @@map("clinics")
@@ -206,7 +211,7 @@ model Client {
   @@map("clients")
 }
 
-// â”€â”€â”€ Profissionais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Professionals
 model Professional {
   id              Int                      @id @default(autoincrement())
   userId          Int
@@ -238,7 +243,7 @@ model Service {
   userId      Int
   name        String
   description String?
-  duration    Int      // duraÃ§Ã£o em minutos
+  duration    Int      // duration in minutes
   price       Decimal  @db.Decimal(10, 2)
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -251,7 +256,7 @@ model Service {
   @@map("services")
 }
 
-// â”€â”€â”€ Agendamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Appointments
 model Appointment {
   id             Int               @id @default(autoincrement())
   userId         Int
@@ -271,6 +276,7 @@ model Appointment {
   service      Service      @relation(fields: [serviceId], references: [id])
   professional Professional? @relation(fields: [professionalId], references: [id])
   payment      Payment?
+  whatsappLogs WhatsappLog[]
 
   @@map("appointments")
 }
@@ -284,7 +290,7 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
-// â”€â”€â”€ Pagamentos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Payments
 model Payment {
   id            Int           @id @default(autoincrement())
   appointmentId Int           @unique
@@ -315,11 +321,11 @@ enum PaymentStatus {
   CANCELLED
 }
 
-// â”€â”€â”€ Anamnese â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Anamnesis
 model Anamnesis {
   id          Int      @id @default(autoincrement())
   clientId    Int
-  answers     Json     // respostas do formulÃ¡rio em JSON
+  answers     Json     // form answers in JSON
   filledAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -351,6 +357,7 @@ model ConsentRecord {
   user         User          @relation(fields: [userId], references: [id])
   client       Client        @relation(fields: [clientId], references: [id])
   professional Professional? @relation(fields: [professionalId], references: [id])
+  whatsappLogs WhatsappLog[]
 
   @@index([userId, clientId])
   @@index([clientId, createdAt])
@@ -464,4 +471,150 @@ model ClinicBill {
   @@index([userId, dueAt])
   @@index([userId, paidAt])
   @@map("clinic_bills")
+}
+
+
+enum BillingGatewayIntentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingGatewayMethod {
+  PIX
+  CREDIT_CARD
+  BANK_TRANSFER
+}
+
+model BillingGatewayIntent {
+  id                Int                        @id @default(autoincrement())
+  clinicId          Int
+  userId            Int
+  reference         String                     @unique
+  provider          String
+  providerPaymentId String?
+  method            BillingGatewayMethod
+  status            BillingGatewayIntentStatus @default(PENDING)
+  amount            Decimal                    @db.Decimal(10, 2)
+  currency          String                     @default("BRL")
+  dueAt             DateTime?
+  expiresAt         DateTime?
+  paidAt            DateTime?
+  checkoutUrl       String?                    @db.Text
+  pixCopyPaste      String?                    @db.Text
+  payload           Json?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  clinic Clinic @relation(fields: [clinicId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  events BillingGatewayEvent[]
+
+  @@index([clinicId, createdAt])
+  @@index([userId, status])
+  @@index([status, dueAt])
+  @@map("billing_gateway_intents")
+}
+
+model BillingGatewayEvent {
+  id          Int                         @id @default(autoincrement())
+  intentId    Int?
+  clinicId    Int?
+  reference   String?
+  provider    String?
+  eventType   String
+  status      BillingGatewayIntentStatus?
+  payload     Json?
+  processedAt DateTime                    @default(now())
+
+  intent BillingGatewayIntent? @relation(fields: [intentId], references: [id])
+  clinic Clinic?               @relation(fields: [clinicId], references: [id])
+
+  @@index([intentId, processedAt])
+  @@index([clinicId, processedAt])
+  @@index([reference])
+  @@map("billing_gateway_events")
+}
+
+enum WhatsappMessageDirection {
+  OUTBOUND
+  INBOUND
+  STATUS
+}
+
+enum WhatsappMessageType {
+  TEMPLATE
+  TEXT
+  INTERACTIVE
+  STATUS
+  WEBHOOK
+}
+
+enum WhatsappMessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RECEIVED
+  CONFIRMED
+  DECLINED
+}
+
+model WhatsappClinicConfig {
+  id                      Int      @id @default(autoincrement())
+  userId                  Int      @unique
+  phoneNumberId           String
+  businessAccountId       String?
+  accessTokenEncrypted    String   @db.Text
+  verifyToken             String
+  defaultLanguage         String   @default("pt_BR")
+  appointmentTemplateName String   @default("appointment_confirmation")
+  consentTemplateName     String   @default("consent_link")
+  graphApiVersion         String   @default("v21.0")
+  active                  Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+  logs WhatsappLog[]
+
+  @@index([phoneNumberId])
+  @@index([active, createdAt])
+  @@map("whatsapp_clinic_configs")
+}
+
+model WhatsappLog {
+  id                Int                       @id @default(autoincrement())
+  userId            Int
+  configId          Int?
+  appointmentId     Int?
+  consentRecordId   Int?
+  direction         WhatsappMessageDirection
+  messageType       WhatsappMessageType
+  providerMessageId String?
+  recipientPhone    String?
+  senderPhone       String?
+  templateName      String?
+  status            WhatsappMessageStatus?
+  payload           Json?
+  errorCode         String?
+  errorMessage      String?
+  receivedText      String?                   @db.Text
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id])
+  config        WhatsappClinicConfig? @relation(fields: [configId], references: [id])
+  appointment   Appointment?          @relation(fields: [appointmentId], references: [id])
+  consentRecord ConsentRecord?        @relation(fields: [consentRecordId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([configId, createdAt])
+  @@index([appointmentId])
+  @@index([consentRecordId])
+  @@index([providerMessageId])
+  @@map("whatsapp_logs")
 }

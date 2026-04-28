@@ -141,7 +141,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuth: Boolean(user),
     isSupport: isSupportUser(user),
     hasSupportSession,
-  }), [assumeClinic, hasSupportSession, isReady, login, logout, refreshUser, register, returnToSupport, sessionRevision, user])
+  }), [assumeClinic, hasSupportSession, isReady, login, logout, refreshUser, register, returnToSupport, user])
 
   return createElement(AuthContext.Provider, { value }, children)
 }

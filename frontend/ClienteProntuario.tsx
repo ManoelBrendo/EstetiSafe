@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { getApiErrorMessage } from './api'
 import {
   downloadClientMedicalRecordPdf,
+  generateClientImageConsentRecord,
   getClientMedicalRecord,
   getClientPayments,
   getClientProtocols,
@@ -25,6 +26,7 @@ import {
 import type {
   AnamnesisRecordVersion,
   ClientRecord,
+  ConsentRecordSummary,
   MedicalRecordBundle,
   PaymentsBundle,
   ProtocolsBundle,
@@ -111,6 +113,21 @@ function formatReadableStatus(status: string | null | undefined) {
 function formatConsentStatus(status: string | null | undefined) {
   if (!status) return 'Sem termo'
   return formatReadableStatus(status)
+}
+
+const IMAGE_CONSENT_TITLE_FRAGMENT = 'uso de imagem'
+
+function isImageConsentRecord(record: ConsentRecordSummary | null | undefined) {
+  const title = typeof record?.title === 'string' ? record.title : ''
+  return title.toLowerCase().includes(IMAGE_CONSENT_TITLE_FRAGMENT)
+}
+
+function formatImageConsentHelper(record: ConsentRecordSummary | null, isLocked: boolean) {
+  if (record?.status === 'SIGNED') return 'Termo formal assinado e vinculado ao prontuario.'
+  if (record?.status === 'PENDING') return 'Termo gerado e aguardando assinatura da cliente.'
+  if (record?.status === 'REVOKED') return 'Autorizacao revogada. Gere um novo termo antes de usar imagens.'
+  if (isLocked) return 'Prontuario bloqueado: consulte registros existentes ou retorne ao suporte antes de gerar novo termo.'
+  return 'Gere um termo separado para registrar a autorizacao formal de uso de imagem.'
 }
 
 function formatProtocolStatus(status: string | null | undefined) {
@@ -229,6 +246,7 @@ export default function ClienteProntuario() {
   const [protocolBundle, setProtocolBundle] = useState<ProtocolsBundle | null>(null)
   const [paymentsBundle, setPaymentsBundle] = useState<PaymentsBundle | null>(null)
   const [anamnesisHistory, setAnamnesisHistory] = useState<AnamnesisRecordVersion[]>([])
+  const [generatingImageConsent, setGeneratingImageConsent] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -268,14 +286,31 @@ export default function ClienteProntuario() {
     [anamnesisHistory, client]
   )
 
-  const latestConsent = client?.latestConsentRecord || client?.consentRecords?.[0] || null
+  const consentRecords = client?.consentRecords || []
+  const imageConsentRecord = consentRecords.find(isImageConsentRecord)
+    || (isImageConsentRecord(client?.latestConsentRecord) ? client?.latestConsentRecord || null : null)
+  const latestConsent = consentRecords.find(record => !isImageConsentRecord(record))
+    || (!isImageConsentRecord(client?.latestConsentRecord) ? client?.latestConsentRecord || null : null)
   const consentStatusLabel = formatConsentStatus(latestConsent?.status)
   const consentProfessionalName = latestConsent?.professionalName || ''
   const anamnesisProfessionalName = latestAnamnesis?.signatures?.professionalName || ''
   const photoCount = latestAnamnesis?.photoRecord?.photos?.length || 0
+  const clinicalPhotoConsent = Boolean(latestAnamnesis?.photoRecord?.clinicalUseAuthorized || latestAnamnesis?.photoRecord?.imageUseAuthorized)
+  const marketingPhotoConsent = Boolean(latestAnamnesis?.photoRecord?.marketingUseAuthorized || latestAnamnesis?.photoRecord?.imageUseAuthorized)
+  const photoConsentAcceptedAt = latestAnamnesis?.photoRecord?.consentAcceptedAt || null
   const appointmentCount = medicalRecord?.appointments?.length || client?.appointments?.length || 0
   const isLocked = Boolean(medicalRecord?.accessState?.isLocked ?? client?.isLocked)
   const lockedAt = medicalRecord?.accessState?.lockedAt || client?.lockedAt || null
+  const imageConsentStatusLabel = formatConsentStatus(imageConsentRecord?.status)
+  const imageConsentButtonLabel = imageConsentRecord?.id
+    ? imageConsentRecord.status === 'SIGNED'
+      ? 'Ver termo assinado'
+      : imageConsentRecord.status === 'REVOKED'
+        ? 'Gerar novo termo'
+        : 'Assinar termo de imagem'
+    : 'Gerar termo de imagem'
+  const imageConsentButtonDisabled = generatingImageConsent || ((!imageConsentRecord?.id || imageConsentRecord?.status === 'REVOKED') && isLocked)
+  const imageConsentHelper = formatImageConsentHelper(imageConsentRecord || null, isLocked)
   const currentProtocol = protocolBundle?.current || null
   const protocolServices = currentProtocol?.services || []
   const paymentsSummary = paymentsBundle?.summary || {
@@ -297,6 +332,35 @@ export default function ClienteProntuario() {
       await downloadClientMedicalRecordPdf(client.id, client.name)
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Não foi possível baixar o PDF do prontuário'))
+    }
+  }
+
+  async function handleImageConsent() {
+    if (!client?.id) return
+
+    if (imageConsentRecord?.id && imageConsentRecord.status !== 'REVOKED') {
+      navigate('/clientes/' + client.id + '/consentimentos/' + imageConsentRecord.id + '/assinar')
+      return
+    }
+
+    setGeneratingImageConsent(true)
+
+    try {
+      const record = await generateClientImageConsentRecord(client.id, {
+        clinicalUseAuthorized: clinicalPhotoConsent,
+        marketingUseAuthorized: marketingPhotoConsent,
+      })
+
+      if (!record.id) {
+        throw new Error('Termo gerado sem identificador')
+      }
+
+      toast.success('Termo de uso de imagem gerado para assinatura')
+      navigate('/clientes/' + client.id + '/consentimentos/' + record.id + '/assinar')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível gerar o termo de uso de imagem'))
+    } finally {
+      setGeneratingImageConsent(false)
     }
   }
 
@@ -407,7 +471,7 @@ export default function ClienteProntuario() {
           <SummaryMetric
             label="Fotos clínicas"
             value={String(photoCount)}
-            helper={photoCount ? 'Registros anexados à anamnese mais recente.' : 'Nenhuma evidência fotográfica anexada.'}
+            helper={imageConsentRecord?.status === 'SIGNED' ? 'Termo formal de imagem assinado.' : photoCount ? (clinicalPhotoConsent ? 'Registros com consentimento clinico vinculado.' : 'Registros antigos sem consentimento clinico estruturado.') : 'Nenhuma evidencia fotografica anexada.'}
           />
           <SummaryMetric
             label="Atendimentos"
@@ -858,15 +922,44 @@ export default function ClienteProntuario() {
                 defaultOpen
                 summaryItems={[
                   buildSummaryItem('Fotos', String(photoCount)),
-                  buildSummaryItem('Imagem autorizada', formatBooleanAnswer(latestAnamnesis.photoRecord.imageUseAuthorized)),
+                  buildSummaryItem('Uso clinico autorizado', formatBooleanAnswer(clinicalPhotoConsent)),
+                  buildSummaryItem('Marketing autorizado', formatBooleanAnswer(marketingPhotoConsent)),
                   buildSummaryItem('Profissional', anamnesisProfessionalName),
                 ]}
               >
                 <div className="prontuario-grid">
-                  <ReadonlyField label="Autorização de imagem" value={formatBooleanAnswer(latestAnamnesis.photoRecord.imageUseAuthorized)} />
+                  <ReadonlyField label="Uso clinico de imagem" value={formatBooleanAnswer(clinicalPhotoConsent)} />
+                  <ReadonlyField label="Uso em marketing" value={formatBooleanAnswer(marketingPhotoConsent)} />
+                  <ReadonlyField label="Termo formal de imagem" value={imageConsentStatusLabel} />
+                  <ReadonlyField label="Aceite de imagem" value={photoConsentAcceptedAt ? formatDateTime(photoConsentAcceptedAt) : ''} />
                   <ReadonlyField label="Fotos anexadas" value={String(photoCount)} />
                   <ReadonlyField label="Data da assinatura" value={latestAnamnesis.signatures.signedAt ? formatDate(latestAnamnesis.signatures.signedAt) : ''} />
                   <ReadonlyField label="Profissional responsável" value={anamnesisProfessionalName} />
+                </div>
+
+                {photoCount && !clinicalPhotoConsent ? (
+                  <div className="prontuario-consent-alert">
+                    Este prontuario possui fotos antigas sem consentimento clinico estruturado. Antes de usar novas imagens, atualize a anamnese e registre o aceite.
+                  </div>
+                ) : null}
+
+                <div className="image-consent-card" aria-live="polite">
+                  <div className="image-consent-copy">
+                    <span className="eyebrow">Seguranca juridica de imagem</span>
+                    <strong>Termo formal de uso de imagem</strong>
+                    <p>{imageConsentHelper}</p>
+                    {imageConsentRecord?.signedAt ? <small>Assinado em {formatDateTime(imageConsentRecord.signedAt)}</small> : null}
+                  </div>
+
+                  <div className="image-consent-actions">
+                    <span className={imageConsentRecord?.status === 'SIGNED' ? 'badge badge-green' : imageConsentRecord?.status === 'PENDING' ? 'badge badge-gold' : 'badge badge-muted'}>
+                      {imageConsentStatusLabel}
+                    </span>
+                    <button type="button" className="btn btn-outline" onClick={handleImageConsent} disabled={imageConsentButtonDisabled}>
+                      {generatingImageConsent ? <span className="spinner" /> : <Icon name="signature" />}
+                      {imageConsentButtonLabel}
+                    </button>
+                  </div>
                 </div>
 
                 {!photoCount ? null : (

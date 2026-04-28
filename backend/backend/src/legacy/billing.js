@@ -178,11 +178,13 @@ function registerBillingRoutes({
   }
 
   app.get('/billing/summary', authMiddleware, handle(async (req, res) => {
+    const billing = req.billing || getBillingSnapshot(req.currentUser)
+
     res.json({
       clinicId: req.currentUser?.ownedClinic?.id || null,
       clinicName: req.currentUser?.clinicName || supportAdminName,
       email: req.currentUser?.email || supportAdminEmail,
-      billing: req.billing,
+      billing,
       permissions: {
         canManageSubscription: canManageSubscription(req),
       },

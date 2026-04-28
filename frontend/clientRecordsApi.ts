@@ -5,6 +5,7 @@ import type {
   AnamnesisHistoryBundle,
   ClientListResponse,
   ClientRecord,
+  ConsentRecordSummary,
   ClientSeed,
   ClientUpsertPayload,
   MedicalRecordBundle,
@@ -265,6 +266,14 @@ export async function getClientProtocols(clientId: string | number): Promise<Pro
 export async function getClientPayments(clientId: string | number): Promise<PaymentsBundle> {
   const { data } = await api.get(`/api/v2/payments/by-client/${clientId}`)
   return normalizePaymentsBundle(data)
+}
+
+export async function generateClientImageConsentRecord(
+  clientId: string | number,
+  payload: { clinicalUseAuthorized?: boolean; marketingUseAuthorized?: boolean } = {}
+): Promise<ConsentRecordSummary> {
+  const { data } = await api.post(`/clients/${clientId}/consent-records/generate-image-use`, payload)
+  return data
 }
 
 export async function downloadClientMedicalRecordPdf(clientId: string | number, clientName: string): Promise<void> {

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import api, { getApiErrorMessage } from './api'
 import { createClientRecord, listClientRecords, updateClientRecord } from './clientRecordsApi'
 import { Icon } from './Icon'
-import type { ClientRecord, Identifier } from './clinicalTypes'
+import type { ClientRecord, ConsentRecordSummary, Identifier } from './clinicalTypes'
 
 type ClientModalMode = 'create' | 'edit' | null
 
@@ -82,8 +82,19 @@ const anamnesisStatusMeta = {
   filled: { label: 'Anamnese atualizada', className: 'badge badge-blue' },
 }
 
+function isImageConsentRecord(record: ConsentRecordSummary | null | undefined) {
+  const title = typeof record?.title === 'string' ? record.title : ''
+  return title.toLowerCase().includes('uso de imagem')
+}
+
+function getGeneralConsentRecord(client: ClientRecord) {
+  const consentRecords = client.consentRecords || []
+  return consentRecords.find(record => !isImageConsentRecord(record))
+    || (!isImageConsentRecord(client.latestConsentRecord) ? client.latestConsentRecord : null)
+}
+
 function getConsentStatusMeta(client: ClientRecord) {
-  const status = client.latestConsentRecord?.status
+  const status = getGeneralConsentRecord(client)?.status
   return consentStatusMeta[status] || consentStatusMeta.none
 }
 
@@ -122,7 +133,7 @@ function getClientWorkflowMeta(client: ClientRecord) {
     }
   }
 
-  if (client.latestConsentRecord?.status !== 'SIGNED') {
+  if (getGeneralConsentRecord(client)?.status !== 'SIGNED') {
     return {
       label: 'Próximo passo',
       value: 'Coletar consentimento',
@@ -141,8 +152,9 @@ function ClientCard({ client, consentLoadingId, onOpenProntuario, onConsent, onE
   const consentMeta = getConsentStatusMeta(client)
   const anamnesisMeta = getAnamnesisStatusMeta(client)
   const workflowMeta = getClientWorkflowMeta(client)
-  const consentDate = client.latestConsentRecord?.signedAt
-    ? format(new Date(client.latestConsentRecord.signedAt), 'dd/MM/yyyy')
+  const generalConsent = getGeneralConsentRecord(client)
+  const consentDate = generalConsent?.signedAt
+    ? format(new Date(generalConsent.signedAt), 'dd/MM/yyyy')
     : 'Pendente'
   const anamnesisDate = client.latestAnamnesis?.filledAt
     ? format(new Date(client.latestAnamnesis.filledAt), 'dd/MM/yyyy')
@@ -257,7 +269,7 @@ export default function Clientes() {
   const clientOverview = useMemo(() => {
     const total = clients.length
     const anamnesisReady = clients.filter(client => Boolean(client.latestAnamnesis)).length
-    const consentPending = clients.filter(client => client.latestConsentRecord?.status !== 'SIGNED').length
+    const consentPending = clients.filter(client => getGeneralConsentRecord(client)?.status !== 'SIGNED').length
     const locked = clients.filter(client => Boolean(client.isLocked)).length
 
     return {
@@ -367,9 +379,10 @@ export default function Clientes() {
     setConsentLoadingId(client.id)
 
     try {
-      let recordId = client.latestConsentRecord?.id
+      const generalConsent = getGeneralConsentRecord(client)
+      let recordId = generalConsent?.id
 
-      if (!recordId || client.latestConsentRecord?.status === 'REVOKED') {
+      if (!recordId || generalConsent?.status === 'REVOKED') {
         const { data } = await api.post<{ id: Identifier }>('/clients/' + client.id + '/consent-records/generate-default')
         recordId = data.id
       }

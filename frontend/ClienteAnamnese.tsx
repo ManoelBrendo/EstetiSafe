@@ -51,6 +51,7 @@ interface ProfessionalSummary {
 
 type FormPath = Array<string | number>
 type PhotoFieldKey = 'caption' | 'dataUrl' | 'fileName'
+type PhotoConsentField = 'clinicalUseAuthorized' | 'marketingUseAuthorized'
 
 interface SectionCardProps {
   eyebrow?: string
@@ -428,6 +429,8 @@ export default function ClienteAnamnese() {
   const activeService = form.treatmentPlan.services.find(service => service.id === activeServiceId) || null
   const isLocked = Boolean(client?.isLocked)
   const lockedAt = client?.lockedAt || null
+  const clinicalPhotoConsent = Boolean(form.photoRecord.clinicalUseAuthorized || form.photoRecord.imageUseAuthorized)
+  const photoUploadDisabled = isLocked || uploading || !clinicalPhotoConsent
 
   function setTextField(path: FormPath) {
     return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -447,6 +450,45 @@ export default function ClienteAnamnese() {
     return (event: ChangeEvent<HTMLInputElement>) => {
       if (isLocked) return
       setForm(current => updateFormValue(current, path, event.target.checked))
+    }
+  }
+
+  function setPhotoConsentField(field: PhotoConsentField) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      if (isLocked) return
+
+      const checked = event.target.checked
+      setForm(current => {
+        const nextPhotoRecord: AnamnesisForm['photoRecord'] = {
+          ...current.photoRecord,
+          [field]: checked,
+        }
+
+        if (field === 'clinicalUseAuthorized') {
+          nextPhotoRecord.consentAcceptedAt = checked
+            ? (current.photoRecord.consentAcceptedAt || new Date().toISOString())
+            : null
+
+          if (!checked) {
+            nextPhotoRecord.marketingUseAuthorized = false
+            nextPhotoRecord.imageUseAuthorized = false
+          }
+        }
+
+        if (field === 'marketingUseAuthorized') {
+          nextPhotoRecord.imageUseAuthorized = checked
+
+          if (checked && !nextPhotoRecord.clinicalUseAuthorized) {
+            nextPhotoRecord.clinicalUseAuthorized = true
+            nextPhotoRecord.consentAcceptedAt = current.photoRecord.consentAcceptedAt || new Date().toISOString()
+          }
+        }
+
+        return {
+          ...current,
+          photoRecord: nextPhotoRecord,
+        }
+      })
     }
   }
 
@@ -494,6 +536,10 @@ export default function ClienteAnamnese() {
 
     if (isLocked) return
     if (!files.length) return
+    if (!clinicalPhotoConsent) {
+      toast.error('Registre o consentimento clinico antes de anexar fotos ao prontuario')
+      return
+    }
     if ((form.photoRecord.photos?.length || 0) + files.length > 8) {
       toast.error('Adicione no máximo 8 fotos por anamnese')
       return
@@ -717,6 +763,11 @@ export default function ClienteAnamnese() {
 
     if (!form.signatures.signedAt) {
       toast.error('Informe a data da assinatura')
+      return
+    }
+
+    if ((form.photoRecord.photos?.length || 0) > 0 && !clinicalPhotoConsent) {
+      toast.error('As fotos do prontuario precisam do aceite de uso clinico de imagem')
       return
     }
 
@@ -1148,15 +1199,44 @@ export default function ClienteAnamnese() {
             title="Registro fotográfico"
             description="Fotos antes do procedimento com legenda curta e autorização vinculada ao prontuário."
             actions={(
-              <label className="btn btn-outline photo-upload-btn">
-                <input type="file" accept="image/*" multiple onChange={handleFiles} hidden disabled={uploading} />
+              <label className={['btn btn-outline photo-upload-btn', photoUploadDisabled ? 'is-disabled' : ''].filter(Boolean).join(' ')}>
+                <input type="file" accept="image/*" multiple onChange={handleFiles} hidden disabled={photoUploadDisabled} />
                 {uploading ? <span className="spinner" /> : <><Icon name="camera" /> Adicionar fotos</>}
               </label>
             )}
           >
             <div className="anamnesis-photo-layout">
-              <div className="checkbox-grid form-full anamnesis-single-toggle-grid">
-                <ToggleField label="Autorização de uso de imagem" checked={form.photoRecord.imageUseAuthorized} onChange={setCheckboxField(['photoRecord', 'imageUseAuthorized'])} />
+              <div className="photo-consent-panel">
+                <div className="photo-consent-head">
+                  <div>
+                    <strong>Consentimento de imagem</strong>
+                    <p>Separe o registro clínico do uso de marketing para reduzir risco e deixar a decisão clara para a cliente.</p>
+                  </div>
+                  <span className={clinicalPhotoConsent ? 'badge badge-green' : 'badge badge-muted'}>
+                    {clinicalPhotoConsent ? 'Consentimento clinico ativo' : 'Aguardando aceite'}
+                  </span>
+                </div>
+
+                <div className="checkbox-grid form-full anamnesis-photo-consent-grid">
+                  <ToggleField
+                    label="Autorizo registrar fotos para acompanhamento clinico no prontuario"
+                    checked={clinicalPhotoConsent}
+                    onChange={setPhotoConsentField('clinicalUseAuthorized')}
+                  />
+                  <ToggleField
+                    label="Autorizo uso de imagem em divulgacao e marketing"
+                    checked={Boolean(form.photoRecord.marketingUseAuthorized || form.photoRecord.imageUseAuthorized)}
+                    onChange={setPhotoConsentField('marketingUseAuthorized')}
+                  />
+                </div>
+
+                <p className="photo-consent-guidance">
+                  O aceite clinico permite anexar fotos ao prontuario para evolucao do tratamento. O aceite de marketing e separado e deve ser usado apenas quando a cliente concordar com divulgacao externa.
+                </p>
+
+                {!clinicalPhotoConsent ? (
+                  <p className="photo-consent-warning">O envio de fotos fica bloqueado ate o consentimento clinico ser marcado.</p>
+                ) : null}
               </div>
 
               {!form.photoRecord.photos?.length ? (
@@ -1428,7 +1508,3 @@ export default function ClienteAnamnese() {
     </div>
   )
 }
-
-
-
-

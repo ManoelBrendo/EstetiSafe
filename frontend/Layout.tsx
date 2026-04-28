@@ -17,13 +17,13 @@ interface NavigationItem {
 
 const clinicNav: NavigationItem[] = [
   { to: '/', icon: 'dashboard', label: 'Painel Clinico' },
-  { to: '/documentos', icon: 'fileText', label: 'Documentos' },
-  { to: '/produtos-e-equipamentos', icon: 'box', label: 'Produtos e Equipamentos' },
-  { to: '/clientes', icon: 'users', label: 'Clientes' },
   { to: '/agendamentos', icon: 'calendar', label: 'Agendamentos' },
+  { to: '/assinatura', icon: 'dollar', label: 'Assinatura e contas' },
+  { to: '/documentos', icon: 'fileText', label: 'Documentos' },
+  { to: '/clientes', icon: 'users', label: 'Clientes' },
   { to: '/servicos', icon: 'scissors', label: 'Servicos' },
   { to: '/profissionais', icon: 'person', label: 'Profissionais' },
-  { to: '/assinatura', icon: 'dollar', label: 'Assinatura e contas' },
+  { to: '/produtos-e-equipamentos', icon: 'box', label: 'Produtos e Equipamentos' },
 ]
 
 const supportNav: NavigationItem[] = [
@@ -146,10 +146,10 @@ export function Layout({ children }: LayoutProps) {
           <strong>{clinicName}</strong>
           <p>
             {supportUser
-              ? 'Localize a conta correta e assuma uma sessao de manutencao com rastreabilidade antes de editar qualquer dado da clinica.'
+              ? 'Localize a conta e registre manutencoes sem perder rastreabilidade.'
               : impersonationActive
-                ? 'Sessao de manutencao ativa. Voce esta navegando como a clinica para realizar ajustes, suporte ou atualizacao.'
-                : 'Agenda, atendimento, POPs e prontuario com identidade visual da propria clinica.'}
+                ? 'Sessao de manutencao ativa para ajustes pontuais da clinica.'
+                : 'Agenda, clientes, documentos e financeiro em um fluxo unico.'}
           </p>
           <div className="sidebar-clinic-status">
             <span className={billing.className}>{billing.label}</span>
@@ -163,7 +163,7 @@ export function Layout({ children }: LayoutProps) {
               key={item.to}
               to={item.to}
               end={item.to === '/' || item.to === '/suporte'}
-              className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+              className={({ isActive }) => `nav-item ${item.to === '/assinatura' ? 'nav-item-finance' : ''} ${isActive ? 'active' : ''}`}
               onClick={closeMenu}
             >
               <Icon name={item.icon} />

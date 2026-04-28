@@ -29,6 +29,7 @@ interface ConsentRecordDetail {
   status: ConsentStatus | string
   createdAt?: string | null
   signedAt?: string | null
+  updatedAt?: string | null
   signatureDataUrl?: string | null
   signerName?: string | null
   signerDocument?: string | null
@@ -81,6 +82,7 @@ export default function ClienteConsentimentoAssinatura() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [revoking, setRevoking] = useState(false)
   const [record, setRecord] = useState<ConsentRecordDetail | null>(null)
   const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
   const [signerName, setSignerName] = useState('')
@@ -137,7 +139,7 @@ export default function ClienteConsentimentoAssinatura() {
   }, [loadRecord])
 
   useEffect(() => {
-    if (loading || record?.status === 'SIGNED') return
+    if (loading || record?.status !== 'PENDING') return
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -169,7 +171,7 @@ export default function ClienteConsentimentoAssinatura() {
   }
 
   function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
-    if (record?.status === 'SIGNED') return
+    if (record?.status !== 'PENDING') return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
@@ -190,7 +192,7 @@ export default function ClienteConsentimentoAssinatura() {
   }
 
   function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
-    if (!drawingRef.current || record?.status === 'SIGNED') return
+    if (!drawingRef.current || record?.status !== 'PENDING') return
 
     const canvas = canvasRef.current
     const context = canvas?.getContext('2d')
@@ -287,6 +289,32 @@ export default function ClienteConsentimentoAssinatura() {
     }
   }
 
+  async function handleRevokeConsent() {
+    if (!record?.id || record.status !== 'SIGNED') return
+
+    const reason = window.prompt('Informe o motivo da revogacao. Este texto ficara registrado na auditoria interna.')
+    if (reason === null) return
+
+    const confirmed = window.confirm('Confirmar revogacao deste termo? A assinatura e o PDF permanecem preservados, mas o status passa a ser revogado.')
+    if (!confirmed) return
+
+    setRevoking(true)
+
+    try {
+      const { data } = await api.post<ConsentRecordDetail>('/consent-records/' + record.id + '/revoke', {
+        reason: reason.trim() || undefined,
+      })
+
+      setRecord(data)
+      setAccepted(false)
+      toast.success('Termo revogado com rastreabilidade preservada')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Nao foi possivel revogar o termo'))
+    } finally {
+      setRevoking(false)
+    }
+  }
+
   async function handleDownloadPdf() {
     if (!record?.id) return
 
@@ -371,7 +399,7 @@ export default function ClienteConsentimentoAssinatura() {
                   className="form-input"
                   value={signerName}
                   onChange={event => setSignerName(event.target.value)}
-                  disabled={record.status === 'SIGNED'}
+                  disabled={record.status !== 'PENDING'}
                   placeholder="Nome completo"
                 />
               </div>
@@ -382,7 +410,7 @@ export default function ClienteConsentimentoAssinatura() {
                   className="form-input"
                   value={signerDocument}
                   onChange={event => setSignerDocument(event.target.value)}
-                  disabled={record.status === 'SIGNED'}
+                  disabled={record.status !== 'PENDING'}
                   placeholder="CPF ou outro documento"
                 />
               </div>
@@ -394,7 +422,7 @@ export default function ClienteConsentimentoAssinatura() {
                     className="form-select"
                     value={useManualProfessional ? 'MANUAL' : professionalId}
                     onChange={handleProfessionalChange}
-                    disabled={record.status === 'SIGNED'}
+                    disabled={record.status !== 'PENDING'}
                   >
                     <option value="">Selecione</option>
                     {professionals.map(professional => (
@@ -426,14 +454,46 @@ export default function ClienteConsentimentoAssinatura() {
                     className="form-input"
                     value={professionalName}
                     onChange={event => setProfessionalName(event.target.value)}
-                    disabled={record.status === 'SIGNED'}
+                    disabled={record.status !== 'PENDING'}
                     placeholder="Quem validou este termo"
                   />
                 </div>
               ) : null}
             </div>
 
-            {record.status === 'SIGNED' ? (
+            {record.status === 'REVOKED' ? (
+              <div className="consent-revoked-card">
+                <div className="empty-icon">
+                  <Icon name="clipboard" size={24} />
+                </div>
+                <h3>Termo revogado</h3>
+                <p>
+                  Este termo permanece arquivado para consulta, PDF e auditoria, mas nao deve mais ser usado como autorizacao ativa.
+                </p>
+                <div className="detail-list consent-revoked-details">
+                  <div className="detail-row">
+                    <span>Assinado em</span>
+                    <strong>{formatDateTime(record.signedAt)}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span>Revogado em</span>
+                    <strong>{formatDateTime(record.updatedAt)}</strong>
+                  </div>
+                  <div className="detail-row">
+                    <span>Profissional responsavel</span>
+                    <strong>{resolvedProfessionalName}</strong>
+                  </div>
+                </div>
+                <div className="consent-actions consent-actions-start">
+                  <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes/' + record.client.id)}>
+                    Voltar ao prontuario
+                  </button>
+                  <button type="button" className="btn btn-outline" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+                    {downloadingPdf ? <span className="spinner" /> : <><Icon name="download" /> Baixar PDF</>}
+                  </button>
+                </div>
+              </div>
+            ) : record.status === 'SIGNED' ? (
               <div className="signature-preview-card">
                 <div className="signature-preview-wrap">
                   <img src={record.signatureDataUrl || ''} alt="Assinatura do cliente" className="signature-preview" />
@@ -454,6 +514,14 @@ export default function ClienteConsentimentoAssinatura() {
                     disabled={downloadingPdf}
                   >
                     {downloadingPdf ? <span className="spinner" /> : <><Icon name="download" /> Baixar PDF</>}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline danger-ghost"
+                    onClick={handleRevokeConsent}
+                    disabled={revoking}
+                  >
+                    {revoking ? <span className="spinner" /> : <><Icon name="x" /> Revogar termo</>}
                   </button>
                   <button
                     type="button"

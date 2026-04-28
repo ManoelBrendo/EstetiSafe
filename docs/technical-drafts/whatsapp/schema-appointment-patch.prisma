@@ -1,0 +1,41 @@
+// ─── Trecho a adicionar no seu schema.prisma ─────────────────────────────────
+//
+// Adicione o campo `confirmationSentAt` ao model Appointment.
+// Ele serve como flag de idempotência: o job só envia uma vez por agendamento.
+//
+// Exemplo (adapte ao seu schema real):
+
+model Appointment {
+  id                  String            @id @default(cuid())
+  clinicId            String
+  clientId            String
+  professionalId      String
+  serviceId           String
+  scheduledAt         DateTime
+  status              AppointmentStatus @default(PENDING)
+
+  // ← ADICIONE ESTE CAMPO:
+  confirmationSentAt  DateTime?         // null = ainda não enviou; data = já enviou
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  clinic              Clinic            @relation(fields: [clinicId], references: [id])
+  client              Client            @relation(fields: [clientId], references: [id])
+  professional        Professional      @relation(fields: [professionalId], references: [id])
+  service             Service           @relation(fields: [serviceId], references: [id])
+
+  @@index([scheduledAt])               // índice para a query do job (performance)
+  @@index([clinicId, scheduledAt])     // índice composto para multi-clínica
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+// ─── Após editar o schema, rode: ─────────────────────────────────────────────
+//   npx prisma migrate dev --name add_confirmation_sent_at
+// ─────────────────────────────────────────────────────────────────────────────
