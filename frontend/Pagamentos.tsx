@@ -68,9 +68,9 @@ const billingMeta: Record<BillingStatusKey, BadgeMeta> = {
 }
 
 const clinicStatusMeta: Record<ClinicStatusKey, BadgeMeta> = {
-  ACTIVE: { label: 'Operacao ativa', className: 'badge badge-green' },
-  SUSPENDED: { label: 'Operacao suspensa', className: 'badge badge-gold' },
-  ARCHIVED: { label: 'Clinica arquivada', className: 'badge badge-muted' },
+  ACTIVE: { label: 'Operação ativa', className: 'badge badge-green' },
+  SUSPENDED: { label: 'Operação suspensa', className: 'badge badge-gold' },
+  ARCHIVED: { label: 'Clínica arquivada', className: 'badge badge-muted' },
 }
 
 const auditActionMeta: Record<string, { label: string; icon: IconName }> = {
@@ -78,7 +78,11 @@ const auditActionMeta: Record<string, { label: string; icon: IconName }> = {
   SUPPORT_ASSUME_CLINIC: { label: 'Acesso do suporte', icon: 'dashboard' },
   BILLING_CONFIG_UPDATED: { label: 'Assinatura ajustada', icon: 'edit' },
   BILLING_MARKED_PAID: { label: 'Pagamento confirmado', icon: 'check' },
-  BILLING_GATEWAY_INTENT_CREATED: { label: 'Cobranca preparada', icon: 'dollar' },
+  CLINIC_BILL_CREATE: { label: 'Conta criada', icon: 'dollar' },
+  CLINIC_BILL_UPDATE: { label: 'Conta atualizada', icon: 'edit' },
+  CLINIC_BILL_MARK_PAID: { label: 'Conta baixada', icon: 'check' },
+  CLINIC_BILL_DELETE: { label: 'Conta removida', icon: 'trash' },
+  BILLING_GATEWAY_INTENT_CREATED: { label: 'Cobrança preparada', icon: 'dollar' },
   BILLING_GATEWAY_PAYMENT_CONFIRMED: { label: 'Gateway confirmado', icon: 'check' },
   BILLING_GATEWAY_WEBHOOK_RECEIVED: { label: 'Webhook financeiro', icon: 'refresh' },
 }
@@ -90,7 +94,7 @@ const billCategories = [
   'Impostos',
   'Marketing',
   'Agua e luz',
-  'Manutencao',
+  'Manutenção',
   'Fornecedores',
   'Outros',
 ]
@@ -115,7 +119,7 @@ const emptyBillingSnapshot: BillingSummaryResponse['billing'] = {
   nextDueAt: null,
   blockAt: null,
   daysRemaining: null,
-  message: 'Dados de assinatura parcialmente indisponiveis. A central financeira continua acessivel para regularizacao.',
+  message: 'Dados de assinatura parcialmente indisponiveis. A central financeira continua acessivel para regularização.',
 }
 
 type BillingSnapshotLike = Partial<BillingSummaryResponse['billing']> | null | undefined
@@ -160,28 +164,85 @@ const emptyBillsDashboard: ClinicBillsResponse = {
   bills: [],
 }
 
+type ClinicBillItemLike = Partial<ClinicBillItem> | null | undefined
+type ClinicBillsDashboardLike = Partial<ClinicBillsResponse> | null | undefined
+
+function normalizeNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value ?? fallback)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function normalizeBillStatus(status: unknown): ClinicBillItem['status'] {
+  return status === 'PAID' || status === 'OVERDUE' || status === 'PENDING' ? status : 'PENDING'
+}
+
+function normalizeClinicBillItem(item: ClinicBillItemLike, index: number): ClinicBillItem {
+  const status = normalizeBillStatus(item?.status)
+  const fallbackLabel = status === 'PAID' ? 'Pago' : status === 'OVERDUE' ? 'Em atraso' : 'Pendente'
+
+  return {
+    id: item?.id ?? `bill-${index}`,
+    title: item?.title || 'Conta sem título',
+    category: item?.category || null,
+    amount: normalizeNumber(item?.amount),
+    dueAt: item?.dueAt || null,
+    paidAt: item?.paidAt || null,
+    notes: item?.notes || null,
+    active: item?.active !== false,
+    createdAt: item?.createdAt || null,
+    updatedAt: item?.updatedAt || null,
+    status,
+    statusLabel: item?.statusLabel || fallbackLabel,
+  }
+}
+
+function normalizeBillsDashboard(data: ClinicBillsDashboardLike): ClinicBillsResponse {
+  const bills = Array.isArray(data?.bills)
+    ? data.bills.map((bill, index) => normalizeClinicBillItem(bill, index))
+    : []
+
+  return {
+    openCount: normalizeNumber(data?.openCount, bills.filter(bill => bill.status !== 'PAID').length),
+    overdueCount: normalizeNumber(data?.overdueCount, bills.filter(bill => bill.status === 'OVERDUE').length),
+    paidCount: normalizeNumber(data?.paidCount, bills.filter(bill => bill.status === 'PAID').length),
+    totalOpenAmount: normalizeNumber(data?.totalOpenAmount, bills.filter(bill => bill.status !== 'PAID').reduce((sum, bill) => sum + bill.amount, 0)),
+    overdueAmount: normalizeNumber(data?.overdueAmount, bills.filter(bill => bill.status === 'OVERDUE').reduce((sum, bill) => sum + bill.amount, 0)),
+    paidThisMonthAmount: normalizeNumber(data?.paidThisMonthAmount, 0),
+    bills,
+  }
+}
+
 function formatCurrency(value: number | string | null | undefined): string {
-  return Number(value || 0).toLocaleString('pt-BR', {
+  const parsedValue = Number(value ?? 0)
+  const safeValue = Number.isFinite(parsedValue) ? parsedValue : 0
+
+  return safeValue.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
 function formatDate(value?: string | Date | null): string {
-  if (!value) return 'Nao definido'
+  if (!value) return 'Não definido'
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Não definido'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
 }
 
 function formatDateTime(value?: string | Date | null): string {
   if (!value) return 'Sem registro'
 
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Sem registro'
+
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
 }
 
 function getBillingStatus(status?: string | null): BadgeMeta {
@@ -205,7 +266,7 @@ function getAuditAction(action?: string | null): { label: string; icon: IconName
     return auditActionMeta[action]
   }
 
-  return { label: 'Acao registrada', icon: 'clipboard' }
+  return { label: 'Ação registrada', icon: 'clipboard' }
 }
 
 function getMetadataRecord(log: AuditLogItem): Record<string, unknown> {
@@ -214,16 +275,18 @@ function getMetadataRecord(log: AuditLogItem): Record<string, unknown> {
 
 function getMetadataString(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key]
-  return typeof value === 'string' && value.trim() ? value : null
+  if (value instanceof Date) return value.toISOString()
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function getMetadataNumber(metadata: Record<string, unknown>, key: string): number | null {
   const value = metadata[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  const parsedValue = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+  return Number.isFinite(parsedValue) ? parsedValue : null
 }
 
 function formatAuditActor(log: AuditLogItem): string {
-  if (log.actorRole === 'SUPPORT') return 'Suporte tecnico'
+  if (log.actorRole === 'SUPPORT') return 'Suporte técnico'
   return log.actorEmail || 'Sistema'
 }
 
@@ -231,7 +294,7 @@ function describeAuditLog(log: AuditLogItem): string {
   const metadata = getMetadataRecord(log)
 
   if (log.action === 'AUTH_REGISTER') {
-    const clinicLabel = getMetadataString(metadata, 'clinicName') || 'a clinica'
+    const clinicLabel = getMetadataString(metadata, 'clinicName') || 'a clínica'
     const emailValue = getMetadataString(metadata, 'email')
     const emailLabel = emailValue ? ` com o e-mail ${emailValue}` : ''
     return `Cadastro inicial de ${clinicLabel}${emailLabel}.`
@@ -240,7 +303,7 @@ function describeAuditLog(log: AuditLogItem): string {
   if (log.action === 'SUPPORT_ASSUME_CLINIC') {
     const clinicEmail = getMetadataString(metadata, 'clinicEmail')
     const emailLabel = clinicEmail ? ` da conta ${clinicEmail}` : ''
-    return `Ambiente assumido pelo suporte para manutencao e diagnostico${emailLabel}.`
+    return `Ambiente assumido pelo suporte para manutenção e diagnóstico${emailLabel}.`
   }
 
   if (log.action === 'BILLING_CONFIG_UPDATED') {
@@ -250,12 +313,12 @@ function describeAuditLog(log: AuditLogItem): string {
     const reference = getMetadataString(metadata, 'reference')
 
     if (amount != null) parts.push(`valor ${formatCurrency(amount)}`)
-    if (nextDueAt) parts.push(`proximo vencimento em ${formatDate(nextDueAt)}`)
+    if (nextDueAt) parts.push(`próximo vencimento em ${formatDate(nextDueAt)}`)
     if (reference) parts.push(`referencia ${reference}`)
 
     return parts.length
-      ? `Configuracao da assinatura atualizada com ${parts.join(', ')}.`
-      : 'Configuracao da assinatura atualizada.'
+      ? `Configuração da assinatura atualizada com ${parts.join(', ')}.`
+      : 'Configuração da assinatura atualizada.'
   }
 
   if (log.action === 'BILLING_MARKED_PAID') {
@@ -273,6 +336,25 @@ function describeAuditLog(log: AuditLogItem): string {
       : 'Pagamento da assinatura confirmado.'
   }
 
+
+  if (log.action?.startsWith('CLINIC_BILL_')) {
+    const title = getMetadataString(metadata, 'title') || 'conta da clínica'
+    const amount = getMetadataNumber(metadata, 'amount')
+    const dueAt = getMetadataString(metadata, 'dueAt')
+    const paidAt = getMetadataString(metadata, 'paidAt')
+    const parts: string[] = []
+
+    if (amount != null) parts.push(`valor ${formatCurrency(amount)}`)
+    if (dueAt) parts.push(`vencimento em ${formatDate(dueAt)}`)
+    if (paidAt) parts.push(`baixa em ${formatDateTime(paidAt)}`)
+
+    const detail = parts.length ? ` com ${parts.join(', ')}` : ''
+
+    if (log.action === 'CLINIC_BILL_CREATE') return `Conta "${title}" criada${detail}.`
+    if (log.action === 'CLINIC_BILL_UPDATE') return `Conta "${title}" atualizada${detail}.`
+    if (log.action === 'CLINIC_BILL_MARK_PAID') return `Conta "${title}" marcada como paga${detail}.`
+    if (log.action === 'CLINIC_BILL_DELETE') return `Conta "${title}" removida da visão ativa${detail}.`
+  }
   if (log.action === 'BILLING_GATEWAY_INTENT_CREATED' || log.action === 'BILLING_GATEWAY_PAYMENT_CONFIRMED' || log.action === 'BILLING_GATEWAY_WEBHOOK_RECEIVED') {
     const intent = metadata.intent && typeof metadata.intent === 'object' ? metadata.intent as Record<string, unknown> : metadata
     const reference = getMetadataString(intent, 'reference')
@@ -291,7 +373,7 @@ function describeAuditLog(log: AuditLogItem): string {
       : 'Evento de gateway financeiro registrado.'
   }
 
-  return 'Evento registrado para rastreabilidade do modulo financeiro.'
+  return 'Evento registrado para rastreabilidade do módulo financeiro.'
 }
 
 function BillingOverviewMetric({ label, value, helper, tone = 'default' }: BillingOverviewMetricProps) {
@@ -311,7 +393,7 @@ function BillCard({ bill, onEdit, onMarkPaid, onDelete }: BillCardProps) {
     <article className="billing-bill-card">
       <div className="billing-bill-head">
         <div>
-          <span className="billing-bill-category">{bill.category || 'Conta operacional da clinica'}</span>
+          <span className="billing-bill-category">{bill.category || 'Conta operacional da clínica'}</span>
           <h3 className="billing-bill-title">{bill.title}</h3>
         </div>
 
@@ -337,7 +419,7 @@ function BillCard({ bill, onEdit, onMarkPaid, onDelete }: BillCardProps) {
 
       {bill.notes ? (
         <div className="billing-bill-note">
-          <strong>Observacoes</strong>
+          <strong>Observações</strong>
           <p>{bill.notes}</p>
         </div>
       ) : null}
@@ -377,7 +459,7 @@ function AuditTimelineItem({ log }: AuditTimelineItemProps) {
         <p>{describeAuditLog(log)}</p>
         <small>
           {formatAuditActor(log)}
-          {log.entityType ? ` Ã¢â‚¬Â¢ ${log.entityType}` : ''}
+          {log.entityType ? ` · ${log.entityType}` : ''}
         </small>
       </div>
     </li>
@@ -433,7 +515,7 @@ export default function Pagamentos() {
       const billing = normalizedSummary.billing
 
       setSummary(normalizedSummary)
-      setBillsData(billsResponse)
+      setBillsData(normalizeBillsDashboard(billsResponse))
       setGatewayStatus(nextGatewayStatus)
       setAuditLogs(nextAuditLogs)
       setForm({
@@ -443,7 +525,7 @@ export default function Pagamentos() {
         notes: billing.notes || '',
       })
     } catch (error) {
-      const message = getApiErrorMessage(error, 'Nao foi possivel carregar a central financeira')
+      const message = getApiErrorMessage(error, 'Não foi possível carregar a central financeira')
       setLoadError(message)
       toast.error(message)
     } finally {
@@ -455,22 +537,25 @@ export default function Pagamentos() {
     void load()
   }, [load])
 
-  const statusMeta = useMemo(() => getBillingStatus(summary?.billing?.effectiveStatus), [summary?.billing?.effectiveStatus])
+  const billing = useMemo(() => normalizeBillingSnapshot(summary?.billing, user?.billing), [summary?.billing, user?.billing])
+  const statusMeta = useMemo(() => getBillingStatus(billing.effectiveStatus), [billing.effectiveStatus])
+  const showBillingStateBanner = billing.blocked || billing.effectiveStatus === 'OVERDUE'
+  const billingStateTone = billing.blocked ? 'danger' : 'warning'
   const clinicStatus = useMemo(() => getClinicStatus(user?.clinicStatus), [user?.clinicStatus])
   const canManageSubscription = Boolean(summary?.permissions?.canManageSubscription || isImpersonating(user))
-  const clinicIdentifier = summary?.clinicId ?? user?.clinicId ?? 'Nao definido'
+  const clinicIdentifier = summary?.clinicId ?? user?.clinicId ?? 'Não definido'
   const latestGatewayIntent = gatewayStatus?.latestIntent || null
   const latestGatewayIntentStatus = latestGatewayIntent?.status || null
   const gatewayStatusLabel = latestGatewayIntentStatus === 'PAID'
     ? 'Pagamento confirmado'
     : latestGatewayIntentStatus === 'PENDING'
-      ? 'Cobranca pendente'
+      ? 'Cobrança pendente'
       : latestGatewayIntentStatus === 'FAILED'
         ? 'Falha no pagamento'
         : latestGatewayIntentStatus === 'CANCELLED'
-          ? 'Cobranca cancelada'
+          ? 'Cobrança cancelada'
           : latestGatewayIntentStatus === 'EXPIRED'
-            ? 'Cobranca expirada'
+            ? 'Cobrança expirada'
             : 'Pronto para gateway'
   const gatewayBadgeClass = latestGatewayIntentStatus === 'PAID'
     ? 'badge badge-green'
@@ -482,6 +567,17 @@ export default function Pagamentos() {
   const gatewayAutomation = gatewayStatus?.automation || null
   const gatewayAutomationLabel = gatewayAutomation?.enabled ? 'Ativa' : 'Pausada'
   const gatewayAutomationBadge = gatewayAutomation?.enabled ? 'badge badge-green' : 'badge badge-muted'
+  const gatewayReadiness = gatewayStatus?.readiness || null
+  const gatewayReadinessLabel = gatewayReadiness?.status === 'READY'
+    ? 'Pronto para producao'
+    : gatewayReadiness?.status === 'PARTIAL'
+      ? 'Configuracao parcial'
+      : 'Modo simulado seguro'
+  const gatewayReadinessBadge = gatewayReadiness?.status === 'READY'
+    ? 'badge badge-green'
+    : gatewayReadiness?.status === 'PARTIAL'
+      ? 'badge badge-gold'
+      : 'badge badge-muted'
 
   function setField(key: keyof BillingConfigFormState) {
     return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -530,9 +626,9 @@ export default function Pagamentos() {
       })
 
       await Promise.all([load(), refreshUser()])
-      toast.success('Configuracao da assinatura atualizada')
+      toast.success('Configuração da assinatura atualizada')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel atualizar a assinatura da plataforma'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível atualizar a assinatura da plataforma'))
     } finally {
       setSavingConfig(false)
     }
@@ -555,17 +651,17 @@ export default function Pagamentos() {
       await Promise.all([load(), refreshUser()])
       toast.success('Assinatura marcada como paga e acesso reativado')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel registrar o pagamento da assinatura'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível registrar o pagamento da assinatura'))
     } finally {
       setMarkingPaid(false)
     }
   }
 
   async function handleCreateGatewayIntent(): Promise<void> {
-    const parsedAmount = form.amount ? Number(form.amount) : Number(summary?.billing?.amount || 0)
+    const parsedAmount = form.amount ? Number(form.amount) : Number(billing.amount || 0)
 
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      toast.error('Defina o valor da assinatura antes de gerar a cobranca')
+      toast.error('Defina o valor da assinatura antes de gerar a cobrança')
       return
     }
 
@@ -584,12 +680,12 @@ export default function Pagamentos() {
         configured: Boolean(current?.configured),
         webhookConfigured: Boolean(current?.webhookConfigured),
         latestIntent: data.intent,
-        message: current?.message || 'Cobranca preparada para gateway financeiro.',
+        message: current?.message || 'Cobrança preparada para gateway financeiro.',
       }))
       await Promise.all([load(), refreshUser()])
-      toast.success('Cobranca da assinatura preparada')
+      toast.success('Cobrança da assinatura preparada')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel preparar a cobranca da assinatura'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível preparar a cobrança da assinatura'))
     } finally {
       setCreatingGatewayIntent(false)
     }
@@ -602,11 +698,11 @@ export default function Pagamentos() {
     }
 
     if (!latestGatewayIntent?.reference) {
-      toast.error('Gere uma cobranca antes de simular o recebimento')
+      toast.error('Gere uma cobrança antes de simular o recebimento')
       return
     }
 
-    if (!window.confirm('Simular recebimento desta cobranca e reativar a assinatura?')) return
+    if (!window.confirm('Simular recebimento desta cobrança e reativar a assinatura?')) return
 
     setSimulatingGatewayPayment(true)
 
@@ -619,7 +715,7 @@ export default function Pagamentos() {
       await Promise.all([load(), refreshUser()])
       toast.success('Recebimento simulado e assinatura atualizada')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel simular o recebimento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível simular o recebimento'))
     } finally {
       setSimulatingGatewayPayment(false)
     }
@@ -627,7 +723,7 @@ export default function Pagamentos() {
 
   async function handleSaveBill(): Promise<void> {
     if (!billForm.title.trim() || !billForm.amount || !billForm.dueAt) {
-      toast.error('Titulo, valor e vencimento sao obrigatorios')
+      toast.error('Título, valor e vencimento são obrigatórios')
       return
     }
 
@@ -667,7 +763,7 @@ export default function Pagamentos() {
       setBillForm(emptyBillForm)
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar esta conta'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar esta conta'))
     } finally {
       setSavingBill(false)
     }
@@ -679,19 +775,19 @@ export default function Pagamentos() {
       toast.success('Conta marcada como paga')
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel registrar esta baixa'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível registrar esta baixa'))
     }
   }
 
   async function handleDeleteBill(billId: Identifier): Promise<void> {
-    if (!window.confirm('Deseja remover esta conta da clinica?')) return
+    if (!window.confirm('Deseja remover esta conta da clínica?')) return
 
     try {
       await api.delete<{ ok: boolean }>(`/billing/bills/${billId}`)
       toast.success('Conta removida com sucesso')
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel remover esta conta'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível remover esta conta'))
     }
   }
 
@@ -714,7 +810,7 @@ export default function Pagamentos() {
             <Icon name="dollar" size={24} />
           </div>
           <span className="eyebrow">Assinatura e contas</span>
-          <h1 className="section-title">Nao conseguimos abrir a central financeira</h1>
+          <h1 className="section-title">Não conseguimos abrir a central financeira</h1>
           <p className="section-copy">
             {loadError || 'A resposta da API veio vazia. Tente carregar novamente antes de acionar o suporte.'}
           </p>
@@ -737,7 +833,7 @@ export default function Pagamentos() {
         <div>
           <h1 className="page-title">Assinatura e contas</h1>
           <p className="page-subtitle">
-            Centralize assinatura, despesas operacionais e baixas financeiras da clinica em um unico painel.
+            Centralize assinatura, despesas operacionais e baixas financeiras da clínica em um único painel.
           </p>
         </div>
 
@@ -755,15 +851,31 @@ export default function Pagamentos() {
           <span className="eyebrow">Centro financeiro</span>
           <h2 className="section-title">{clinicName}</h2>
           <p className="section-copy">
-            Contas da clinica, assinatura do sistema e rastreabilidade das acoes organizadas com leitura rapida e controle centralizado.
+            Contas da clínica, assinatura do sistema e rastreabilidade das ações organizadas com leitura rápida e controle centralizado.
           </p>
           <div className="billing-brand-meta">
             <span className={statusMeta.className}>{statusMeta.label}</span>
             <span className={clinicStatus.className}>{clinicStatus.label}</span>
-            <span className="badge badge-muted">ID da clinica {clinicIdentifier}</span>
+            <span className="badge badge-muted">ID da clínica {clinicIdentifier}</span>
           </div>
         </div>
       </section>
+
+      {showBillingStateBanner ? (
+        <section className={`billing-state-banner ${billingStateTone}`} aria-live="polite">
+          <div>
+            <span className="eyebrow">Status da assinatura</span>
+            <strong>{billing.blocked ? 'Acesso bloqueado, central financeira liberada' : 'Pagamento em acompanhamento'}</strong>
+            <p>{billing.message}</p>
+          </div>
+          <div className="billing-state-actions">
+            <span className={statusMeta.className}>{statusMeta.label}</span>
+            <Link to="/contatar-suporte" className="btn btn-outline btn-sm">
+              <Icon name="mail" /> Falar com suporte
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       <section className="billing-overview-strip" aria-label="Resumo financeiro">
         <BillingOverviewMetric
@@ -786,7 +898,7 @@ export default function Pagamentos() {
         />
         <BillingOverviewMetric
           label="Assinatura do sistema"
-          value={summary.billing.amount != null ? formatCurrency(summary.billing.amount) : 'A definir'}
+          value={billing.amount != null ? formatCurrency(billing.amount) : 'A definir'}
           helper={`Status atual: ${statusMeta.label}.`}
         />
       </section>
@@ -796,8 +908,8 @@ export default function Pagamentos() {
           <div className="billing-alert-head">
             <div>
               <span className="eyebrow">Assinatura do sistema</span>
-              <h2 className="section-title">Gestao do acesso da clinica</h2>
-              <p className="section-copy">Acompanhe valor, vencimento, carencia e regularizacao do acesso da clinica sem sair deste modulo.</p>
+              <h2 className="section-title">Gestao do acesso da clínica</h2>
+              <p className="section-copy">Acompanhe valor, vencimento, carência e regularização do acesso da clínica sem sair deste módulo.</p>
             </div>
             <div className="billing-alert-badge">
               <Icon name="dollar" size={22} />
@@ -808,21 +920,21 @@ export default function Pagamentos() {
             <div className="stat-card gold">
               <div className="stat-label">Valor atual</div>
               <div className="stat-value billing-stat-value">
-                {summary.billing.amount != null ? formatCurrency(summary.billing.amount) : 'A definir'}
+                {billing.amount != null ? formatCurrency(billing.amount) : 'A definir'}
               </div>
               <div className="stat-sub">Defina o plano comercial quando desejar.</div>
             </div>
 
             <div className="stat-card green">
-              <div className="stat-label">Proximo vencimento</div>
-              <div className="stat-value billing-stat-value">{formatDate(summary.billing.nextDueAt || summary.billing.graceEndsAt)}</div>
+              <div className="stat-label">Próximo vencimento</div>
+              <div className="stat-value billing-stat-value">{formatDate(billing.nextDueAt || billing.graceEndsAt)}</div>
               <div className="stat-sub">Depois do vencimento, ha 7 dias antes do bloqueio.</div>
             </div>
 
             <div className="stat-card rose">
               <div className="stat-label">Bloqueio</div>
-              <div className="stat-value billing-stat-value">{formatDate(summary.billing.blockAt)}</div>
-              <div className="stat-sub">Sem regularizacao, o acesso fica suspenso ate o pagamento.</div>
+              <div className="stat-value billing-stat-value">{formatDate(billing.blockAt)}</div>
+              <div className="stat-sub">Sem regularização, o acesso fica suspenso até o pagamento.</div>
             </div>
           </div>
         </section>
@@ -836,20 +948,20 @@ export default function Pagamentos() {
                 <strong>{statusMeta.label}</strong>
               </div>
               <div className="detail-row">
-                <span>Situacao da clinica</span>
+                <span>Situação da clínica</span>
                 <strong>{clinicStatus.label}</strong>
               </div>
               <div className="detail-row">
-                <span>ID da clinica</span>
+                <span>ID da clínica</span>
                 <strong>{clinicIdentifier}</strong>
               </div>
               <div className="detail-row">
                 <span>Dias restantes</span>
-                <strong>{summary.billing.daysRemaining ?? 'Nao definido'}</strong>
+                <strong>{billing.daysRemaining ?? 'Não definido'}</strong>
               </div>
               <div className="detail-row">
-                <span>Ultimo pagamento</span>
-                <strong>{formatDate(summary.billing.lastPaidAt)}</strong>
+                <span>Último pagamento</span>
+                <strong>{formatDate(billing.lastPaidAt)}</strong>
               </div>
             </div>
           </section>
@@ -863,20 +975,32 @@ export default function Pagamentos() {
               </span>
             </div>
             <p className="billing-gateway-copy">
-              {gatewayStatus?.message || 'Camada preparada para conectar Pix dinamico, cartao e recorrencia sem mudar a experiencia da clinica.'}
+              {gatewayStatus?.message || 'Camada preparada para conectar Pix dinâmico, cartão e recorrência sem mudar a experiência da clínica.'}
             </p>
+            {gatewayReadiness ? (
+              <div className="detail-list billing-gateway-details">
+                <div className="detail-row">
+                  <span>Prontidao</span>
+                  <strong><span className={gatewayReadinessBadge}>{gatewayReadinessLabel}</span></strong>
+                </div>
+                <div className="detail-row">
+                  <span>Pendencias</span>
+                  <strong>{gatewayReadiness.missing?.length ? gatewayReadiness.missing.join(', ') : 'Nenhuma pendencia critica'}</strong>
+                </div>
+              </div>
+            ) : null}
             {gatewayAutomation ? (
               <div className="detail-list billing-gateway-details billing-automation-details">
                 <div className="detail-row">
-                  <span>Automacao</span>
+                  <span>Automação</span>
                   <strong><span className={gatewayAutomationBadge}>{gatewayAutomationLabel}</span></strong>
                 </div>
                 <div className="detail-row">
-                  <span>Metodo padrao</span>
+                  <span>Método padrão</span>
                   <strong>{gatewayAutomation.method || 'PIX'}</strong>
                 </div>
                 <div className="detail-row">
-                  <span>Janela de geracao</span>
+                  <span>Janela de geração</span>
                   <strong>{gatewayAutomation.lookAheadDays} dia(s)</strong>
                 </div>
               </div>
@@ -885,7 +1009,7 @@ export default function Pagamentos() {
               <div className="detail-list billing-gateway-details">
                 <div className="detail-row">
                   <span>Referencia</span>
-                  <strong>{latestGatewayIntent.reference || 'Nao gerada'}</strong>
+                  <strong>{latestGatewayIntent.reference || 'Não gerada'}</strong>
                 </div>
                 <div className="detail-row">
                   <span>Valor</span>
@@ -899,7 +1023,7 @@ export default function Pagamentos() {
             ) : null}
             <div className="billing-gateway-actions">
               <button type="button" className="btn btn-outline btn-sm" onClick={handleCreateGatewayIntent} disabled={creatingGatewayIntent}>
-                {creatingGatewayIntent ? <span className="spinner" /> : <><Icon name="dollar" /> Gerar cobranca</>}
+                {creatingGatewayIntent ? <span className="spinner" /> : <><Icon name="dollar" /> Gerar cobrança</>}
               </button>
               {canManageSubscription && latestGatewayIntent?.status === 'PENDING' ? (
                 <button type="button" className="btn btn-gold btn-sm" onClick={handleSimulateGatewayPayment} disabled={simulatingGatewayPayment}>
@@ -910,7 +1034,7 @@ export default function Pagamentos() {
           </section>
 
           <section className="card billing-side-card">
-            <div className="eyebrow">Contas da clinica</div>
+            <div className="eyebrow">Contas da clínica</div>
             <div className="detail-list">
               <div className="detail-row">
                 <span>Em aberto</span>
@@ -933,11 +1057,11 @@ export default function Pagamentos() {
         <section className="card section-card billing-config-card">
           <div className="section-head">
             <div>
-              <h2 className="section-title">Configuracao da assinatura</h2>
+              <h2 className="section-title">Configuração da assinatura</h2>
               <p className="section-copy">
                 {canManageSubscription
-                  ? 'Defina valor, proximo vencimento e observacoes internas da assinatura da clinica.'
-                  : 'A clinica acompanha aqui o status da assinatura. Alteracoes de valor e confirmacao de pagamento ficam restritas ao suporte.'}
+                  ? 'Defina valor, próximo vencimento e observações internas da assinatura da clínica.'
+                  : 'A clínica acompanha aqui o status da assinatura. Alterações de valor e confirmação de pagamento ficam restritas ao suporte.'}
               </p>
             </div>
             {!canManageSubscription ? <span className="badge badge-muted">Edicao restrita ao suporte</span> : null}
@@ -959,7 +1083,7 @@ export default function Pagamentos() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Proximo vencimento</label>
+              <label className="form-label">Próximo vencimento</label>
               <input className="form-input" type="date" value={form.nextDueAt} onChange={setField('nextDueAt')} disabled={!canManageSubscription} />
             </div>
 
@@ -975,12 +1099,12 @@ export default function Pagamentos() {
             </div>
 
             <div className="form-group form-full">
-              <label className="form-label">Observacoes</label>
+              <label className="form-label">Observações</label>
               <textarea
                 className="form-textarea"
                 value={form.notes}
                 onChange={setField('notes')}
-                placeholder="Anotacoes internas sobre negociacao, condicao comercial ou forma de cobranca."
+                placeholder="Anotações internas sobre negociação, condição comercial ou forma de cobrança."
                 readOnly={!canManageSubscription}
               />
             </div>
@@ -1009,7 +1133,7 @@ export default function Pagamentos() {
             </div>
           ) : (
             <div className="billing-readonly-note">
-              <strong>Alteracoes protegidas</strong>
+              <strong>Alterações protegidas</strong>
               <p>Somente o login de suporte pode atualizar o valor da assinatura e confirmar o pagamento da plataforma.</p>
               <Link to="/contatar-suporte" className="btn btn-outline btn-sm">
                 <Icon name="mail" /> Falar com o suporte
@@ -1022,7 +1146,7 @@ export default function Pagamentos() {
           <div className="section-head">
             <div>
               <h2 className="section-title">Rastreabilidade da assinatura</h2>
-              <p className="section-copy">Toda alteracao importante do acesso da clinica fica registrada para consulta rapida e suporte auditavel.</p>
+              <p className="section-copy">Toda alteração importante do acesso da clínica fica registrada para consulta rápida e suporte auditável.</p>
             </div>
             <span className="badge badge-muted">Ultimos {auditLogs.length}</span>
           </div>
@@ -1032,8 +1156,8 @@ export default function Pagamentos() {
               <div className="empty-icon">
                 <Icon name="clipboard" size={24} />
               </div>
-              <h3>Nenhum log disponivel</h3>
-              <p>Quando houver mudancas relevantes na assinatura ou no acesso da clinica, elas aparecerao aqui.</p>
+              <h3>Nenhum log disponível</h3>
+              <p>Quando houver mudanças relevantes na assinatura ou no acesso da clínica, elas aparecerão aqui.</p>
             </div>
           ) : (
             <ol className="audit-timeline">
@@ -1048,7 +1172,7 @@ export default function Pagamentos() {
       <section className="card section-card documents-main-card billing-bills-card">
         <div className="section-head">
           <div>
-            <h2 className="section-title">Contas da clinica</h2>
+            <h2 className="section-title">Contas da clínica</h2>
             <p className="section-copy">Cadastre aluguel, folha, fornecedores, impostos e outras despesas operacionais.</p>
           </div>
 
@@ -1063,7 +1187,7 @@ export default function Pagamentos() {
               <Icon name="dollar" size={24} />
             </div>
             <h3>Nenhuma conta cadastrada</h3>
-            <p>Adicione as despesas da clinica para acompanhar vencimentos, atrasos e baixas no mesmo painel.</p>
+            <p>Adicione as despesas da clínica para acompanhar vencimentos, atrasos e baixas no mesmo painel.</p>
           </div>
         ) : (
           <div className="billing-bill-list">
@@ -1077,12 +1201,12 @@ export default function Pagamentos() {
       {billModal ? (
         <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setBillModal(null)}>
           <div className="modal">
-            <h2 className="modal-title">{billModal === 'create' ? 'Nova conta da clinica' : 'Editar conta da clinica'}</h2>
+            <h2 className="modal-title">{billModal === 'create' ? 'Nova conta da clínica' : 'Editar conta da clínica'}</h2>
 
             <div className="form-grid">
               <div className="form-group form-full">
-                <label className="form-label">Titulo *</label>
-                <input className="form-input" value={billForm.title} onChange={setBillField('title')} placeholder="Ex: Aluguel da clinica" />
+                <label className="form-label">Título *</label>
+                <input className="form-input" value={billForm.title} onChange={setBillField('title')} placeholder="Ex: Aluguel da clínica" />
               </div>
 
               <div className="form-group">
@@ -1108,12 +1232,12 @@ export default function Pagamentos() {
               </div>
 
               <div className="form-group form-full">
-                <label className="form-label">Observacoes</label>
+                <label className="form-label">Observações</label>
                 <textarea
                   className="form-textarea"
                   value={billForm.notes}
                   onChange={setBillField('notes')}
-                  placeholder="Ex: contrato mensal, fornecedor principal, observacoes sobre a cobranca."
+                  placeholder="Ex: contrato mensal, fornecedor principal, observações sobre a cobrança."
                 />
               </div>
             </div>

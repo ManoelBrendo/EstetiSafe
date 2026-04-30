@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  buildAiReadiness,
   buildClinicalInsights,
   buildInventoryPredictiveInsights,
   extractAnamnesisRiskSignals,
@@ -104,4 +105,20 @@ test('buildClinicalInsights returns an auditable deterministic summary', () => {
   assert.equal(summary.total, 3)
   assert.equal(summary.countsByPriority.WARNING, 3)
   assert.equal(summary.insights[0].priority, 'WARNING')
+})
+test('buildAiReadiness keeps clinical insights auditable by default', () => {
+  const readiness = buildAiReadiness({})
+
+  assert.equal(readiness.mode, 'deterministic_rules')
+  assert.equal(readiness.externalAiEnabled, false)
+  assert.equal(readiness.ready, true)
+  assert.ok(readiness.safeguards.includes('human_review_required'))
+})
+
+test('buildAiReadiness requires an API key before enabling external AI', () => {
+  const readiness = buildAiReadiness({ CLINICAL_AI_ENABLED: 'true', CLINICAL_AI_PROVIDER: 'OPENAI' })
+
+  assert.equal(readiness.externalAiEnabled, false)
+  assert.equal(readiness.ready, false)
+  assert.deepEqual(readiness.missing, ['CLINICAL_AI_API_KEY'])
 })

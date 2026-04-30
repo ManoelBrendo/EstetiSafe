@@ -1,4 +1,4 @@
-﻿import {
+import {
   useCallback,
   useEffect,
   useState,
@@ -133,11 +133,14 @@ const alertMeta: Record<InventoryStatus, BadgeMeta> = {
 }
 
 function formatDate(value?: string | Date | null): string {
-  if (!value) return 'NÃ£o informado'
+  if (!value) return 'Não informado'
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
 }
 
 function formatQuantity(item: ProductItemSummary): string {
@@ -158,12 +161,12 @@ function ProductModal({ form, setForm, mode, onClose, onSave, saving }: ProductM
         <div className="form-grid">
           <div className="form-group">
             <label className="form-label">Nome</label>
-            <input className="form-input" value={form.name} onChange={setField('name')} placeholder="Ex: MÃ¡scara calmante" />
+            <input className="form-input" value={form.name} onChange={setField('name')} placeholder="Ex: Máscara calmante" />
           </div>
 
           <div className="form-group">
             <label className="form-label">Categoria</label>
-            <input className="form-input" value={form.category} onChange={setField('category')} placeholder="Ex: CosmÃ©tico" />
+            <input className="form-input" value={form.category} onChange={setField('category')} placeholder="Ex: Cosmético" />
           </div>
 
           <div className="form-group">
@@ -195,7 +198,7 @@ function ProductModal({ form, setForm, mode, onClose, onSave, saving }: ProductM
           </div>
 
           <div className="form-group">
-            <label className="form-label">Entrada/AquisiÃ§Ã£o</label>
+            <label className="form-label">Entrada/Aquisição</label>
             <input className="form-input" type="date" value={form.purchasedAt} onChange={setField('purchasedAt')} />
           </div>
 
@@ -205,12 +208,12 @@ function ProductModal({ form, setForm, mode, onClose, onSave, saving }: ProductM
           </div>
 
           <div className="form-group form-full">
-            <label className="form-label">ObservaÃ§Ãµes</label>
+            <label className="form-label">Observações</label>
             <textarea
               className="form-textarea"
               value={form.notes}
               onChange={setField('notes')}
-              placeholder="ObservaÃ§Ãµes internas sobre uso, armazenamento ou procedÃªncia."
+              placeholder="Observações internas sobre uso, armazenamento ou procedência."
             />
           </div>
         </div>
@@ -250,7 +253,7 @@ function EquipmentModal({ form, setForm, mode, onClose, onSave, saving }: Equipm
         <div className="form-grid">
           <div className="form-group">
             <label className="form-label">Nome</label>
-            <input className="form-input" value={form.name} onChange={setField('name')} placeholder="Ex: Laser de baixa potÃªncia" />
+            <input className="form-input" value={form.name} onChange={setField('name')} placeholder="Ex: Laser de baixa potência" />
           </div>
 
           <div className="form-group">
@@ -269,7 +272,7 @@ function EquipmentModal({ form, setForm, mode, onClose, onSave, saving }: Equipm
           </div>
 
           <div className="form-group">
-            <label className="form-label">SÃ©rie</label>
+            <label className="form-label">Série</label>
             <input className="form-input" value={form.serialNumber} onChange={setField('serialNumber')} placeholder="Ex: SN-000123" />
           </div>
 
@@ -282,17 +285,17 @@ function EquipmentModal({ form, setForm, mode, onClose, onSave, saving }: Equipm
           </div>
 
           <div className="form-group">
-            <label className="form-label">AquisiÃ§Ã£o</label>
+            <label className="form-label">Aquisição</label>
             <input className="form-input" type="date" value={form.acquiredAt} onChange={setField('acquiredAt')} />
           </div>
 
           <div className="form-group">
-            <label className="form-label">ManutenÃ§Ã£o atÃ©</label>
+            <label className="form-label">Manutenção até</label>
             <input className="form-input" type="date" value={form.maintenanceDueAt} onChange={setField('maintenanceDueAt')} />
           </div>
 
           <div className="form-group">
-            <label className="form-label">Garantia atÃ©</label>
+            <label className="form-label">Garantia até</label>
             <input className="form-input" type="date" value={form.warrantyUntil} onChange={setField('warrantyUntil')} />
           </div>
 
@@ -317,24 +320,24 @@ function EquipmentModal({ form, setForm, mode, onClose, onSave, saving }: Equipm
               </div>
 
               <div className="form-group">
-                <label className="form-label">NÃºmero de notificaÃ§Ã£o</label>
+                <label className="form-label">Número de notificação</label>
                 <input className="form-input" value={form.notificationNumber} onChange={setField('notificationNumber')} placeholder="Ex: 25351.123456/2026-01" />
               </div>
 
               <div className="form-group form-full">
-                <label className="form-label">NÃºmero do processo</label>
+                <label className="form-label">Número do processo</label>
                 <input className="form-input" value={form.processNumber} onChange={setField('processNumber')} placeholder="Ex: 25351.654321/2026-10" />
               </div>
             </>
           ) : null}
 
           <div className="form-group form-full">
-            <label className="form-label">ObservaÃ§Ãµes</label>
+            <label className="form-label">Observações</label>
             <textarea
               className="form-textarea"
               value={form.notes}
               onChange={setField('notes')}
-              placeholder="CalibraÃ§Ã£o, local de uso, observaÃ§Ãµes sobre performance ou histÃ³rico."
+              placeholder="Calibração, local de uso, observações sobre performance ou histórico."
             />
           </div>
         </div>
@@ -369,30 +372,30 @@ function EquipmentDetailsModal({ item, onClose, onEdit }: EquipmentDetailsModalP
         <div className="detail-list inventory-detail-list">
           <div className="detail-row">
             <span>Categoria</span>
-            <strong>{item.category || 'NÃ£o informado'}</strong>
+            <strong>{item.category || 'Não informado'}</strong>
           </div>
           <div className="detail-row">
             <span>Marca</span>
-            <strong>{item.brand || 'NÃ£o informado'}</strong>
+            <strong>{item.brand || 'Não informado'}</strong>
           </div>
           <div className="detail-row">
             <span>Modelo</span>
-            <strong>{item.model || 'NÃ£o informado'}</strong>
+            <strong>{item.model || 'Não informado'}</strong>
           </div>
           <div className="detail-row">
-            <span>SÃ©rie</span>
-            <strong>{item.serialNumber || 'NÃ£o informado'}</strong>
+            <span>Série</span>
+            <strong>{item.serialNumber || 'Não informado'}</strong>
           </div>
           <div className="detail-row">
             <span>Origem</span>
-            <strong>{entryModeLabels[item.entryMode] || 'NÃ£o informado'}</strong>
+            <strong>{entryModeLabels[item.entryMode] || 'Não informado'}</strong>
           </div>
           <div className="detail-row">
-            <span>AquisiÃ§Ã£o</span>
+            <span>Aquisição</span>
             <strong>{formatDate(item.acquiredAt)}</strong>
           </div>
           <div className="detail-row">
-            <span>PrÃ³xima manutenÃ§Ã£o</span>
+            <span>Próxima manutenção</span>
             <strong>{formatDate(item.maintenanceDueAt)}</strong>
           </div>
           <div className="detail-row">
@@ -406,15 +409,15 @@ function EquipmentDetailsModal({ item, onClose, onEdit }: EquipmentDetailsModalP
           <div className="detail-list inventory-detail-list">
             <div className="detail-row">
               <span>Registro</span>
-              <strong>{item.anvisaRegistration || 'NÃ£o informado'}</strong>
+              <strong>{item.anvisaRegistration || 'Não informado'}</strong>
             </div>
             <div className="detail-row">
-              <span>NotificaÃ§Ã£o</span>
-              <strong>{item.notificationNumber || 'NÃ£o informado'}</strong>
+              <span>Notificação</span>
+              <strong>{item.notificationNumber || 'Não informado'}</strong>
             </div>
             <div className="detail-row">
               <span>Processo</span>
-              <strong>{item.processNumber || 'NÃ£o informado'}</strong>
+              <strong>{item.processNumber || 'Não informado'}</strong>
             </div>
           </div>
         </div>
@@ -491,11 +494,11 @@ function EquipmentCard({ item, onView, onEdit, onArchive }: EquipmentCardProps) 
 
       <div className="inventory-meta-grid">
         <div className="inventory-meta-item">
-          <span>SÃ©rie</span>
-          <strong>{item.serialNumber || 'NÃ£o informado'}</strong>
+          <span>Série</span>
+          <strong>{item.serialNumber || 'Não informado'}</strong>
         </div>
         <div className="inventory-meta-item">
-          <span>PrÃ³xima manutenÃ§Ã£o</span>
+          <span>Próxima manutenção</span>
           <strong>{formatDate(item.maintenanceDueAt)}</strong>
         </div>
         <div className="inventory-meta-item">
@@ -508,7 +511,7 @@ function EquipmentCard({ item, onView, onEdit, onArchive }: EquipmentCardProps) 
         <div className="inventory-regulatory-chip">
           {[
             item.anvisaRegistration ? `Registro ${item.anvisaRegistration}` : null,
-            item.notificationNumber ? 'NotificaÃ§Ã£o cadastrada' : null,
+            item.notificationNumber ? 'Notificação cadastrada' : null,
             item.processNumber ? 'Processo cadastrado' : null,
           ]
             .filter(Boolean)
@@ -562,7 +565,7 @@ export default function ProdutosEquipamentos() {
       setProducts(productsResponse.data)
       setEquipmentItems(equipmentResponse.data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'NÃ£o foi possÃ­vel carregar produtos e equipamentos'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível carregar produtos e equipamentos'))
     } finally {
       setLoading(false)
     }
@@ -630,12 +633,17 @@ export default function ProdutosEquipamentos() {
     const parsedQuantity = Number(productForm.quantity || 0)
 
     if (!Number.isFinite(parsedQuantity) || parsedQuantity < 0) {
-      toast.error('Informe uma quantidade vÃ¡lida')
+      toast.error('Informe uma quantidade válida')
+      return
+    }
+
+    if (!Number.isInteger(parsedQuantity)) {
+      toast.error('A quantidade precisa ser um número inteiro')
       return
     }
 
     if (productModal === 'edit' && !selectedProduct) {
-      toast.error('Selecione um produto vÃ¡lido antes de salvar')
+      toast.error('Selecione um produto válido antes de salvar')
       return
     }
 
@@ -665,7 +673,7 @@ export default function ProdutosEquipamentos() {
       setSelectedProduct(null)
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'NÃ£o foi possÃ­vel salvar o produto'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar o produto'))
     } finally {
       setSavingProduct(false)
     }
@@ -678,7 +686,7 @@ export default function ProdutosEquipamentos() {
     }
 
     if (equipmentModal === 'edit' && !selectedEquipment) {
-      toast.error('Selecione um equipamento vÃ¡lido antes de salvar')
+      toast.error('Selecione um equipamento válido antes de salvar')
       return
     }
 
@@ -710,7 +718,7 @@ export default function ProdutosEquipamentos() {
       setSelectedEquipment(null)
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'NÃ£o foi possÃ­vel salvar o equipamento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar o equipamento'))
     } finally {
       setSavingEquipment(false)
     }
@@ -724,7 +732,7 @@ export default function ProdutosEquipamentos() {
       toast.success('Produto arquivado')
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'NÃ£o foi possÃ­vel arquivar o produto'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível arquivar o produto'))
     }
   }
 
@@ -736,7 +744,7 @@ export default function ProdutosEquipamentos() {
       toast.success('Equipamento arquivado')
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'NÃ£o foi possÃ­vel arquivar o equipamento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível arquivar o equipamento'))
     }
   }
 
@@ -753,17 +761,17 @@ export default function ProdutosEquipamentos() {
         <div className="stat-card gold">
           <div className="stat-label">Produtos ativos</div>
           <div className="stat-value">{summary?.totalProducts ?? 0}</div>
-          <div className="stat-sub">Itens de consumo, insumos e cosmÃ©ticos da clÃ­nica.</div>
+          <div className="stat-sub">Itens de consumo, insumos e cosméticos da clínica.</div>
         </div>
         <div className="stat-card green">
           <div className="stat-label">Equipamentos ativos</div>
           <div className="stat-value">{summary?.totalEquipment ?? 0}</div>
-          <div className="stat-sub">Equipamentos tÃ©cnicos com acompanhamento de manutenÃ§Ã£o.</div>
+          <div className="stat-sub">Equipamentos técnicos com acompanhamento de manutenção.</div>
         </div>
         <div className="stat-card rose">
           <div className="stat-label">Alertas</div>
           <div className="stat-value">{summary ? summary.alerts.length : 0}</div>
-          <div className="stat-sub">Itens perto do vencimento, da manutenÃ§Ã£o ou jÃ¡ vencidos.</div>
+          <div className="stat-sub">Itens perto do vencimento, da manutenção ou já vencidos.</div>
         </div>
       </div>
 
@@ -809,7 +817,7 @@ export default function ProdutosEquipamentos() {
         <section className="card section-card">
           <div className="section-head">
             <div>
-              <h2 className="section-title">Resumo rÃ¡pido</h2>
+              <h2 className="section-title">Resumo rápido</h2>
               <p className="section-copy">Leitura imediata do risco operacional de estoque e equipamentos.</p>
             </div>
           </div>
@@ -872,7 +880,7 @@ export default function ProdutosEquipamentos() {
           <div className="section-head">
             <div>
               <h2 className="section-title">Equipamentos</h2>
-              <p className="section-copy">Cadastre equipamentos novos e antigos com manutenÃ§Ã£o e garantia.</p>
+              <p className="section-copy">Cadastre equipamentos novos e antigos com manutenção e garantia.</p>
             </div>
             <button type="button" className="btn btn-primary" onClick={openCreateEquipment}>
               <Icon name="plus" /> Novo equipamento
@@ -889,7 +897,7 @@ export default function ProdutosEquipamentos() {
                 <Icon name="box" size={24} />
               </div>
               <h3>Nenhum equipamento cadastrado</h3>
-              <p>Cadastre os equipamentos para acompanhar manutenÃ§Ã£o e vencimentos.</p>
+              <p>Cadastre os equipamentos para acompanhar manutenção e vencimentos.</p>
             </div>
           ) : (
             <div className="inventory-card-list">

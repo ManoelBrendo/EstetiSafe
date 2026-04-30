@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react'
+﻿import type { ComponentPropsWithoutRef, ReactNode } from 'react'
 
 const icons = {
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
@@ -30,6 +30,7 @@ const icons = {
   download: <><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
   refresh: <><path d="M21 12a9 9 0 0 1-15.5 6.2" /><path d="M3 12a9 9 0 0 1 15.5-6.2" /><path d="M18 2v5h-5" /><path d="M6 22v-5h5" /></>,
   fileText: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="16" y2="17" /><line x1="8" y1="9" x2="10" y2="9" /></>,
+  shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-5" /></>,
   box: <><path d="M21 8.5 12 13 3 8.5" /><path d="M21 8.5V16l-9 4.5L3 16V8.5" /><path d="M12 13v7.5" /><path d="M7.5 6 12 3l4.5 3" /></>,
 } satisfies Record<string, ReactNode>
 
@@ -57,3 +58,4 @@ export function Icon({ name, size = 16, ...props }: IconProps) {
     </svg>
   )
 }
+

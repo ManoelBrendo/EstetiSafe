@@ -14,10 +14,19 @@ export function registerLappuiPwa() {
           registration.waiting.postMessage({ type: 'SKIP_WAITING' })
         }
 
+        registration.addEventListener('updatefound', () => {
+          const installingWorker = registration.installing
+          installingWorker?.addEventListener('statechange', () => {
+            if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              installingWorker.postMessage({ type: 'SKIP_WAITING' })
+            }
+          })
+        })
+
         void registration.update()
       })
       .catch(error => {
-        console.warn('Nao foi possivel ativar o modo instalavel do LAppui.', error)
+        console.warn("Nao foi possivel ativar o modo instalavel do L'Appui.", error)
       })
   }, { once: true })
 }

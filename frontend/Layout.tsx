@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -16,12 +16,15 @@ interface NavigationItem {
 }
 
 const clinicNav: NavigationItem[] = [
-  { to: '/', icon: 'dashboard', label: 'Painel Clinico' },
+  { to: '/painel', icon: 'dashboard', label: 'Painel Clínico' },
   { to: '/agendamentos', icon: 'calendar', label: 'Agendamentos' },
   { to: '/assinatura', icon: 'dollar', label: 'Assinatura e contas' },
   { to: '/documentos', icon: 'fileText', label: 'Documentos' },
+  { to: '/auditoria', icon: 'shield', label: 'Auditoria' },
+  { to: '/configuracoes', icon: 'edit', label: 'Configuracoes' },
   { to: '/clientes', icon: 'users', label: 'Clientes' },
-  { to: '/servicos', icon: 'scissors', label: 'Servicos' },
+  { to: '/intercorrencias', icon: 'clipboard', label: 'Intercorrências' },
+  { to: '/servicos', icon: 'scissors', label: 'Serviços' },
   { to: '/profissionais', icon: 'person', label: 'Profissionais' },
   { to: '/produtos-e-equipamentos', icon: 'box', label: 'Produtos e Equipamentos' },
 ]
@@ -80,7 +83,7 @@ export function Layout({ children }: LayoutProps) {
   )
 
   const billing = supportUser
-    ? { label: 'Operacao tecnica', className: 'badge badge-gold' }
+    ? { label: 'Operação técnica', className: 'badge badge-gold' }
     : (billingMeta[(user?.billing?.effectiveStatus as BillingStatusKey) || 'TRIAL'] || billingMeta.TRIAL)
 
   const navigation = supportUser ? supportNav : clinicNav
@@ -90,7 +93,7 @@ export function Layout({ children }: LayoutProps) {
       await returnToSupport()
       navigate('/suporte')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nao foi possivel restaurar a sessao de suporte'
+      const message = error instanceof Error ? error.message : 'Não foi possível restaurar a sessão de suporte'
       toast.error(message)
     }
   }
@@ -107,7 +110,7 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className={`app-shell ${menuOpen ? 'menu-open' : ''}`}>
       <a className="skip-link" href="#main-content">
-        Ir para o conteudo principal
+        Ir para o conteúdo principal
       </a>
 
       {menuOpen ? (
@@ -142,14 +145,14 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         <div className="sidebar-clinic">
-          <div className="sidebar-clinic-label">{supportUser ? 'Acesso tecnico' : 'Clinica ativa'}</div>
+          <div className="sidebar-clinic-label">{supportUser ? 'Acesso técnico' : 'Clínica ativa'}</div>
           <strong>{clinicName}</strong>
           <p>
             {supportUser
-              ? 'Localize a conta e registre manutencoes sem perder rastreabilidade.'
+              ? 'Localize a conta e registre manutenções sem perder rastreabilidade.'
               : impersonationActive
-                ? 'Sessao de manutencao ativa para ajustes pontuais da clinica.'
-                : 'Agenda, clientes, documentos e financeiro em um fluxo unico.'}
+                ? 'Sessão de manutenção ativa para ajustes pontuais da clínica.'
+                : 'Agenda, clientes, documentos e financeiro em um fluxo único.'}
           </p>
           <div className="sidebar-clinic-status">
             <span className={billing.className}>{billing.label}</span>
@@ -157,12 +160,12 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section">{supportUser ? 'Suporte' : 'Navegacao'}</div>
+          <div className="nav-section">{supportUser ? 'Suporte' : 'Navegação'}</div>
           {navigation.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/' || item.to === '/suporte'}
+              end={item.to === '/painel' || item.to === '/suporte'}
               className={({ isActive }) => `nav-item ${item.to === '/assinatura' ? 'nav-item-finance' : ''} ${isActive ? 'active' : ''}`}
               onClick={closeMenu}
             >
@@ -195,9 +198,9 @@ export function Layout({ children }: LayoutProps) {
               <div className="user-name">{clinicName}</div>
               <div className="user-role">
                 {supportUser
-                  ? 'Operacao tecnica'
+                  ? 'Operação técnica'
                   : impersonationActive
-                    ? 'Sessao de manutencao'
+                    ? 'Sessão de manutenção'
                     : (user?.email || "Equipe L'Appui")}
               </div>
             </div>
@@ -233,8 +236,8 @@ export function Layout({ children }: LayoutProps) {
         {impersonationActive ? (
           <div className="support-session-banner">
             <div>
-              <strong>Modo manutencao ativo</strong>
-              <span>Voce esta no ambiente de {clinicName}. A navegacao segue rastreada ate o retorno ao suporte.</span>
+              <strong>Modo manutenção ativo</strong>
+              <span>Você está no ambiente de {clinicName}. A navegação segue rastreada até o retorno ao suporte.</span>
             </div>
             {hasSupportSession ? (
               <button type="button" className="btn btn-outline btn-sm" onClick={() => void handleReturnToSupport()}>
@@ -251,5 +254,7 @@ export function Layout({ children }: LayoutProps) {
     </div>
   )
 }
+
+
 
 

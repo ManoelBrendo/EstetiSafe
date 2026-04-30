@@ -7,11 +7,11 @@ export const BILLING_GATEWAY_PAYMENT_METHODS = ['PIX', 'CREDIT_CARD', 'BANK_TRAN
 export const BILLING_GATEWAY_TERMINAL_STATUSES = ['PAID', 'FAILED', 'CANCELLED', 'EXPIRED'] as const
 
 export const BILLING_GATEWAY_STATUS_LABELS: Record<BillingGatewayIntentStatus, string> = {
-  PENDING: 'Cobranca pendente',
+  PENDING: 'Cobrança pendente',
   PAID: 'Pagamento confirmado',
   FAILED: 'Falha no pagamento',
-  CANCELLED: 'Cobranca cancelada',
-  EXPIRED: 'Cobranca expirada',
+  CANCELLED: 'Cobrança cancelada',
+  EXPIRED: 'Cobrança expirada',
 }
 
 export const BILLING_GATEWAY_METHOD_LABELS: Record<BillingGatewayPaymentMethod, string> = {

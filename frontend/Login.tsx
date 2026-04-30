@@ -15,7 +15,7 @@ function validateLoginForm({ email, password }: LoginFormState) {
   const normalizedEmail = email.trim()
 
   if (!normalizedEmail) {
-    return 'Informe o e-mail da clinica.'
+    return 'Informe o e-mail da clínica.'
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -59,13 +59,13 @@ export default function Login() {
 
     try {
       const authenticatedUser = await login(form.email.trim().toLowerCase(), form.password)
-      toast.success('Sessao iniciada com sucesso')
+      toast.success('Sessão iniciada com sucesso')
       navigate(authenticatedUser?.role === 'SUPPORT' ? '/suporte' : '/painel')
     } catch (error) {
       const status = (error as { response?: { status?: number } })?.response?.status
       const message = status === 404
         ? 'Nenhuma conta encontrada com este e-mail.'
-        : getApiErrorMessage(error, 'Nao foi possivel entrar')
+        : getApiErrorMessage(error, 'Não foi possível entrar')
 
       setAuthError(message)
       toast.error(message)
@@ -83,14 +83,14 @@ export default function Login() {
           </div>
           <div className="login-brand-copy">
             <strong className="login-brand-name">L'Appui</strong>
-            <p className="login-brand-subtitle">Acesso ao painel da clinica</p>
+            <p className="login-brand-subtitle">Acesso ao painel da clínica</p>
           </div>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit} noValidate>
           <div className="login-heading">
             <h1>Entrar</h1>
-            <p>Use seu e-mail e senha para acessar a operacao da clinica.</p>
+            <p>Use seu e-mail e senha para acessar a operação da clínica.</p>
           </div>
 
           <div className="form-group">
@@ -99,7 +99,7 @@ export default function Login() {
               id="login-email"
               className="form-input"
               type="email"
-              placeholder="contato@clinica.com"
+              placeholder="contato@clínica.com"
               value={form.email}
               onChange={updateField('email')}
               autoComplete="email"
@@ -139,7 +139,7 @@ export default function Login() {
           </button>
 
           <p className="login-register-row">
-            Ainda nao possui conta? <Link className="login-register-link" to="/register">Cadastrar</Link>
+            Ainda não possui conta? <Link className="login-register-link" to="/register">Cadastrar</Link>
           </p>
         </form>
       </section>

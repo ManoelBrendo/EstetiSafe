@@ -49,7 +49,7 @@ function getFirstName(name) {
   return String(name || 'cliente').trim().split(/\s+/)[0] || 'cliente'
 }
 
-function buildReactivationMessage(candidate, clinicName = 'sua clinica') {
+function buildReactivationMessage(candidate, clinicName = 'sua clínica') {
   const firstName = getFirstName(candidate.name)
   return `Ola, ${firstName}. Sentimos sua falta na ${clinicName}. Podemos te ajudar a agendar uma nova avaliacao? Responda SIM para continuar.`
 }
@@ -66,7 +66,7 @@ function buildReactivationCandidates(clients = [], options = {}) {
   const inactiveDaysThreshold = Number.isFinite(options.inactiveDaysThreshold) ? options.inactiveDaysThreshold : 90
   const newClientDaysThreshold = Number.isFinite(options.newClientDaysThreshold) ? options.newClientDaysThreshold : 30
   const limit = Number.isFinite(options.limit) ? options.limit : 25
-  const clinicName = options.clinicName || 'sua clinica'
+  const clinicName = options.clinicName || 'sua clínica'
   const candidates = []
 
   for (const client of clients) {

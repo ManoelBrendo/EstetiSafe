@@ -1,4 +1,6 @@
-﻿const { z } = require('zod')
+const { z } = require('zod')
+
+const imageDataUrlSchema = z.union([z.string().trim().startsWith('data:image/').max(8_000_000), z.null()])
 
 const loginSchema = z.object({
   email: z.string().trim().email(),
@@ -12,6 +14,7 @@ const clientShape = {
   phone: z.string().trim().min(8).max(30),
   birthDate: z.string().trim().optional().or(z.literal('')),
   cpf: z.string().trim().optional(),
+  photoDataUrl: imageDataUrlSchema.optional(),
   sex: z.string().trim().max(30).optional(),
   maritalStatus: z.string().trim().max(60).optional(),
   profession: z.string().trim().max(120).optional(),
@@ -36,6 +39,7 @@ const clientUpdateSchema = z.object({
   phone: z.string().trim().min(8).max(30).optional(),
   birthDate: z.string().trim().optional().or(z.literal('')),
   cpf: z.string().trim().optional(),
+  photoDataUrl: imageDataUrlSchema.optional(),
   sex: z.string().trim().max(30).optional(),
   maritalStatus: z.string().trim().max(60).optional(),
   profession: z.string().trim().max(120).optional(),
@@ -51,6 +55,7 @@ const anamnesisUpsertSchema = z.object({
     phone: z.string().trim().min(8).max(30).optional(),
     birthDate: z.string().trim().optional().or(z.literal('')),
     cpf: z.string().trim().optional(),
+    photoDataUrl: imageDataUrlSchema.optional(),
     sex: z.string().trim().max(30).optional(),
     maritalStatus: z.string().trim().max(60).optional(),
     profession: z.string().trim().max(120).optional(),

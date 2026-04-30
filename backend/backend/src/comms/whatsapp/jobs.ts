@@ -80,7 +80,7 @@ export function createAppointmentConfirmationJob({
             bodyParams: [
               appointment.client.name,
               appointment.service?.name || 'Atendimento',
-              appointment.professional?.name || 'Equipe da clinica',
+              appointment.professional?.name || 'Equipe da clínica',
               formatAppointmentDateTime(appointment.startAt),
             ],
           })

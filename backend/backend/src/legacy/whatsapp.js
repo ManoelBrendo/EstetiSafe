@@ -424,10 +424,95 @@ function isMetaSignatureValid({ signature, rawBody, appSecret }) {
   return safeCompareText(signature, expected)
 }
 
+function isMissingWhatsAppPersistenceError(error) {
+  const code = error?.code
+  const message = String(error?.message || '').toLowerCase()
+
+  return code === 'P2021'
+    || code === 'P2022'
+    || message.includes('whatsapp_clinic_configs')
+    || message.includes('whatsapp_logs')
+}
+
+async function countWhatsAppRecords(model, args = {}) {
+  if (!model?.count) return 0
+
+  try {
+    return await model.count(args)
+  } catch (error) {
+    if (isMissingWhatsAppPersistenceError(error)) return 0
+    throw error
+  }
+}
+
+function buildWhatsAppReadiness({
+  env = process.env,
+  activeConfigCount = 0,
+  outboundLast24h = 0,
+  inboundLast24h = 0,
+  failedLast24h = 0,
+  graphApiVersion = DEFAULT_GRAPH_API_VERSION,
+} = {}) {
+  const hasProviderConfig = activeConfigCount > 0
+  const hasGlobalVerifyToken = Boolean(env.WHATSAPP_VERIFY_TOKEN || env.WHATSAPP_WEBHOOK_VERIFY_TOKEN)
+  const webhookConfigured = hasGlobalVerifyToken || hasProviderConfig
+  const appSecretConfigured = Boolean(env.WHATSAPP_APP_SECRET)
+  const confirmationJobEnabled = env.WHATSAPP_CONFIRMATION_JOB_ENABLED === 'true'
+  const missing = []
+
+  if (!hasProviderConfig) missing.push('whatsappClinicConfig ativa')
+  if (!webhookConfigured) missing.push('WHATSAPP_VERIFY_TOKEN')
+  if (!appSecretConfigured) missing.push('WHATSAPP_APP_SECRET')
+  if (!confirmationJobEnabled) missing.push('WHATSAPP_CONFIRMATION_JOB_ENABLED=true')
+
+  const readyForLive = hasProviderConfig && webhookConfigured && appSecretConfigured && confirmationJobEnabled
+  const status = readyForLive ? 'READY' : (hasProviderConfig ? 'PARTIAL' : 'NOT_CONFIGURED')
+
+  return {
+    channel: 'whatsapp',
+    status,
+    readyForLive,
+    provider: 'Meta WhatsApp Business API',
+    graphApiVersion,
+    activeConfigCount,
+    webhookConfigured,
+    appSecretConfigured,
+    confirmationJobEnabled,
+    confirmationWindowHours: 24,
+    outboundLast24h,
+    inboundLast24h,
+    failedLast24h,
+    missing,
+    message: readyForLive
+      ? 'WhatsApp pronto para lembretes, respostas SIM/NAO e auditoria de entrega.'
+      : 'WhatsApp preparado em camada segura; faltam configuracoes para envio automatico em producao.',
+  }
+}
+
+async function getWhatsAppOperationalSnapshot({ prisma, env = process.env, now = new Date() } = {}) {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const [activeConfigCount, outboundLast24h, inboundLast24h, failedLast24h] = await Promise.all([
+    countWhatsAppRecords(prisma?.whatsappClinicConfig, { where: { active: true } }),
+    countWhatsAppRecords(prisma?.whatsappLog, { where: { direction: 'OUTBOUND', createdAt: { gte: since } } }),
+    countWhatsAppRecords(prisma?.whatsappLog, { where: { direction: 'INBOUND', createdAt: { gte: since } } }),
+    countWhatsAppRecords(prisma?.whatsappLog, { where: { status: 'FAILED', createdAt: { gte: since } } }),
+  ])
+
+  return buildWhatsAppReadiness({
+    env,
+    activeConfigCount,
+    outboundLast24h,
+    inboundLast24h,
+    failedLast24h,
+    graphApiVersion: env.WHATSAPP_GRAPH_API_VERSION || DEFAULT_GRAPH_API_VERSION,
+  })
+}
+
 function registerWhatsAppRoutes({
   app,
   prisma,
   handle,
+  authMiddleware,
   verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
   appSecret = process.env.WHATSAPP_APP_SECRET,
   logger = console,
@@ -472,6 +557,20 @@ function registerWhatsAppRoutes({
   }
 
   app.post('/webhooks/whatsapp', handle ? handle(postHandler) : postHandler)
+
+  if (authMiddleware) {
+    const statusHandler = async (_req, res) => {
+      const whatsapp = await getWhatsAppOperationalSnapshot({ prisma, env: process.env })
+
+      res.json({
+        generatedAt: new Date().toISOString(),
+        channels: { whatsapp },
+        message: 'Status operacional de notificacoes sem expor tokens, secrets ou credenciais sensiveis.',
+      })
+    }
+
+    app.get('/notifications/status', authMiddleware, handle ? handle(statusHandler) : statusHandler)
+  }
 }
 
 function formatAppointmentDateTime(date) {
@@ -561,7 +660,7 @@ function createAppointmentConfirmationJob({
             bodyParams: [
               appointment.client.name,
               appointment.service?.name || 'Atendimento',
-              appointment.professional?.name || 'Equipe da clinica',
+              appointment.professional?.name || 'Equipe da clínica',
               formatAppointmentDateTime(appointment.startAt),
             ],
           })
@@ -632,12 +731,14 @@ module.exports = {
   assertPhoneNumberId,
   buildMetaSignature,
   buildTemplateComponents,
+  buildWhatsAppReadiness,
   createAppointmentConfirmationJob,
   createProviderFromConfig,
   extractWebhookEvents,
   findConfigForWebhook,
   getIncomingMessageText,
   getProviderMessageId,
+  getWhatsAppOperationalSnapshot,
   handleInboundMessage,
   handleStatusEvent,
   isMetaSignatureValid,

@@ -1,16 +1,24 @@
 import type {
   AnamnesisForm,
+  AnamnesisPayload,
   AnamnesisRecordInput,
   AnamnesisRecordVersion,
   AestheticCondition,
   AestheticConditionMeta,
   AestheticHistoryEntry,
   ClientSeed,
+  DermatologicalHistoryKey,
+  DermatologicalHistorySection,
   FieldDefinition,
+  ObservedConditionKey,
+  ObservedConditionsSection,
+  PreExistingConditionKey,
   SelectOption,
   TreatmentService,
 } from './clinicalTypes'
 
+type UnknownRecord = Record<string, unknown>
+type MutableUnknownRecord = Record<string | number, unknown>
 export const ANAMNESIS_SEX_OPTIONS: SelectOption[] = [
   { value: 'FEMININO', label: 'Feminino' },
   { value: 'MASCULINO', label: 'Masculino' },
@@ -63,7 +71,7 @@ export const WORKOUTS_PER_WEEK_OPTIONS: SelectOption[] = Array.from({ length: 8 
   label: index === 0 ? 'Não pratica' : `${index}x por semana`,
 }))
 
-export const PRE_EXISTING_CONDITION_FIELDS: FieldDefinition[] = [
+export const PRE_EXISTING_CONDITION_FIELDS: FieldDefinition<PreExistingConditionKey>[] = [
   { key: 'hypertension', label: 'Hipertensão' },
   { key: 'diabetes', label: 'Diabetes' },
   { key: 'heartDisease', label: 'Doenças cardíacas' },
@@ -73,7 +81,7 @@ export const PRE_EXISTING_CONDITION_FIELDS: FieldDefinition[] = [
   { key: 'liverIssues', label: 'Problemas hepáticos' },
 ]
 
-export const DERMATOLOGICAL_HISTORY_FIELDS: FieldDefinition[] = [
+export const DERMATOLOGICAL_HISTORY_FIELDS: FieldDefinition<DermatologicalHistoryKey>[] = [
   { key: 'activeAcne', label: 'Acne ativa' },
   { key: 'rosacea', label: 'Rosácea' },
   { key: 'melasma', label: 'Melasma' },
@@ -148,7 +156,7 @@ export const AESTHETIC_CONDITION_LIBRARY: AestheticConditionMeta[] = [
   },
 ]
 
-const OBSERVED_CONDITION_TYPE_MAP = {
+const OBSERVED_CONDITION_TYPE_MAP: Record<ObservedConditionKey, AestheticCondition['type']> = {
   wrinkles: 'wrinkles',
   sagging: 'sagging',
   spots: 'spots',
@@ -158,31 +166,31 @@ const OBSERVED_CONDITION_TYPE_MAP = {
   stretchMarks: 'stretchMarks',
 }
 
-const CONDITION_LABEL_BY_TYPE = Object.fromEntries(
+const CONDITION_LABEL_BY_TYPE: Record<string, string> = Object.fromEntries(
   AESTHETIC_CONDITION_LIBRARY.map(condition => [condition.type, condition.label])
 )
 
-function digitsOnly(value) {
+function digitsOnly(value: unknown): string {
   return String(value || '').replace(/\D/g, '')
 }
 
-function createLocalId(prefix) {
+function createLocalId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
 }
 
 export const PHOTO_CONSENT_VERSION = 'photo-consent-v1'
 
-export function todayDateInput() {
+export function todayDateInput(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function normalizeDateInput(value) {
+export function normalizeDateInput(value: unknown): string {
   if (!value) return ''
   const asString = String(value)
   return asString.length >= 10 ? asString.slice(0, 10) : asString
 }
 
-export function applyDateInputMask(value) {
+export function applyDateInputMask(value: unknown): string {
   const digits = digitsOnly(value).slice(0, 8)
 
   if (digits.length <= 2) return digits
@@ -191,7 +199,7 @@ export function applyDateInputMask(value) {
   return digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4)
 }
 
-export function formatDateInputDisplay(value) {
+export function formatDateInputDisplay(value: unknown): string {
   const normalized = normalizeDateInput(value)
   if (!normalized) return ''
 
@@ -203,7 +211,7 @@ export function formatDateInputDisplay(value) {
   return applyDateInputMask(normalized)
 }
 
-export function parseDateInputDisplay(value) {
+export function parseDateInputDisplay(value: unknown): string {
   if (!value) return ''
 
   const masked = applyDateInputMask(value)
@@ -220,7 +228,7 @@ export function parseDateInputDisplay(value) {
   return year + '-' + month + '-' + day
 }
 
-export function calculateAgeFromBirthDate(value) {
+export function calculateAgeFromBirthDate(value: unknown): string {
   if (!value) return ''
 
   const birthDate = new Date(normalizeDateInput(value) + 'T12:00:00.000Z')
@@ -237,32 +245,32 @@ export function calculateAgeFromBirthDate(value) {
   return age >= 0 ? String(age) : ''
 }
 
-function safeText(value) {
+function safeText(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function safeBoolean(value) {
+function safeBoolean(value: unknown): boolean {
   return Boolean(value)
 }
 
-function safePositiveInteger(value) {
+function safePositiveInteger(value: unknown): number | null {
   const parsedValue = Number(value)
   return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null
 }
 
-function safeNonNegativeInteger(value) {
+function safeNonNegativeInteger(value: unknown): number | null {
   if (value === '' || value === null || value === undefined) return null
 
   const parsedValue = Number(value)
   return Number.isInteger(parsedValue) && parsedValue >= 0 ? parsedValue : null
 }
 
-function safeSessionCount(value) {
+function safeSessionCount(value: unknown): number {
   const parsedValue = Number(value)
   return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : 1
 }
 
-function mapLegacySkinType(value) {
+function mapLegacySkinType(value: unknown): string {
   const normalized = safeText(value).trim().toUpperCase()
 
   if (normalized.includes('OLEOS')) return 'OLEOSA'
@@ -273,19 +281,27 @@ function mapLegacySkinType(value) {
   return ''
 }
 
-function deepMerge(target, source) {
+function isPlainRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function deepMerge<T>(target: T, source: unknown): T & UnknownRecord {
   if (Array.isArray(target)) {
-    return Array.isArray(source) ? source : target
+    return (Array.isArray(source) ? source : target) as T & UnknownRecord
   }
 
-  if (!target || typeof target !== 'object') {
-    return source ?? target
+  if (!isPlainRecord(target)) {
+    return (source ?? target) as T & UnknownRecord
   }
 
-  const result = { ...target }
+  if (!isPlainRecord(source)) {
+    return target as T & UnknownRecord
+  }
 
-  Object.keys(source || {}).forEach(key => {
-    const currentValue = target[key]
+  const result: UnknownRecord = { ...target }
+
+  Object.keys(source).forEach(key => {
+    const currentValue = target[key as keyof T]
     const nextValue = source[key]
 
     if (Array.isArray(currentValue)) {
@@ -293,14 +309,7 @@ function deepMerge(target, source) {
       return
     }
 
-    if (
-      currentValue
-      && typeof currentValue === 'object'
-      && !Array.isArray(currentValue)
-      && nextValue
-      && typeof nextValue === 'object'
-      && !Array.isArray(nextValue)
-    ) {
+    if (isPlainRecord(currentValue) && isPlainRecord(nextValue)) {
       result[key] = deepMerge(currentValue, nextValue)
       return
     }
@@ -308,10 +317,10 @@ function deepMerge(target, source) {
     result[key] = nextValue ?? currentValue
   })
 
-  return result
+  return result as T & UnknownRecord
 }
 
-function buildLegacyObservedConditions(legacyObservedConditions: Record<string, any> = {}) {
+function buildLegacyObservedConditions(legacyObservedConditions: Partial<ObservedConditionsSection> = {}): ObservedConditionsSection {
   return {
     wrinkles: safeBoolean(legacyObservedConditions.wrinkles),
     sagging: safeBoolean(legacyObservedConditions.sagging),
@@ -323,7 +332,7 @@ function buildLegacyObservedConditions(legacyObservedConditions: Record<string, 
   }
 }
 
-function getConditionMeta(type) {
+function getConditionMeta(type: string): AestheticConditionMeta {
   return AESTHETIC_CONDITION_LIBRARY.find(condition => condition.type === type) || {
     type,
     label: CONDITION_LABEL_BY_TYPE[type] || type,
@@ -364,7 +373,7 @@ export function createEmptyTreatmentService(partial: Partial<TreatmentService> =
   }
 }
 
-function deriveLegacyAestheticHistoryEntries(legacyAestheticHistory: Record<string, any> = {}) {
+function deriveLegacyAestheticHistoryEntries(legacyAestheticHistory: UnknownRecord = {}): AestheticHistoryEntry[] {
   if (!legacyAestheticHistory || typeof legacyAestheticHistory !== 'object') {
     return []
   }
@@ -389,7 +398,7 @@ function deriveLegacyAestheticHistoryEntries(legacyAestheticHistory: Record<stri
   ]
 }
 
-function normalizeAestheticHistoryEntries(entries = [], legacyAestheticHistory = {}) {
+function normalizeAestheticHistoryEntries(entries: Array<Partial<AestheticHistoryEntry>> = [], legacyAestheticHistory: UnknownRecord = {}): AestheticHistoryEntry[] {
   const source = Array.isArray(entries) && entries.length
     ? entries
     : deriveLegacyAestheticHistoryEntries(legacyAestheticHistory)
@@ -399,9 +408,9 @@ function normalizeAestheticHistoryEntries(entries = [], legacyAestheticHistory =
     .filter(entry => entry.procedureName || entry.procedureDate || entry.notes || entry.intercurrences)
 }
 
-function normalizeAestheticConditions(conditions: Array<Partial<AestheticCondition>> = [], legacyObservedConditions: Record<string, any> = {}, dermatologicalHistory: Record<string, any> = {}) {
+function normalizeAestheticConditions(conditions: Array<Partial<AestheticCondition>> = [], legacyObservedConditions: Partial<ObservedConditionsSection> = {}, dermatologicalHistory: Partial<DermatologicalHistorySection> = {}): AestheticCondition[] {
   const normalizedObserved = buildLegacyObservedConditions(legacyObservedConditions)
-  const sourceMap = new Map()
+  const sourceMap = new Map<string, AestheticCondition>()
 
   if (Array.isArray(conditions)) {
     conditions.forEach(condition => {
@@ -409,6 +418,11 @@ function normalizeAestheticConditions(conditions: Array<Partial<AestheticConditi
       if (!type) return
       sourceMap.set(type, createEmptyAestheticCondition(condition))
     })
+  }
+
+  const getObservedPresence = (type: string) => {
+    if (!Object.prototype.hasOwnProperty.call(normalizedObserved, type)) return false
+    return safeBoolean(normalizedObserved[type as ObservedConditionKey])
   }
 
   const defaultConditions = AESTHETIC_CONDITION_LIBRARY.map(meta => {
@@ -419,7 +433,7 @@ function normalizeAestheticConditions(conditions: Array<Partial<AestheticConditi
         ? safeBoolean(dermatologicalHistory.activeAcne)
         : meta.type === 'melasma'
           ? safeBoolean(dermatologicalHistory.melasma)
-          : safeBoolean(normalizedObserved[meta.type])
+          : getObservedPresence(meta.type)
 
     return createEmptyAestheticCondition({
       type: meta.type,
@@ -442,8 +456,8 @@ function normalizeAestheticConditions(conditions: Array<Partial<AestheticConditi
   return [...defaultConditions, ...customConditions]
 }
 
-function buildObservedConditionsFromConditions(conditions = []) {
-  const base = {
+function buildObservedConditionsFromConditions(conditions: Array<Partial<AestheticCondition>> = []): ObservedConditionsSection {
+  const base: ObservedConditionsSection = {
     wrinkles: false,
     sagging: false,
     spots: false,
@@ -455,17 +469,17 @@ function buildObservedConditionsFromConditions(conditions = []) {
 
   conditions.forEach(condition => {
     const type = safeText(condition?.type)
-    const key = Object.keys(OBSERVED_CONDITION_TYPE_MAP).find(item => OBSERVED_CONDITION_TYPE_MAP[item] === type)
+    const matchedEntry = (Object.entries(OBSERVED_CONDITION_TYPE_MAP) as Array<[ObservedConditionKey, string]>)
+      .find(([, mappedType]) => mappedType === type)
 
-    if (key) {
-      base[key] = safeBoolean(condition.present)
+    if (matchedEntry) {
+      base[matchedEntry[0]] = safeBoolean(condition.present)
     }
   })
 
   return base
 }
-
-function deriveLegacyTreatmentServices(treatmentPlan: Record<string, any> = {}) {
+function deriveLegacyTreatmentServices(treatmentPlan: UnknownRecord = {}): TreatmentService[] {
   const recommendedProcedure = safeText(treatmentPlan.recommendedProcedure)
   const hasLegacyProtocol = Boolean(
     recommendedProcedure
@@ -494,7 +508,7 @@ function deriveLegacyTreatmentServices(treatmentPlan: Record<string, any> = {}) 
   ]
 }
 
-function normalizeTreatmentServices(services = [], treatmentPlan = {}) {
+function normalizeTreatmentServices(services: Array<Partial<TreatmentService>> = [], treatmentPlan: UnknownRecord = {}): TreatmentService[] {
   const source = Array.isArray(services) && services.length ? services : deriveLegacyTreatmentServices(treatmentPlan)
 
   return source
@@ -610,6 +624,7 @@ export function createEmptyAnamnesisForm(client: ClientSeed = {}): AnamnesisForm
       marketingUseAuthorized: false,
       consentVersion: PHOTO_CONSENT_VERSION,
       consentAcceptedAt: null,
+      consentAwarenessConfirmed: false,
     },
     treatmentPlan: {
       recommendedProcedure: '',
@@ -634,7 +649,7 @@ export function createEmptyAnamnesisForm(client: ClientSeed = {}): AnamnesisForm
   }
 }
 
-function mapLegacyAnamnesis(answers: Record<string, any> = {}, client: ClientSeed = {}) {
+function mapLegacyAnamnesis(answers: UnknownRecord = {}, client: ClientSeed = {}): UnknownRecord {
   const combinedPreviousTreatment = [safeText(answers.proceduresHistory), safeText(answers.currentRoutine)]
     .filter(Boolean)
     .join('\n\n')
@@ -706,6 +721,7 @@ function mapLegacyAnamnesis(answers: Record<string, any> = {}, client: ClientSee
       marketingUseAuthorized: safeBoolean(answers.marketingUseAuthorized || answers.imageUseAuthorized),
       consentVersion: PHOTO_CONSENT_VERSION,
       consentAcceptedAt: null,
+      consentAwarenessConfirmed: safeBoolean(answers.consentAwarenessConfirmed || answers.clinicalUseAuthorized || answers.imageUseAuthorized),
     },
     treatmentPlan: {},
     scienceTerm: {},
@@ -720,8 +736,11 @@ function mapLegacyAnamnesis(answers: Record<string, any> = {}, client: ClientSee
 }
 
 export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | AnamnesisRecordVersion | null | undefined, client: ClientSeed = {}): AnamnesisRecordVersion {
-  const raw = record && 'answers' in record ? record.answers || record || {} : record || {}
-  const structured = raw.identification && raw.chiefComplaint ? raw : mapLegacyAnamnesis(raw, client)
+  const rawSource = record && 'answers' in record ? record.answers || record || {} : record || {}
+  const raw = isPlainRecord(rawSource) ? rawSource : {}
+  const structured = isPlainRecord(raw.identification) && isPlainRecord(raw.chiefComplaint)
+    ? raw
+    : mapLegacyAnamnesis(raw, client)
   const merged = deepMerge(createEmptyAnamnesisForm(client), structured)
   const birthDate = normalizeDateInput(merged.identification.birthDate || client.birthDate)
   const normalizedConditions = normalizeAestheticConditions(
@@ -748,7 +767,7 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
     ...merged.healthHistory,
     aestheticHistory: normalizeAestheticHistoryEntries(
       merged.healthHistory?.aestheticHistory,
-      merged.aestheticHistory
+      isPlainRecord(merged.aestheticHistory) ? merged.aestheticHistory : {}
     ),
   }
 
@@ -768,6 +787,7 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
   const legacyImageUseAuthorized = safeBoolean(merged.photoRecord?.imageUseAuthorized)
   const clinicalUseAuthorized = safeBoolean(merged.photoRecord?.clinicalUseAuthorized || legacyImageUseAuthorized)
   const marketingUseAuthorized = safeBoolean(merged.photoRecord?.marketingUseAuthorized || legacyImageUseAuthorized)
+  const consentAwarenessConfirmed = safeBoolean(merged.photoRecord?.consentAwarenessConfirmed || (clinicalUseAuthorized && merged.photoRecord?.consentAcceptedAt))
 
   merged.photoRecord = {
     ...merged.photoRecord,
@@ -784,11 +804,12 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
     marketingUseAuthorized,
     consentVersion: safeText(merged.photoRecord?.consentVersion) || PHOTO_CONSENT_VERSION,
     consentAcceptedAt: merged.photoRecord?.consentAcceptedAt ? safeText(merged.photoRecord.consentAcceptedAt) : null,
+    consentAwarenessConfirmed,
   }
 
   merged.treatmentPlan = {
     ...merged.treatmentPlan,
-    services: normalizeTreatmentServices(merged.treatmentPlan?.services, merged.treatmentPlan),
+    services: normalizeTreatmentServices(merged.treatmentPlan?.services, merged.treatmentPlan as unknown as UnknownRecord),
     sessionCount: merged.treatmentPlan?.sessionCount ?? '',
   }
 
@@ -813,12 +834,19 @@ export function normalizeAnamnesisRecord(record: AnamnesisRecordInput | Anamnesi
 
 export function updateFormValue(current: AnamnesisForm, path: Array<string | number>, value: unknown): AnamnesisForm {
   const next = { ...current }
-  let cursor = next
+  let cursor: MutableUnknownRecord = next as unknown as MutableUnknownRecord
 
   for (let index = 0; index < path.length - 1; index += 1) {
     const key = path[index]
-    cursor[key] = Array.isArray(cursor[key]) ? [...cursor[key]] : { ...cursor[key] }
-    cursor = cursor[key]
+    const currentValue = cursor[key]
+    const clonedValue = Array.isArray(currentValue)
+      ? [...currentValue]
+      : isPlainRecord(currentValue)
+        ? { ...currentValue }
+        : {}
+
+    cursor[key] = clonedValue
+    cursor = clonedValue as MutableUnknownRecord
   }
 
   cursor[path[path.length - 1]] = value
@@ -846,8 +874,7 @@ export function updateFormValue(current: AnamnesisForm, path: Array<string | num
 
   return next
 }
-
-export function buildAnamnesisPayload(form: AnamnesisForm): Record<string, unknown> {
+export function buildAnamnesisPayload(form: AnamnesisForm): AnamnesisPayload {
   const conditions = normalizeAestheticConditions(
     form.aestheticEvaluation.conditions,
     form.aestheticEvaluation.observedConditions,
@@ -855,6 +882,7 @@ export function buildAnamnesisPayload(form: AnamnesisForm): Record<string, unkno
   )
   const clinicalUseAuthorized = safeBoolean(form.photoRecord.clinicalUseAuthorized || form.photoRecord.imageUseAuthorized)
   const marketingUseAuthorized = safeBoolean(form.photoRecord.marketingUseAuthorized || form.photoRecord.imageUseAuthorized)
+  const consentAwarenessConfirmed = safeBoolean(form.photoRecord.consentAwarenessConfirmed)
   const consentAcceptedAt = clinicalUseAuthorized
     ? safeText(form.photoRecord.consentAcceptedAt) || new Date().toISOString()
     : null
@@ -939,6 +967,7 @@ export function buildAnamnesisPayload(form: AnamnesisForm): Record<string, unkno
       marketingUseAuthorized,
       consentVersion: safeText(form.photoRecord.consentVersion) || PHOTO_CONSENT_VERSION,
       consentAcceptedAt,
+      consentAwarenessConfirmed,
       photos: (form.photoRecord.photos || []).map(photo => ({
         id: photo.id,
         caption: safeText(photo.caption).trim(),

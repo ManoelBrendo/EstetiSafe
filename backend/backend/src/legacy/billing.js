@@ -22,6 +22,11 @@ const clinicBillSchema = z.object({
   active: z.boolean().optional(),
 })
 
+function toSafeNumber(value, fallback = 0) {
+  const parsed = Number(value ?? fallback)
+  return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : fallback
+}
+
 function getBillDueStatus(date, warningDays = 30) {
   if (!date) {
     return {
@@ -75,7 +80,7 @@ function summarizeClinicBill(record) {
   const paid = Boolean(record.paidAt)
   const status = paid ? 'PAID' : due.status === 'OVERDUE' ? 'OVERDUE' : 'PENDING'
   const statusLabel = paid
-   ? 'Pago'
+    ? 'Pago'
     : status === 'OVERDUE'
       ? 'Em atraso'
       : due.label
@@ -84,7 +89,7 @@ function summarizeClinicBill(record) {
     id: record.id,
     title: record.title,
     category: record.category,
-    amount: record.amount,
+    amount: toSafeNumber(record.amount),
     dueAt: record.dueAt,
     paidAt: record.paidAt,
     notes: record.notes,
@@ -97,7 +102,7 @@ function summarizeClinicBill(record) {
 }
 
 function buildClinicBillsDashboard(records) {
-  const bills = records.map(summarizeClinicBill)
+  const bills = (Array.isArray(records) ? records : []).map(summarizeClinicBill).filter(Boolean)
   const openBills = bills.filter(bill => bill.status !== 'PAID')
   const overdueBills = bills.filter(bill => bill.status === 'OVERDUE')
   const paidBills = bills.filter(bill => bill.status === 'PAID')
@@ -125,13 +130,36 @@ function normalizeClinicBillData(data, parseDateOnly) {
 
   if ('title' in data) normalized.title = data.title.trim()
   if ('category' in data) normalized.category = data.category?.trim() || null
-  if ('amount' in data) normalized.amount = data.amount
+  if ('amount' in data) normalized.amount = toSafeNumber(data.amount)
   if ('dueAt' in data) normalized.dueAt = data.dueAt ? parseDateOnly(data.dueAt, 'dueAt') : null
   if ('paidAt' in data) normalized.paidAt = data.paidAt ? parseDateOnly(data.paidAt, 'paidAt') : null
   if ('notes' in data) normalized.notes = data.notes?.trim() || null
   if ('active' in data) normalized.active = data.active
 
   return normalized
+}
+
+function serializeBillAuditDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString()
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString()
+}
+
+function buildClinicBillAuditMetadata(record, overrides = {}) {
+  const summary = summarizeClinicBill(record) || {}
+
+  return {
+    title: summary.title || null,
+    category: summary.category || null,
+    amount: summary.amount ?? null,
+    dueAt: serializeBillAuditDate(summary.dueAt),
+    paidAt: serializeBillAuditDate(summary.paidAt),
+    status: summary.status || null,
+    statusLabel: summary.statusLabel || null,
+    ...overrides,
+  }
 }
 
 function registerBillingRoutes({
@@ -270,6 +298,9 @@ function registerBillingRoutes({
       clinicName: user.clinicName,
       email: user.email,
       billing: getBillingSnapshot(user),
+      permissions: {
+        canManageSubscription: canManageSubscription(req),
+      },
     })
   }))
 
@@ -340,6 +371,9 @@ function registerBillingRoutes({
       clinicName: user.clinicName,
       email: user.email,
       billing: getBillingSnapshot(user),
+      permissions: {
+        canManageSubscription: canManageSubscription(req),
+      },
     })
   }))
 
@@ -385,47 +419,94 @@ function registerBillingRoutes({
         userId: req.currentUser.id,
       },
     })
+    const summary = summarizeClinicBill(record)
 
-    res.status(201).json(summarizeClinicBill(record))
+    await createAuditLogFromRequest(req, {
+      clinicId: req.currentUser.ownedClinic?.id || null,
+      action: 'CLINIC_BILL_CREATE',
+      entityType: 'ClinicBill',
+      entityId: record.id,
+      metadata: buildClinicBillAuditMetadata(record),
+    })
+
+    res.status(201).json(summary)
   }))
 
   app.put('/billing/bills/:id', authMiddleware, handle(async (req, res) => {
     const billId = parseId(req.params.id, 'billId')
     const data = clinicBillSchema.partial().parse(req.body)
 
-    await prisma.clinicBill.findFirstOrThrow({
-      where: { id: billId, userId: req.user.id, active: true },
+    const previousRecord = await prisma.clinicBill.findFirstOrThrow({
+      where: { id: billId, userId: req.currentUser.id, active: true },
     })
 
     const record = await prisma.clinicBill.update({
       where: { id: billId },
       data: normalizeClinicBillData(data, parseDateOnly),
     })
+    const summary = summarizeClinicBill(record)
 
-    res.json(summarizeClinicBill(record))
+    await createAuditLogFromRequest(req, {
+      clinicId: req.currentUser.ownedClinic?.id || null,
+      action: 'CLINIC_BILL_UPDATE',
+      entityType: 'ClinicBill',
+      entityId: billId,
+      metadata: buildClinicBillAuditMetadata(record, {
+        previous: buildClinicBillAuditMetadata(previousRecord),
+      }),
+    })
+
+    res.json(summary)
   }))
 
   app.post('/billing/bills/:id/mark-paid', authMiddleware, handle(async (req, res) => {
     const billId = parseId(req.params.id, 'billId')
 
-    await prisma.clinicBill.findFirstOrThrow({
-      where: { id: billId, userId: req.user.id, active: true },
+    const previousRecord = await prisma.clinicBill.findFirstOrThrow({
+      where: { id: billId, userId: req.currentUser.id, active: true },
     })
 
+    const paidAt = new Date()
     const record = await prisma.clinicBill.update({
       where: { id: billId },
-      data: { paidAt: new Date() },
+      data: { paidAt },
+    })
+    const summary = summarizeClinicBill(record)
+
+    await createAuditLogFromRequest(req, {
+      clinicId: req.currentUser.ownedClinic?.id || null,
+      action: 'CLINIC_BILL_MARK_PAID',
+      entityType: 'ClinicBill',
+      entityId: billId,
+      metadata: buildClinicBillAuditMetadata(record, {
+        previousStatus: summarizeClinicBill(previousRecord)?.status || null,
+        paidAt: paidAt.toISOString(),
+      }),
     })
 
-    res.json(summarizeClinicBill(record))
+    res.json(summary)
   }))
 
   app.delete('/billing/bills/:id', authMiddleware, handle(async (req, res) => {
     const billId = parseId(req.params.id, 'billId')
 
+    const previousRecord = await prisma.clinicBill.findFirstOrThrow({
+      where: { id: billId, userId: req.currentUser.id, active: true },
+    })
+
     await prisma.clinicBill.updateMany({
-      where: { id: billId, userId: req.user.id },
+      where: { id: billId, userId: req.currentUser.id },
       data: { active: false },
+    })
+
+    await createAuditLogFromRequest(req, {
+      clinicId: req.currentUser.ownedClinic?.id || null,
+      action: 'CLINIC_BILL_DELETE',
+      entityType: 'ClinicBill',
+      entityId: billId,
+      metadata: buildClinicBillAuditMetadata(previousRecord, {
+        active: false,
+      }),
     })
 
     res.json({ ok: true })
@@ -438,4 +519,5 @@ module.exports = {
   normalizeClinicBillData,
   registerBillingRoutes,
   summarizeClinicBill,
+  toSafeNumber,
 }

@@ -1,7 +1,8 @@
-const APP_SHELL_CACHE = 'lappui-shell-v1'
-const RUNTIME_CACHE = 'lappui-runtime-v1'
+const APP_SHELL_CACHE = 'lappui-shell-v2'
+const RUNTIME_CACHE = 'lappui-runtime-v2'
 const CURRENT_CACHES = [APP_SHELL_CACHE, RUNTIME_CACHE]
-const APP_SHELL_URLS = ['/', '/index.html', '/manifest.webmanifest', '/pwa-icon.svg']
+const APP_SHELL_URLS = ['/', '/index.html', '/offline.html', '/manifest.webmanifest', '/pwa-icon.svg']
+const API_PATH_PREFIXES = ['/api/', '/auth/', '/clients', '/dashboard', '/billing', '/clinic', '/webhooks']
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -36,6 +37,7 @@ self.addEventListener('fetch', event => {
 
   const url = new URL(event.request.url)
   if (url.origin !== self.location.origin) return
+  if (isApiLikeRequest(url)) return
 
   if (event.request.mode === 'navigate') {
     event.respondWith(networkFirstPage(event.request))
@@ -46,6 +48,10 @@ self.addEventListener('fetch', event => {
     event.respondWith(staleWhileRevalidate(event.request))
   }
 })
+
+function isApiLikeRequest(url) {
+  return API_PATH_PREFIXES.some(prefix => url.pathname === prefix.slice(0, -1) || url.pathname.startsWith(prefix))
+}
 
 function shouldCacheAsset(request) {
   const url = new URL(request.url)
@@ -58,12 +64,15 @@ async function networkFirstPage(request) {
 
   try {
     const response = await fetch(request)
-    cache.put(request, response.clone())
+    if (response && response.ok) {
+      cache.put(request, response.clone())
+    }
     return response
   } catch (error) {
     const cachedPage = await cache.match(request)
     const cachedShell = await cache.match('/index.html') || await cache.match('/')
-    return cachedPage || cachedShell || Response.error()
+    const offlinePage = await cache.match('/offline.html')
+    return cachedPage || cachedShell || offlinePage || Response.error()
   }
 }
 

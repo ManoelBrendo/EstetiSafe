@@ -73,31 +73,31 @@ const platformColumns: MarketingColumn[] = [
   {
     icon: 'fileText',
     title: 'Administrativo',
-    description: 'Cadastros, organizacao gerencial e visao centralizada para decisoes mais rapidas e seguras.',
+    description: 'Cadastros, organização gerencial e visão centralizada para decisões mais rápidas e seguras.',
     bullets: [
-      'Clientes, servicos e profissionais em um fluxo unico.',
-      'Gestao da rotina com menos ruido e menos retrabalho.',
-      'Mais clareza para quem lidera a clinica e a operacao.',
+      'Clientes, serviços e profissionais em um fluxo único.',
+      'Gestão da rotina com menos ruído e menos retrabalho.',
+      'Mais clareza para quem lidera a clínica e a operação.',
     ],
   },
   {
     icon: 'calendar',
     title: 'Operacional',
-    description: 'Agenda, atendimento, prontuario e execucao do dia a dia em uma interface mais refinada.',
+    description: 'Agenda, atendimento, prontuário e execução do dia a dia em uma interface mais refinada.',
     bullets: [
-      'Atendimento com contexto, historico e proximos passos.',
-      'Equipe com acesso mais rapido ao que importa em cada etapa.',
-      'Fluxo visual mais sofisticado, claro e pratico para a rotina.',
+      'Atendimento com contexto, histórico e próximos passos.',
+      'Equipe com acesso mais rápido ao que importa em cada etapa.',
+      'Fluxo visual mais sofisticado, claro e prático para a rotina.',
     ],
   },
   {
     icon: 'clipboard',
-    title: 'Regularizacao sanitaria',
-    description: 'Documentacao, alertas e rastreabilidade para reduzir improviso e fortalecer o padrao da clinica.',
+    title: 'Regularização sanitária',
+    description: 'Documentação, alertas e rastreabilidade para reduzir improviso e fortalecer o padrão da clínica.',
     bullets: [
-      'Alvaras, POPs, PGRSS e biosseguranca mais organizados.',
-      'Vencimentos, pendencias e registros auditaveis no mesmo ambiente.',
-      'Mais respaldo para fiscalizacao, equipe e gestao clinica.',
+      'Alvarás, POPs, PGRSS e biossegurança mais organizados.',
+      'Vencimentos, pendências e registros auditáveis no mesmo ambiente.',
+      'Mais respaldo para fiscalização, equipe e gestão clínica.',
     ],
   },
 ]
@@ -105,21 +105,21 @@ const platformColumns: MarketingColumn[] = [
 const stageCards: StageCard[] = [
   {
     icon: 'sparkles',
-    eyebrow: 'Percepcao premium',
-    title: 'A interface ja comunica padrao elevado de atendimento.',
-    copy: 'A clinica transmite mais organizacao, cuidado e sofisticacao desde a primeira leitura.',
+    eyebrow: 'Percepção premium',
+    title: 'A interface já comunica padrão elevado de atendimento.',
+    copy: 'A clínica transmite mais organização, cuidado e sofisticação desde a primeira leitura.',
   },
   {
     icon: 'users',
     eyebrow: 'Atendimento com contexto',
-    title: 'Agenda, prontuario e historico dentro de uma jornada mais elegante.',
-    copy: 'A equipe navega melhor e o atendimento ganha consistencia, clareza e apresentacao.',
+    title: 'Agenda, prontuário e histórico dentro de uma jornada mais elegante.',
+    copy: 'A equipe navega melhor e o atendimento ganha consistência, clareza e apresentação.',
   },
   {
     icon: 'check',
-    eyebrow: 'Controle sanitario',
-    title: 'Documentos criticos, alertas e rastreabilidade no mesmo fluxo.',
-    copy: 'A regularizacao sanitaria deixa de ficar espalhada e passa a ser acompanhada com metodo.',
+    eyebrow: 'Controle sanitário',
+    title: 'Documentos críticos, alertas e rastreabilidade no mesmo fluxo.',
+    copy: 'A regularização sanitária deixa de ficar espalhada e passa a ser acompanhada com método.',
   },
 ]
 
@@ -127,117 +127,117 @@ const heroHighlights: StageCard[] = [
   {
     icon: 'fileText',
     eyebrow: 'Administrativo',
-    title: 'Gestao mais clara',
-    copy: 'Cadastros, organizacao e visao gerencial em um fluxo que transmite mais profissionalismo.',
+    title: 'Gestão mais clara',
+    copy: 'Cadastros, organização e visão gerencial em um fluxo que transmite mais profissionalismo.',
   },
   {
     icon: 'calendar',
     eyebrow: 'Operacional',
     title: 'Rotina mais fluida',
-    copy: 'Agenda, historico e atendimento em uma jornada mais limpa para equipe e recepcao.',
+    copy: 'Agenda, histórico e atendimento em uma jornada mais limpa para equipe e recepção.',
   },
   {
     icon: 'clipboard',
-    eyebrow: 'Sanitario',
-    title: 'Regularizacao acompanhada',
-    copy: 'Documentos, alertas e registros criticos com mais metodo, visibilidade e prontidao.',
+    eyebrow: 'Sanitário',
+    title: 'Regularização acompanhada',
+    copy: 'Documentos, alertas e registros críticos com mais método, visibilidade e prontidão.',
   },
 ]
 
 const elevatedExperience: HighlightCard[] = [
   {
     icon: 'sparkles',
-    title: 'Padrao visual mais alto',
-    copy: 'O cliente percebe uma operacao mais seria, refinada e bem organizada antes mesmo de conhecer todos os modulos.',
+    title: 'Padrão visual mais alto',
+    copy: 'O cliente percebe uma operação mais séria, refinada e bem organizada antes mesmo de conhecer todos os módulos.',
   },
   {
     icon: 'calendar',
     title: 'Fluxo mais fluido para equipe',
-    copy: 'Recepcao, gestao e profissionais encontram informacoes com mais rapidez, reduzindo friccao operacional.',
+    copy: 'Recepção, gestão e profissionais encontram informações com mais rapidez, reduzindo fricção operacional.',
   },
   {
     icon: 'clipboard',
-    title: 'Mais seguranca na rotina',
-    copy: 'O administrativo, o operacional e a regularizacao sanitaria passam a conversar no mesmo ambiente.',
+    title: 'Mais segurança na rotina',
+    copy: 'O administrativo, o operacional e a regularização sanitária passam a conversar no mesmo ambiente.',
   },
 ]
 
 const sanitaryTracks: SanitaryTrack[] = [
   {
-    title: 'Documentacao sanitaria',
-    detail: 'Acompanhe alvaras, POPs, manual de biosseguranca, PGRSS e contratos com mais clareza.',
+    title: 'Documentação sanitária',
+    detail: 'Acompanhe alvarás, POPs, manual de biossegurança, PGRSS e contratos com mais clareza.',
   },
   {
-    title: 'Alertas criticos',
-    detail: 'Vencimentos e pendencias deixam de ficar escondidos em planilhas ou lembrancas soltas.',
+    title: 'Alertas críticos',
+    detail: 'Vencimentos e pendências deixam de ficar escondidos em planilhas ou lembranças soltas.',
   },
   {
-    title: 'Registros auditaveis',
-    detail: 'Mantenha historico, logs, responsaveis e evidencias de forma mais acessivel e confiavel.',
+    title: 'Registros auditáveis',
+    detail: 'Mantenha histórico, logs, responsáveis e evidências de forma mais acessível e confiável.',
   },
   {
-    title: 'Prontidao para fiscalizacao',
-    detail: 'A clinica ganha mais respaldo para demonstrar metodo, controle e organizacao operacional.',
+    title: 'Prontidão para fiscalização',
+    detail: 'A clínica ganha mais respaldo para demonstrar método, controle e organização operacional.',
   },
 ]
 
 const modules: HighlightCard[] = [
   {
     icon: 'fileText',
-    title: 'Documentacao e compliance',
-    copy: 'Alvaras, POPs, PGRSS, biosseguranca, responsaveis e vencimentos organizados em um so nucleo.',
+    title: 'Documentação e compliance',
+    copy: 'Alvarás, POPs, PGRSS, biossegurança, responsáveis e vencimentos organizados em um só núcleo.',
   },
   {
     icon: 'users',
-    title: 'Clientes e prontuario',
-    copy: 'Anamnese, consentimento, historico, evolucao e material de acompanhamento em uma experiencia mais cuidadosa.',
+    title: 'Clientes e prontuário',
+    copy: 'Anamnese, consentimento, histórico, evolução e material de acompanhamento em uma experiência mais cuidadosa.',
   },
   {
     icon: 'calendar',
-    title: 'Agenda e operacao diaria',
+    title: 'Agenda e operação diária',
     copy: 'Profissional, procedimento, pagamento e contexto do atendimento reunidos em um painel funcional.',
   },
   {
     icon: 'box',
     title: 'Produtos e equipamentos',
-    copy: 'Validade, lote, manutencao, dados regulatorios e visao operacional sem depender de controles paralelos.',
+    copy: 'Validade, lote, manutenção, dados regulatórios e visão operacional sem depender de controles paralelos.',
   },
 ]
 
 const workflowSteps: WorkflowStep[] = [
   {
     step: '01',
-    title: 'Diagnostico da clinica',
+    title: 'Diagnóstico da clínica',
     copy: 'A landing capta contexto real para iniciar uma conversa comercial melhor e mais consultiva.',
   },
   {
     step: '02',
-    title: 'Estruturacao da rotina',
-    copy: 'O sistema organiza o administrativo, o operacional e a regularizacao sanitaria com visao de produto.',
+    title: 'Estruturação da rotina',
+    copy: 'O sistema organiza o administrativo, o operacional e a regularização sanitária com visão de produto.',
   },
   {
     step: '03',
-    title: 'Elevacao do atendimento',
-    copy: 'A equipe passa a trabalhar em um ambiente mais claro, mais sofisticado e mais coerente com o padrao da clinica.',
+    title: 'Elevação do atendimento',
+    copy: 'A equipe passa a trabalhar em um ambiente mais claro, mais sofisticado e mais coerente com o padrão da clínica.',
   },
   {
     step: '04',
     title: 'Mais controle sanitario',
-    copy: 'Documentos, alertas, registros e evidencias ficam mais prontos para acompanhamento e fiscalizacao.',
+    copy: 'Documentos, alertas, registros e evidências ficam mais prontos para acompanhamento e fiscalização.',
   },
 ]
 
 const personaCards = [
   {
-    title: 'Para a gestao',
-    copy: 'Mais visao sobre equipe, processos, documentos, pendencias e percepcao profissional da clinica.',
+    title: 'Para a gestão',
+    copy: 'Mais visão sobre equipe, processos, documentos, pendências e percepção profissional da clínica.',
   },
   {
-    title: 'Para o responsavel tecnico',
-    copy: 'Mais facilidade para acompanhar documentacao sanitaria, biosseguranca, POPs, PGRSS e registros criticos.',
+    title: 'Para o responsável técnico',
+    copy: 'Mais facilidade para acompanhar documentação sanitária, biossegurança, POPs, PGRSS e registros críticos.',
   },
   {
-    title: 'Para a operacao',
+    title: 'Para a operação',
     copy: 'Mais clareza no atendimento, menos improviso e uma jornada mais refinada para quem executa no dia a dia.',
   },
 ]
@@ -245,13 +245,13 @@ const personaCards = [
 const faqItems: FaqItem[] = [
   {
     id: 'luxo',
-    title: 'A interface sofisticada nao atrapalha a usabilidade?',
-    answer: 'Nao. A proposta visual eleva a percepcao de valor, mas a navegacao continua orientada a clareza, ao atendimento e ao controle operacional.',
+    title: 'A interface sofisticada não atrapalha a usabilidade?',
+    answer: 'Não. A proposta visual eleva a percepção de valor, mas a navegação continua orientada à clareza, ao atendimento e ao controle operacional.',
   },
   {
     id: 'sanitario',
-    title: 'Onde entra o diferencial sanitario da plataforma?',
-    answer: 'Ele aparece na organizacao documental, nos alertas, nos registros auditaveis e na forma como a clinica passa a acompanhar a regularizacao sanitaria em um so fluxo.',
+    title: 'Onde entra o diferencial sanitário da plataforma?',
+    answer: 'Ele aparece na organização documental, nos alertas, nos registros auditáveis e na forma como a clínica passa a acompanhar a regularização sanitária em um s? fluxo.',
   },
   {
     id: 'implantacao',
@@ -260,13 +260,13 @@ const faqItems: FaqItem[] = [
   },
   {
     id: 'whitelabel',
-    title: 'Da para adaptar para a marca da clinica?',
-    answer: 'Sim. O topo e os elementos de identidade continuam preparados para white-label com nome, logo e rotulos configuraveis.',
+    title: 'Dá para adaptar para a marca da clínica?',
+    answer: 'Sim. O topo e os elementos de identidade continuam preparados para white-label com nome, logo e rótulos configuráveis.',
   },
 ]
 
-const teamSizeOptions = ['', 'Ate 2 profissionais', '3 a 5 profissionais', '6 a 10 profissionais', 'Mais de 10 profissionais']
-const goalOptions = ['', 'Organizar documentos e compliance', 'Estruturar prontuario e consentimento', 'Melhorar agenda e equipe', 'Controlar produtos e equipamentos', 'Unificar a gestao da clinica']
+const teamSizeOptions = ['', 'Até 2 profissionais', '3 a 5 profissionais', '6 a 10 profissionais', 'Mais de 10 profissionais']
+const goalOptions = ['', 'Organizar documentos e compliance', 'Estruturar prontuário e consentimento', 'Melhorar agenda e equipe', 'Controlar produtos e equipamentos', 'Unificar a gestão da clínica']
 
 const initialForm: MarketingLeadFormState = {
   clinicName: '',
@@ -308,17 +308,17 @@ function resolveBranding(): BrandingState {
   const tagline =
     cleanTextValue(params?.get('brandTagline')) ||
     cleanTextValue(env.VITE_MARKETING_BRAND_TAGLINE) ||
-    'Software para clinicas de estetica'
+    'Software para clínicas de estética'
   const clinicLabel =
     cleanTextValue(params?.get('clinicLabel')) ||
     cleanTextValue(env.VITE_MARKETING_CLINIC_LABEL) ||
-    'Interface sofisticada com acompanhamento sanitario'
+    'Interface sofisticada com acompanhamento sanitário'
   const logo = cleanLogoValue(params?.get('brandLogo')) || cleanLogoValue(env.VITE_MARKETING_BRAND_LOGO) || logoPath
   const poweredBy =
     cleanTextValue(params?.get('poweredBy')) ||
     cleanTextValue(env.VITE_MARKETING_POWERED_BY) ||
     "Powered by L'Appui"
-  const isWhiteLabel = name !== "L'Appui" || logo !== logoPath || tagline !== 'Software para clinicas de estetica'
+  const isWhiteLabel = name !== "L'Appui" || logo !== logoPath || tagline !== 'Software para clínicas de estética'
 
   return {
     name,
@@ -355,10 +355,10 @@ export default function MarketingSite() {
         ...form,
         source: typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : 'landing-page',
       })
-      toast.success('Recebemos seu interesse. Vamos retornar com uma apresentacao em breve.')
+      toast.success('Recebemos seu interesse. Vamos retornar com uma apresentação em breve.')
       setForm(initialForm)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel enviar seu contato agora'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível enviar seu contato agora'))
     } finally {
       setLoading(false)
     }
@@ -379,15 +379,15 @@ export default function MarketingSite() {
 
         <nav className="leadv2-nav">
           <a href="#plataforma">Plataforma</a>
-          <a href="#sanitario">Sanitario</a>
-          <a href="#modulos">Modulos</a>
-          <a href="#diagnostico">Diagnostico</a>
+          <a href="#sanitario">Sanitário</a>
+          <a href="#modulos">Módulos</a>
+          <a href="#diagnóstico">Diagnóstico</a>
         </nav>
 
         <div className="leadv2-topbar-actions">
           {branding.poweredBy ? <span className="leadv2-powered-by">{branding.poweredBy}</span> : null}
           <Link className="btn btn-ghost" to="/login">Entrar</Link>
-          <a className="btn btn-gold" href="#lead-form">Solicitar apresentacao</a>
+          <a className="btn btn-gold" href="#lead-form">Solicitar apresentação</a>
         </div>
       </header>
 
@@ -395,16 +395,16 @@ export default function MarketingSite() {
         <section id="plataforma" className="leadv2-hero">
           <div className="leadv2-copy leadv2-copy-hero">
             <div className="leadv2-copy-content">
-              <span className="leadv2-badge">Interface sofisticada para elevar o padrao do atendimento</span>
-              <p className="leadv2-kicker">Administrativo, operacional e regularizacao sanitaria em uma mesma experiencia</p>
-              <h1>Um aplicativo que reune o administrativo, o operacional e a regularizacao sanitaria da sua clinica.</h1>
+              <span className="leadv2-badge">Interface sofisticada para elevar o padrão do atendimento</span>
+              <p className="leadv2-kicker">Administrativo, operacional e regularização sanitária em uma mesma experiência</p>
+              <h1>Um aplicativo que reúne o administrativo, o operacional e a regularização sanitária da sua clínica.</h1>
               <p className="leadv2-lead">
-                {branding.name} foi desenhado para clinicas que querem transmitir mais sofisticacao no atendimento,
-                organizar melhor o dia a dia e acompanhar a regularizacao sanitaria com mais clareza, metodo e respaldo.
+                {branding.name} foi desenhado para clínicas que querem transmitir mais sofisticação no atendimento,
+                organizar melhor o dia a dia e acompanhar a regularização sanitária com mais clareza, método e respaldo.
               </p>
 
               <div className="leadv2-cta-row">
-                <a className="btn btn-gold" href="#lead-form"><Icon name="sparkles" /> Quero uma apresentacao</a>
+                <a className="btn btn-gold" href="#lead-form"><Icon name="sparkles" /> Quero uma apresentação</a>
                 <Link className="btn btn-outline" to="/register"><Icon name="plus" /> Criar conta</Link>
               </div>
             </div>
@@ -435,14 +435,14 @@ export default function MarketingSite() {
         <section className="leadv2-section leadv2-showcase-section">
           <div className="leadv2-showcase-intro">
             <div className="leadv2-section-head">
-              <span className="leadv2-badge leadv2-badge-soft">A interface do aplicativo na pratica</span>
-              <h2>Depois da mensagem principal, a clinica enxerga a plataforma em um bloco proprio, mais organizado e facil de absorver.</h2>
-              <p>Assim a primeira leitura fica mais forte, e a vitrine visual do produto entra no momento certo para reforcar percepcao premium, fluidez operacional e acompanhamento sanitario.</p>
+              <span className="leadv2-badge leadv2-badge-soft">A interface do aplicativo na prática</span>
+              <h2>Depois da mensagem principal, a clínica enxerga a plataforma em um bloco próprio, mais organizado e fácil de absorver.</h2>
+              <p>Assim a primeira leitura fica mais forte, e a vitrine visual do produto entra no momento certo para reforçar percepção premium, fluidez operacional e acompanhamento sanitário.</p>
             </div>
 
             <aside className="leadv2-showcase-callout">
               <strong>Alerta inteligente</strong>
-              <span>Documentos criticos, pendencias e vencimentos visiveis antes de virarem problema.</span>
+              <span>Documentos críticos, pendências e vencimentos visíveis antes de virarem problema.</span>
             </aside>
           </div>
 
@@ -457,7 +457,7 @@ export default function MarketingSite() {
                   <div>
                     <span>{branding.clinicLabel}</span>
                     <strong>{branding.name}</strong>
-                    <p>Uma plataforma elegante para elevar o padrao do atendimento, organizar a operacao e acompanhar a regularizacao sanitaria da clinica.</p>
+                    <p>Uma plataforma elegante para elevar o padrão do atendimento, organizar a operação e acompanhar a regularização sanitária da clínica.</p>
                   </div>
                 </div>
               </div>
@@ -478,9 +478,9 @@ export default function MarketingSite() {
 
         <section id="sanitario" className="leadv2-section leadv2-pillar-section">
           <div className="leadv2-section-head">
-            <span className="leadv2-badge leadv2-badge-soft">O valor do produto na pratica</span>
-            <h2>O que a clinica passa a enxergar quando o administrativo, o operacional e o sanitario deixam de ficar separados.</h2>
-            <p>Em vez de uma ferramenta bonita isolada, a clinica ganha uma interface sofisticada que tambem sustenta rotina, metodo e regularizacao.</p>
+            <span className="leadv2-badge leadv2-badge-soft">O valor do produto na prática</span>
+            <h2>O que a clínica passa a enxergar quando o administrativo, o operacional e o sanitário deixam de ficar separados.</h2>
+            <p>Em vez de uma ferramenta bonita isolada, a clínica ganha uma interface sofisticada que também sustenta rotina, método e regularização.</p>
           </div>
 
           <div className="leadv2-pillar-grid">
@@ -504,9 +504,9 @@ export default function MarketingSite() {
 
         <section className="leadv2-section leadv2-sanitario-section">
           <div className="leadv2-section-head">
-            <span className="leadv2-badge leadv2-badge-soft">Rotina sanitaria acompanhada</span>
-            <h2>O diferencial do aplicativo aparece quando a clinica passa a acompanhar o que antes ficava disperso.</h2>
-            <p>Documentacao critica, alertas, registros e prontidao para fiscalizacao deixam de depender de improviso, memoria ou planilhas paralelas.</p>
+            <span className="leadv2-badge leadv2-badge-soft">Rotina sanitária acompanhada</span>
+            <h2>O diferencial do aplicativo aparece quando a clínica passa a acompanhar o que antes ficava disperso.</h2>
+            <p>Documentação crítica, alertas, registros e prontidão para fiscalização deixam de depender de improviso, memória ou planilhas paralelas.</p>
           </div>
 
           <div className="leadv2-sanitario-layout">
@@ -522,18 +522,18 @@ export default function MarketingSite() {
             <div className="leadv2-sanitario-visual">
               <div className="leadv2-visual-shell">
                 <div className="leadv2-visual-panel leadv2-visual-panel-main">
-                  <span>Regularizacao sanitaria</span>
+                  <span>Regularização sanitária</span>
                   <strong>Documentos, alertas e registros em um painel mais claro e sofisticado.</strong>
-                  <p>O sistema ajuda a clinica a acompanhar o que precisa estar valido, acessivel e bem registrado.</p>
+                  <p>O sistema ajuda a clínica a acompanhar o que precisa estar válido, acessível e bem registrado.</p>
                 </div>
                 <div className="leadv2-visual-stack">
                   <div className="leadv2-visual-panel">
-                    <span>Documentos criticos</span>
-                    <strong>Alvara sanitario, POPs, biosseguranca e PGRSS organizados.</strong>
+                    <span>Documentos críticos</span>
+                    <strong>Alvará sanitário, POPs, biossegurança e PGRSS organizados.</strong>
                   </div>
                   <div className="leadv2-visual-panel">
-                    <span>Registros auditaveis</span>
-                    <strong>Historico, responsaveis e evidencias com mais rastreabilidade.</strong>
+                    <span>Registros auditáveis</span>
+                    <strong>Histórico, responsáveis e evidências com mais rastreabilidade.</strong>
                   </div>
                 </div>
               </div>
@@ -543,9 +543,9 @@ export default function MarketingSite() {
 
         <section id="modulos" className="leadv2-section leadv2-modules-section">
           <div className="leadv2-section-head">
-            <span className="leadv2-badge leadv2-badge-soft">Modulos principais</span>
-            <h2>Uma plataforma longa o suficiente para sustentar a operacao e elegante o suficiente para elevar a percepcao do atendimento.</h2>
-            <p>O visitante entende que nao esta olhando apenas para um software de agenda, mas para um nucleo mais completo de gestao e conformidade.</p>
+            <span className="leadv2-badge leadv2-badge-soft">Módulos principais</span>
+            <h2>Uma plataforma ampla o suficiente para sustentar a operação e elegante o suficiente para elevar a percepção do atendimento.</h2>
+            <p>O visitante entende que não está olhando apenas para um software de agenda, mas para um núcleo mais completo de gestão e conformidade.</p>
           </div>
 
           <div className="leadv2-module-grid">
@@ -562,8 +562,8 @@ export default function MarketingSite() {
         <section className="leadv2-section leadv2-persona-section">
           <div className="leadv2-section-head">
             <span className="leadv2-badge leadv2-badge-soft">Quem percebe o valor</span>
-            <h2>O sistema melhora a leitura da clinica para quem lidera, para quem executa e para quem responde tecnicamente pela operacao.</h2>
-            <p>Essa combinacao de sofisticacao visual com estrutura real de gestao torna a plataforma mais forte comercialmente e mais consistente na pratica.</p>
+            <h2>O sistema melhora a leitura da clínica para quem lidera, para quem executa e para quem responde tecnicamente pela operação.</h2>
+            <p>Essa combinação de sofisticação visual com estrutura real de gestão torna a plataforma mais forte comercialmente e mais consistente na prática.</p>
           </div>
 
           <div className="leadv2-persona-grid">
@@ -580,7 +580,7 @@ export default function MarketingSite() {
           <div className="leadv2-section-head">
             <span className="leadv2-badge leadv2-badge-soft">Jornada comercial e operacional</span>
             <h2>Uma landing pensada para vender bem e um produto pensado para sustentar o que foi prometido.</h2>
-            <p>A narrativa visual e funcional mostra que a plataforma melhora percepcao, organiza a operacao e acompanha a regularizacao sanitaria da clinica.</p>
+            <p>A narrativa visual e funcional mostra que a plataforma melhora percepção, organiza a operação e acompanha a regularização sanitária da clínica.</p>
           </div>
 
           <div className="leadv2-flow-grid">
@@ -596,9 +596,9 @@ export default function MarketingSite() {
 
         <section className="leadv2-section leadv2-faq-section">
           <div className="leadv2-section-head">
-            <span className="leadv2-badge leadv2-badge-soft">Perguntas estrategicas</span>
-            <h2>Respostas para quem quer elevar o padrao da clinica sem abrir mao de controle, rastreabilidade e respaldo.</h2>
-            <p>Essa area ajuda a landing a vender melhor sem parecer exagerada ou superficial.</p>
+            <span className="leadv2-badge leadv2-badge-soft">Perguntas estratégicas</span>
+            <h2>Respostas para quem quer elevar o padrão da clínica sem abrir mão de controle, rastreabilidade e respaldo.</h2>
+            <p>Essa área ajuda a landing a vender melhor sem parecer exagerada ou superficial.</p>
           </div>
 
           <div className="leadv2-faq-layout">
@@ -627,11 +627,11 @@ export default function MarketingSite() {
           </div>
         </section>
 
-        <section id="diagnostico" className="leadv2-section leadv2-diagnostico-section">
-          <div className="leadv2-diagnostico-copy">
-            <span className="leadv2-badge leadv2-badge-soft">Diagnostico comercial</span>
-            <h2>Capte leads com contexto real e ja mostre que a plataforma trabalha imagem, operacao e regularizacao sanitaria juntas.</h2>
-            <p>O formulario abaixo continua simples para conversao, mas com informacao suficiente para uma abordagem comercial mais consultiva.</p>
+        <section id="diagnóstico" className="leadv2-section leadv2-diagnóstico-section">
+          <div className="leadv2-diagnóstico-copy">
+            <span className="leadv2-badge leadv2-badge-soft">Diagnóstico comercial</span>
+            <h2>Capte leads com contexto real e já mostre que a plataforma trabalha imagem, operação e regularização sanitária juntas.</h2>
+            <p>O formulário abaixo continua simples para conversão, mas com informação suficiente para uma abordagem comercial mais consultiva.</p>
             {canShowSupport ? (
               <div className="leadv2-support-actions">
                 {supportEmailLink ? <a className="btn btn-outline btn-sm" href={supportEmailLink}><Icon name="mail" /> {supportContact.email}</a> : null}
@@ -642,23 +642,23 @@ export default function MarketingSite() {
 
           <form id="lead-form" className="leadv2-form-card" onSubmit={handleSubmit}>
             <div className="leadv2-form-grid">
-              <label className="marketing-form-field"><span>Nome da clinica</span><input className="form-input" value={form.clinicName} onChange={event => updateField('clinicName', event.target.value)} placeholder="Ex: Clinica Aurora" required /></label>
-              <label className="marketing-form-field"><span>Responsavel</span><input className="form-input" value={form.contactName} onChange={event => updateField('contactName', event.target.value)} placeholder="Seu nome" required /></label>
-              <label className="marketing-form-field"><span>E-mail</span><input className="form-input" type="email" value={form.email} onChange={event => updateField('email', event.target.value)} placeholder="contato@clinica.com" required /></label>
+              <label className="marketing-form-field"><span>Nome da clínica</span><input className="form-input" value={form.clinicName} onChange={event => updateField('clinicName', event.target.value)} placeholder="Ex: Clínica Aurora" required /></label>
+              <label className="marketing-form-field"><span>Responsável</span><input className="form-input" value={form.contactName} onChange={event => updateField('contactName', event.target.value)} placeholder="Seu nome" required /></label>
+              <label className="marketing-form-field"><span>E-mail</span><input className="form-input" type="email" value={form.email} onChange={event => updateField('email', event.target.value)} placeholder="contato@clínica.com" required /></label>
               <label className="marketing-form-field"><span>Telefone ou WhatsApp</span><input className="form-input" value={form.phone} onChange={event => updateField('phone', event.target.value)} placeholder="(11) 99999-0000" required /></label>
-              <label className="marketing-form-field"><span>Cidade</span><input className="form-input" value={form.city} onChange={event => updateField('city', event.target.value)} placeholder="Sao Paulo" /></label>
+              <label className="marketing-form-field"><span>Cidade</span><input className="form-input" value={form.city} onChange={event => updateField('city', event.target.value)} placeholder="São Paulo" /></label>
               <label className="marketing-form-field"><span>Porte da equipe</span><select className="form-select" value={form.teamSize} onChange={event => updateField('teamSize', event.target.value)}>{teamSizeOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Selecione o porte da equipe'}</option>)}</select></label>
-              <label className="marketing-form-field leadv2-form-full"><span>Prioridade da clinica</span><select className="form-select" value={form.mainGoal} onChange={event => updateField('mainGoal', event.target.value)}>{goalOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Qual cenario voce quer resolver primeiro'}</option>)}</select></label>
-              <label className="marketing-form-field leadv2-form-full"><span>Contexto atual</span><textarea className="form-textarea" rows={5} value={form.message} onChange={event => updateField('message', event.target.value)} placeholder="Ex: hoje usamos planilhas, temos dificuldade com documentacao sanitaria, prontuario e alertas de vencimento." /></label>
+              <label className="marketing-form-field leadv2-form-full"><span>Prioridade da clínica</span><select className="form-select" value={form.mainGoal} onChange={event => updateField('mainGoal', event.target.value)}>{goalOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Qual cenário você quer resolver primeiro'}</option>)}</select></label>
+              <label className="marketing-form-field leadv2-form-full"><span>Contexto atual</span><textarea className="form-textarea" rows={5} value={form.message} onChange={event => updateField('message', event.target.value)} placeholder="Ex: hoje usamos planilhas, temos dificuldade com documentação sanitária, prontuário e alertas de vencimento." /></label>
             </div>
 
             <label className="leadv2-consent-row">
               <input type="checkbox" checked={form.requestedDemo} onChange={event => updateField('requestedDemo', event.target.checked)} />
-              <span>Quero receber uma apresentacao guiada do sistema.</span>
+              <span>Quero receber uma apresentação guiada do sistema.</span>
             </label>
 
-            <button className="btn btn-gold btn-block" type="submit" disabled={loading}>{loading ? <span className="spinner" /> : 'Enviar diagnostico'}</button>
-            <p className="leadv2-form-note">Ao enviar, sua clinica entra na base comercial do L'Appui para contato consultivo.</p>
+            <button className="btn btn-gold btn-block" type="submit" disabled={loading}>{loading ? <span className="spinner" /> : 'Enviar diagnóstico'}</button>
+            <p className="leadv2-form-note">Ao enviar, sua clínica entra na base comercial do L'Appui para contato consultivo.</p>
           </form>
         </section>
       </main>

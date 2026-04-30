@@ -44,6 +44,15 @@ function getInventoryDueStatus(date, warningDays = 30) {
 
   const now = new Date()
   const dueAt = new Date(date)
+
+  if (Number.isNaN(dueAt.getTime())) {
+    return {
+      status: 'WITHOUT_DATE',
+      label: 'Data inválida',
+      daysUntilDue: null,
+    }
+  }
+
   dueAt.setHours(23, 59, 59, 999)
 
   const daysUntilDue = Math.ceil((dueAt.getTime() - now.getTime()) / 86400000)
@@ -194,6 +203,58 @@ function normalizeEquipmentData(data, parseDateOnly) {
   return normalized
 }
 
+function getScopedInventoryUserId(req) {
+  return req.currentUser?.id || req.user?.id
+}
+
+function getScopedInventoryClinicId(req) {
+  return req.currentUser?.ownedClinic?.id || req.currentUser?.clinicId || null
+}
+
+function serializeInventoryAuditDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+function buildProductAuditMetadata(record, extra = {}) {
+  const summary = summarizeProductItem(record)
+
+  return {
+    assetType: 'PRODUCT',
+    name: summary?.name || null,
+    category: summary?.category || null,
+    brand: summary?.brand || null,
+    batch: summary?.batch || null,
+    quantity: summary?.quantity ?? null,
+    unit: summary?.unit || null,
+    entryMode: summary?.entryMode || null,
+    expiresAt: serializeInventoryAuditDate(summary?.expiresAt),
+    statusLabel: summary?.statusLabel || null,
+    daysUntilDue: summary?.daysUntilDue ?? null,
+    ...extra,
+  }
+}
+
+function buildEquipmentAuditMetadata(record, extra = {}) {
+  const summary = summarizeEquipmentItem(record)
+
+  return {
+    assetType: 'EQUIPMENT',
+    name: summary?.name || null,
+    category: summary?.category || null,
+    brand: summary?.brand || null,
+    model: summary?.model || null,
+    serialNumber: summary?.serialNumber || null,
+    entryMode: summary?.entryMode || null,
+    maintenanceDueAt: serializeInventoryAuditDate(summary?.maintenanceDueAt),
+    warrantyUntil: serializeInventoryAuditDate(summary?.warrantyUntil),
+    statusLabel: summary?.statusLabel || null,
+    daysUntilDue: summary?.daysUntilDue ?? null,
+    ...extra,
+  }
+}
+
 function registerInventoryRoutes({
   app,
   prisma,
@@ -201,6 +262,8 @@ function registerInventoryRoutes({
   handle,
   parseId,
   parseDateOnly,
+  createAuditLogFromRequest = async () => null,
+  getRequestClinicId = getScopedInventoryClinicId,
 }) {
   const requiredDeps = {
     app,
@@ -218,12 +281,13 @@ function registerInventoryRoutes({
   }
 
   app.get('/inventory/summary', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const [products, equipmentItems] = await Promise.all([
       prisma.productItem.findMany({
-        where: { userId: req.user.id, active: true },
+        where: { userId, active: true },
       }),
       prisma.equipmentItem.findMany({
-        where: { userId: req.user.id, active: true },
+        where: { userId, active: true },
       }),
     ])
 
@@ -231,8 +295,9 @@ function registerInventoryRoutes({
   }))
 
   app.get('/products', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const list = await prisma.productItem.findMany({
-      where: { userId: req.user.id, active: true },
+      where: { userId, active: true },
       orderBy: [
         { expiresAt: 'asc' },
         { name: 'asc' },
@@ -243,47 +308,82 @@ function registerInventoryRoutes({
   }))
 
   app.post('/products', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const data = productItemSchema.parse(req.body)
     const product = await prisma.productItem.create({
       data: {
         ...normalizeProductData(data, parseDateOnly),
-        userId: req.user.id,
+        userId,
       },
     })
+    const summary = summarizeProductItem(product)
 
-    res.status(201).json(summarizeProductItem(product))
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_PRODUCT_CREATE',
+      entityType: 'ProductItem',
+      entityId: product.id,
+      metadata: buildProductAuditMetadata(product),
+    })
+
+    res.status(201).json(summary)
   }))
 
   app.put('/products/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const productId = parseId(req.params.id, 'productId')
     const data = productItemSchema.partial().parse(req.body)
 
-    await prisma.productItem.findFirstOrThrow({
-      where: { id: productId, userId: req.user.id },
+    const previousProduct = await prisma.productItem.findFirstOrThrow({
+      where: { id: productId, userId },
     })
 
     const product = await prisma.productItem.update({
       where: { id: productId },
       data: normalizeProductData(data, parseDateOnly),
     })
+    const summary = summarizeProductItem(product)
 
-    res.json(summarizeProductItem(product))
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_PRODUCT_UPDATE',
+      entityType: 'ProductItem',
+      entityId: productId,
+      metadata: buildProductAuditMetadata(product, {
+        previous: buildProductAuditMetadata(previousProduct),
+      }),
+    })
+
+    res.json(summary)
   }))
 
   app.delete('/products/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const productId = parseId(req.params.id, 'productId')
+    const previousProduct = await prisma.productItem.findFirstOrThrow({
+      where: { id: productId, userId },
+    })
 
     await prisma.productItem.updateMany({
-      where: { id: productId, userId: req.user.id },
+      where: { id: productId, userId },
       data: { active: false },
+    })
+
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_PRODUCT_ARCHIVE',
+      entityType: 'ProductItem',
+      entityId: productId,
+      metadata: buildProductAuditMetadata(previousProduct, { active: false }),
     })
 
     res.json({ ok: true })
   }))
 
   app.get('/equipment', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const list = await prisma.equipmentItem.findMany({
-      where: { userId: req.user.id, active: true },
+      where: { userId, active: true },
       orderBy: [
         { maintenanceDueAt: 'asc' },
         { name: 'asc' },
@@ -294,39 +394,73 @@ function registerInventoryRoutes({
   }))
 
   app.post('/equipment', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const data = equipmentItemSchema.parse(req.body)
     const equipment = await prisma.equipmentItem.create({
       data: {
         ...normalizeEquipmentData(data, parseDateOnly),
-        userId: req.user.id,
+        userId,
       },
     })
+    const summary = summarizeEquipmentItem(equipment)
 
-    res.status(201).json(summarizeEquipmentItem(equipment))
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_EQUIPMENT_CREATE',
+      entityType: 'EquipmentItem',
+      entityId: equipment.id,
+      metadata: buildEquipmentAuditMetadata(equipment),
+    })
+
+    res.status(201).json(summary)
   }))
 
   app.put('/equipment/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const equipmentId = parseId(req.params.id, 'equipmentId')
     const data = equipmentItemSchema.partial().parse(req.body)
 
-    await prisma.equipmentItem.findFirstOrThrow({
-      where: { id: equipmentId, userId: req.user.id },
+    const previousEquipment = await prisma.equipmentItem.findFirstOrThrow({
+      where: { id: equipmentId, userId },
     })
 
     const equipment = await prisma.equipmentItem.update({
       where: { id: equipmentId },
       data: normalizeEquipmentData(data, parseDateOnly),
     })
+    const summary = summarizeEquipmentItem(equipment)
 
-    res.json(summarizeEquipmentItem(equipment))
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_EQUIPMENT_UPDATE',
+      entityType: 'EquipmentItem',
+      entityId: equipmentId,
+      metadata: buildEquipmentAuditMetadata(equipment, {
+        previous: buildEquipmentAuditMetadata(previousEquipment),
+      }),
+    })
+
+    res.json(summary)
   }))
 
   app.delete('/equipment/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedInventoryUserId(req)
     const equipmentId = parseId(req.params.id, 'equipmentId')
+    const previousEquipment = await prisma.equipmentItem.findFirstOrThrow({
+      where: { id: equipmentId, userId },
+    })
 
     await prisma.equipmentItem.updateMany({
-      where: { id: equipmentId, userId: req.user.id },
+      where: { id: equipmentId, userId },
       data: { active: false },
+    })
+
+    await createAuditLogFromRequest(req, {
+      clinicId: getRequestClinicId(req),
+      action: 'INVENTORY_EQUIPMENT_ARCHIVE',
+      entityType: 'EquipmentItem',
+      entityId: equipmentId,
+      metadata: buildEquipmentAuditMetadata(previousEquipment, { active: false }),
     })
 
     res.json({ ok: true })
@@ -334,7 +468,10 @@ function registerInventoryRoutes({
 }
 
 module.exports = {
+  buildEquipmentAuditMetadata,
   buildInventoryDashboard,
+  buildProductAuditMetadata,
+  getScopedInventoryUserId,
   getInventoryDueStatus,
   normalizeEquipmentData,
   normalizeProductData,

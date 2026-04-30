@@ -1,4 +1,4 @@
-﻿const express = require('express')
+const express = require('express')
 const { asyncHandler, parsePositiveInt, httpError } = require('../lib/http')
 const { createAuditLog } = require('../lib/audit')
 const { protocolUpsertSchema } = require('../schemas')
@@ -45,7 +45,7 @@ function createProtocolsRouter(context) {
     }
 
     if (!pop) {
-      throw httpError(404, 'POP ainda nao disponivel para este servico.')
+      throw httpError(404, 'POP ainda não disponível para este serviço.')
     }
 
     res.json({

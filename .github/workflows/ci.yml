@@ -27,6 +27,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+
+      - name: Verify production preflight
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://postgres:postgres@db.lappui.example:5432/lappui
+          JWT_SECRET: 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+          FRONTEND_URL: https://app.lappui.example
+          SUPPORT_ADMIN_EMAIL: support@lappui.example
+          SUPPORT_ADMIN_PASSWORD: A!@246813579246
+          SUPPORT_CONTACT_EMAIL: support@lappui.example
+          SUPPORT_CONTACT_PHONE: 5511999999999
+          BILLING_GATEWAY_PROVIDER: provider-configured
+          BILLING_WEBHOOK_SECRET: abcdef1234567890abcdef1234567890abcdef1234567890
+          WHATSAPP_CONFIRMATION_JOB_ENABLED: "false"
+        run: npm run verify:prod
+
       - name: Typecheck backend
         run: npm run typecheck
 

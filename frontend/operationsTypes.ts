@@ -155,11 +155,47 @@ export interface InventoryDashboard {
   alerts: InventoryAlert[]
 }
 
+export type ClinicalInsightPriority = 'INFO' | 'WARNING' | 'CRITICAL'
+
+export interface ClinicalInsightItem {
+  id: string
+  source: string
+  kind: string
+  priority: ClinicalInsightPriority | string
+  title: string
+  description: string
+  evidence: string[]
+  actionLabel: string
+  metadata?: Record<string, unknown>
+}
+
+export interface ClinicalAiReadiness {
+  mode: string
+  provider: string
+  externalAiEnabled: boolean
+  ready: boolean
+  missing: string[]
+  safeguards: string[]
+  message: string
+}
+
+export interface ClinicalInsightsSummary {
+  mode: string
+  externalAiEnabled: boolean
+  readiness: ClinicalAiReadiness
+  generatedAt: string
+  total: number
+  countsByPriority: Record<ClinicalInsightPriority, number>
+  insights: ClinicalInsightItem[]
+  message: string
+}
+
 export interface DashboardResponse {
   month: DashboardMonthSummary
   upcoming: DashboardUpcomingAppointment[]
   documents: DocumentsSummaryResponse
   inventory: InventoryDashboard
+  clinicalInsights?: ClinicalInsightsSummary | null
   billing?: BillingSnapshot | null
 }
 
@@ -209,12 +245,28 @@ export interface BillingGatewayAutomationConfig {
   message?: string | null
 }
 
+export interface BillingGatewayReadiness {
+  status: 'READY' | 'PARTIAL' | 'SIMULATION' | string
+  provider: string
+  mode: string
+  persistence: string
+  configured: boolean
+  readyForLiveProvider: boolean
+  webhookConfigured: boolean
+  automaticBillingEnabled: boolean
+  supportedMethods: Array<PaymentMethod | string>
+  missing: string[]
+  message: string
+}
+
 export interface BillingGatewayStatusResponse {
   provider: string
   mode: string
   persistence?: string | null
   configured: boolean
   webhookConfigured: boolean
+  readiness?: BillingGatewayReadiness | null
+  supportedMethods?: Array<PaymentMethod | string>
   automation?: BillingGatewayAutomationConfig | null
   latestIntent?: BillingGatewayIntent | null
   message?: string | null
@@ -225,6 +277,28 @@ export interface BillingGatewayIntentResponse {
   billing: BillingSnapshot
 }
 
+export type AuditSeverity = 'LOW' | 'MEDIUM' | 'HIGH'
+
+export interface AuditSummaryAction {
+  action: string
+  label: string
+  category: string
+  severity: AuditSeverity
+  count: number
+}
+
+export interface AuditSummaryCategory {
+  category: string
+  count: number
+}
+
+export interface AuditLogSummary {
+  total: number
+  highRiskCount: number
+  byAction: AuditSummaryAction[]
+  byCategory: AuditSummaryCategory[]
+}
+
 export interface AuditLogItem {
   id: Identifier
   clinicId?: Identifier | null
@@ -232,6 +306,10 @@ export interface AuditLogItem {
   actorEmail?: string | null
   actorRole?: string | null
   action: string
+  actionLabel?: string | null
+  category?: string | null
+  severity?: AuditSeverity | null
+  description?: string | null
   entityType?: string | null
   entityId?: Identifier | null
   metadata?: Record<string, unknown> | null
@@ -239,7 +317,14 @@ export interface AuditLogItem {
 }
 
 export interface AuditLogsResponse {
+  items?: AuditLogItem[]
   logs: AuditLogItem[]
+  total?: number
+  page?: number
+  pageSize?: number
+  totalPages?: number
+  summary?: AuditLogSummary
+  filters?: Record<string, string | null>
 }
 
 export interface ClinicBillItem {
@@ -418,6 +503,76 @@ export interface ServiceRecord {
   servicePop?: ServicePopSummary | null
 }
 
+export interface IntercurrenceLinkedClient {
+  id: Identifier
+  name: string
+  phone?: string | null
+}
+
+export interface IntercurrenceLinkedService {
+  id: Identifier
+  name: string
+}
+
+export interface IntercurrenceLinkedProfessional {
+  id: Identifier
+  name: string
+  specialty?: string | null
+}
+
+export interface ClinicalIntercurrenceEditEntry {
+  id: Identifier
+  editedByUserId?: Identifier | null
+  editedByEmail?: string | null
+  editReason?: string | null
+  changes?: Record<string, { from?: unknown; to?: unknown }> | null
+  createdAt?: string | null
+}
+
+export interface ClinicalIntercurrenceRecord {
+  id: Identifier
+  clientId: Identifier
+  serviceId?: Identifier | null
+  professionalId?: Identifier | null
+  procedureName: string
+  occurredAt: string
+  description: string
+  conduct: string
+  notes?: string | null
+  professionalName: string
+  createdByUserId?: Identifier | null
+  createdByEmail?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  client?: IntercurrenceLinkedClient | null
+  service?: IntercurrenceLinkedService | null
+  professional?: IntercurrenceLinkedProfessional | null
+  editsCount?: number
+  edits?: ClinicalIntercurrenceEditEntry[]
+}
+
+export interface ClinicalIntercurrencesResponse {
+  items: ClinicalIntercurrenceRecord[]
+  total: number
+}
+
+export interface ClinicalIntercurrencePayload {
+  clientId: Identifier
+  serviceId?: Identifier | null
+  procedureName: string
+  occurredDate: string
+  occurredTime: string
+  description: string
+  conduct: string
+  notes?: string
+  professionalId?: Identifier | null
+  professionalName?: string
+}
+
+export interface ClinicalIntercurrenceUpdatePayload extends Partial<ClinicalIntercurrencePayload> {
+  editReason: string
+}
+
 export interface SupportClinicRecord {
   id: number
   email: string
@@ -436,3 +591,4 @@ export interface SupportClinicsResponse {
   overdueCount: number
   clinics: SupportClinicRecord[]
 }
+

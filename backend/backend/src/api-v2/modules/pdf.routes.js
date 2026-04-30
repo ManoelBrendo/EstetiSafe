@@ -1,6 +1,10 @@
-﻿const express = require('express')
+const express = require('express')
 const { asyncHandler, parsePositiveInt, httpError } = require('../lib/http')
-const { ensureClientOwnership } = require('../lib/medical-records')
+const {
+  ensureClientOwnership,
+  buildMedicalRecordAuditMetadata,
+} = require('../lib/medical-records')
+const { createAuditLog } = require('../lib/audit')
 const { ensureServiceOwnership } = require('../lib/protocols')
 
 function createPdfRouter(context) {
@@ -11,7 +15,7 @@ function createPdfRouter(context) {
 
   router.get('/medical-records/by-client/:clientId', asyncHandler(async (req, res) => {
     if (!context.legacyPdf?.sendPdfDocument || !context.legacyPdf?.renderClientMedicalRecordPdf || !context.legacyPdf?.sanitizeFileName) {
-      throw httpError(501, 'Geracao de PDF ainda nao disponivel na API v2.')
+      throw httpError(501, 'Geração de PDF ainda não disponível na API v2.')
     }
 
     const clientId = parsePositiveInt(req.params.clientId, 'clientId')
@@ -31,12 +35,22 @@ function createPdfRouter(context) {
         },
         consentRecords: {
           orderBy: { createdAt: 'desc' },
-          take: 1,
+          take: 10,
         },
       },
     })
 
     const filename = `${context.legacyPdf.sanitizeFileName(`prontuario-${client.name}`, 'prontuario-clinico')}.pdf`
+
+    await createAuditLog(context.prisma, req, context.auth, {
+      action: 'API_V2_MEDICAL_RECORD_PDF_DOWNLOAD',
+      entityType: 'Client',
+      entityId: client.id,
+      metadata: buildMedicalRecordAuditMetadata(client, `/api/v2/pdf/medical-records/by-client/${client.id}`, {
+        filename,
+      }),
+    })
+
     context.legacyPdf.sendPdfDocument(res, filename, doc => {
       context.legacyPdf.renderClientMedicalRecordPdf(doc, {
         clinicName: req.currentUser?.clinicName,
@@ -51,7 +65,7 @@ function createPdfRouter(context) {
       || !context.legacyPdf?.renderServicePopPdf
       || !context.legacyPdf?.sanitizeFileName
     ) {
-      throw httpError(501, 'PDF de POP ainda nao disponivel na API v2.')
+      throw httpError(501, 'PDF de POP ainda não disponível na API v2.')
     }
 
     const serviceId = parsePositiveInt(req.params.serviceId, 'serviceId')
@@ -67,7 +81,7 @@ function createPdfRouter(context) {
     }
 
     if (!pop) {
-      throw httpError(404, 'POP ainda nao disponivel para este servico.')
+      throw httpError(404, 'POP ainda não disponível para este serviço.')
     }
 
     const filename = `${context.legacyPdf.sanitizeFileName(pop.title || `pop-${service.name}`, 'pop')}.pdf`

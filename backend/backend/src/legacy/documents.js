@@ -15,16 +15,16 @@ const clinicDocumentSchema = z.object({
 
 const documentCategoryLabels = {
   LEGAL: 'Legal',
-  SANITARY: 'Sanitario',
+  SANITARY: 'Sanitário',
   CLIENTS: 'Clientes',
-  WASTE: 'Residuos',
+  WASTE: 'Resíduos',
 }
 
 const documentRequirementCatalog = {
-  LEGAL: ['Alvara sanitario', 'Alvara de funcionamento', 'CNPJ', 'Contrato social'],
-  SANITARY: ['Responsavel tecnico', 'Manual de biosseguranca', 'Licenca da VISA', 'Treinamento interno'],
-  CLIENTS: ['Termo de consentimento padrao', 'Politica de privacidade', 'Modelo de anamnese'],
-  WASTE: ['PGRSS', 'Contrato da coletora', 'Comprovante de coleta', 'Manifesto de residuos'],
+  LEGAL: ['Alvará sanitário', 'Alvará de funcionamento', 'CNPJ', 'Contrato social'],
+  SANITARY: ['Responsável técnico', 'Manual de biossegurança', 'Licença da VISA', 'Treinamento interno'],
+  CLIENTS: ['Termo de consentimento padrão', 'Política de privacidade', 'Modelo de anamnese'],
+  WASTE: ['PGRSS', 'Contrato da coletora', 'Comprovante de coleta', 'Manifesto de resíduos'],
 }
 
 function getDocumentStatus(expiresAt) {
@@ -38,6 +38,15 @@ function getDocumentStatus(expiresAt) {
 
   const now = new Date()
   const expiresAtEndOfDay = new Date(expiresAt)
+
+  if (Number.isNaN(expiresAtEndOfDay.getTime())) {
+    return {
+      status: 'WITHOUT_EXPIRY',
+      label: 'Data inválida',
+      daysUntilExpiry: null,
+    }
+  }
+
   expiresAtEndOfDay.setHours(23, 59, 59, 999)
 
   const daysUntilExpiry = Math.ceil((expiresAtEndOfDay.getTime() - now.getTime()) / 86400000)
@@ -123,8 +132,8 @@ function getDocumentRequirementLabel(status, matchedDocument) {
   return 'Em dia'
 }
 
-function buildDocumentDashboard(records) {
-  const summarized = records.map(summarizeDocument).filter(Boolean)
+function buildDocumentDashboard(records = []) {
+  const summarized = (Array.isArray(records) ? records : []).map(summarizeDocument).filter(Boolean)
   const alerts = summarized
     .filter(document => document.status === 'EXPIRING' || document.status === 'EXPIRED')
     .sort((left, right) => {
@@ -184,11 +193,10 @@ function buildDocumentDashboard(records) {
   const expiringIn7Days = summarized.filter(document => document.status === 'EXPIRING' && document.daysUntilExpiry !== null && document.daysUntilExpiry <= 7).length
   const expiringIn15Days = summarized.filter(document => document.status === 'EXPIRING' && document.daysUntilExpiry !== null && document.daysUntilExpiry <= 15).length
   const expiringIn30Days = summarized.filter(document => document.status === 'EXPIRING' && document.daysUntilExpiry !== null && document.daysUntilExpiry <= 30).length
-  const lastUpdatedAt = summarized.length
-    ? summarized
-      .map(document => new Date(document.updatedAt).getTime())
-      .reduce((latest, current) => Math.max(latest, current), 0)
-    : null
+  const updateTimes = summarized
+    .map(document => new Date(document.updatedAt).getTime())
+    .filter(time => Number.isFinite(time))
+  const lastUpdatedAt = updateTimes.length ? Math.max(...updateTimes) : null
 
   return {
     total: summarized.length,
@@ -236,6 +244,40 @@ function normalizeDocumentData(data, parseDateOnly) {
   return normalized
 }
 
+function serializeDocumentAuditDate(value) {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString()
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString()
+}
+
+function buildDocumentAuditMetadata(record, overrides = {}) {
+  const summary = summarizeDocument(record) || {}
+
+  return {
+    title: summary.title || null,
+    documentType: summary.documentType || null,
+    category: summary.category || null,
+    categoryLabel: summary.category ? documentCategoryLabels[summary.category] || summary.category : null,
+    fileName: summary.fileName || null,
+    fileMimeType: summary.fileMimeType || null,
+    expiresAt: serializeDocumentAuditDate(summary.expiresAt),
+    status: summary.status || null,
+    statusLabel: summary.statusLabel || null,
+    daysUntilExpiry: summary.daysUntilExpiry ?? null,
+    ...overrides,
+  }
+}
+
+function getScopedDocumentUserId(req) {
+  return req.currentUser?.id || req.user?.id
+}
+
+function getScopedDocumentClinicId(req) {
+  return req.currentUser?.ownedClinic?.id || null
+}
+
 async function ensureDocumentOwnership(prisma, userId, documentId) {
   return prisma.clinicDocument.findFirstOrThrow({
     where: { id: documentId, userId },
@@ -249,14 +291,16 @@ function registerDocumentRoutes({
   handle,
   parseId,
   parseDateOnly,
+  createAuditLogFromRequest = async () => null,
 }) {
   if (!app || !prisma || !authMiddleware || !handle || !parseId || !parseDateOnly) {
     throw new Error('registerDocumentRoutes requer app, prisma, authMiddleware, handle, parseId e parseDateOnly')
   }
 
   app.get('/documents/summary', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const records = await prisma.clinicDocument.findMany({
-      where: { userId: req.user.id },
+      where: { userId },
       select: {
         id: true,
         category: true,
@@ -275,11 +319,12 @@ function registerDocumentRoutes({
   }))
 
   app.get('/documents', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const category = req.query.category ? documentCategorySchema.parse(String(req.query.category)) : null
 
     const records = await prisma.clinicDocument.findMany({
       where: {
-        userId: req.user.id,
+        userId,
         ...(category ? { category } : {}),
       },
       orderBy: [
@@ -292,8 +337,17 @@ function registerDocumentRoutes({
   }))
 
   app.get('/documents/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const documentId = parseId(req.params.id, 'documentId')
-    const document = await ensureDocumentOwnership(prisma, req.user.id, documentId)
+    const document = await ensureDocumentOwnership(prisma, userId, documentId)
+
+    await createAuditLogFromRequest(req, {
+      clinicId: getScopedDocumentClinicId(req),
+      action: 'CLINIC_DOCUMENT_VIEW',
+      entityType: 'ClinicDocument',
+      entityId: documentId,
+      metadata: buildDocumentAuditMetadata(document),
+    })
 
     res.json({
       ...summarizeDocument(document),
@@ -302,36 +356,70 @@ function registerDocumentRoutes({
   }))
 
   app.post('/documents', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const data = clinicDocumentSchema.parse(req.body)
     const document = await prisma.clinicDocument.create({
       data: {
         ...normalizeDocumentData(data, parseDateOnly),
-        userId: req.user.id,
+        userId,
       },
     })
+    const summary = summarizeDocument(document)
 
-    res.status(201).json(summarizeDocument(document))
+    await createAuditLogFromRequest(req, {
+      clinicId: getScopedDocumentClinicId(req),
+      action: 'CLINIC_DOCUMENT_CREATE',
+      entityType: 'ClinicDocument',
+      entityId: document.id,
+      metadata: buildDocumentAuditMetadata(document),
+    })
+
+    res.status(201).json(summary)
   }))
 
   app.put('/documents/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const documentId = parseId(req.params.id, 'documentId')
     const data = clinicDocumentSchema.partial().parse(req.body)
 
-    await ensureDocumentOwnership(prisma, req.user.id, documentId)
+    const previousDocument = await ensureDocumentOwnership(prisma, userId, documentId)
 
     const document = await prisma.clinicDocument.update({
       where: { id: documentId },
       data: normalizeDocumentData(data, parseDateOnly),
     })
+    const summary = summarizeDocument(document)
 
-    res.json(summarizeDocument(document))
+    await createAuditLogFromRequest(req, {
+      clinicId: getScopedDocumentClinicId(req),
+      action: 'CLINIC_DOCUMENT_UPDATE',
+      entityType: 'ClinicDocument',
+      entityId: documentId,
+      metadata: buildDocumentAuditMetadata(document, {
+        previous: buildDocumentAuditMetadata(previousDocument),
+      }),
+    })
+
+    res.json(summary)
   }))
 
   app.delete('/documents/:id', authMiddleware, handle(async (req, res) => {
+    const userId = getScopedDocumentUserId(req)
     const documentId = parseId(req.params.id, 'documentId')
+    const previousDocument = await ensureDocumentOwnership(prisma, userId, documentId)
 
     await prisma.clinicDocument.deleteMany({
-      where: { id: documentId, userId: req.user.id },
+      where: { id: documentId, userId },
+    })
+
+    await createAuditLogFromRequest(req, {
+      clinicId: getScopedDocumentClinicId(req),
+      action: 'CLINIC_DOCUMENT_DELETE',
+      entityType: 'ClinicDocument',
+      entityId: documentId,
+      metadata: buildDocumentAuditMetadata(previousDocument, {
+        removedFromActiveBase: true,
+      }),
     })
 
     res.json({ ok: true })
@@ -340,6 +428,7 @@ function registerDocumentRoutes({
 
 module.exports = {
   buildDocumentDashboard,
+  buildDocumentAuditMetadata,
   clinicDocumentSchema,
   documentCategorySchema,
   getDocumentStatus,

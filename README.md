@@ -1,4 +1,4 @@
-﻿# L'Appui SaaS
+# L'Appui SaaS
 
 L'Appui is a web SaaS for aesthetic clinics focused on operational clarity, clinical records, regulatory compliance, and technical support.
 
@@ -23,14 +23,14 @@ The platform is organized around the routines that matter most to a clinic:
 
 ## Main stack
 
-- Frontend: React, Vite, TypeScript migration in progress, Axios, React Router
+- Frontend: React, Vite, strict TypeScript, Axios, React Router
 - Backend: Node.js, Express, Prisma, PostgreSQL, Zod, PDFKit
 - Testing: Vitest on the frontend and Node test runner on the backend
 
 ## Current technical status
 
-- The frontend is being migrated progressively from JavaScript to TypeScript.
-- Core auth, clinical flows, documents, dashboard, billing, and inventory are already typed.
+- The frontend is now running with strict TypeScript checks.
+- Core auth, clinical flows, documents, dashboard, billing, inventory, audit and intercurrences are covered by typed frontend code or backend tests.
 - CI is configured to lint, test, and build both application layers.
 
 ## Local setup
@@ -83,6 +83,22 @@ npm test
 npm run test:integration
 ```
 
+
+## Production commercial readiness
+
+Use [docs/production-commercial-readiness.md](docs/production-commercial-readiness.md) before selling or deploying to real clinics.
+
+Backend production preflight:
+
+```bash
+cd backend/backend
+NODE_ENV=production npm run verify:prod
+```
+
+Operational checks after deploy:
+
+- `GET /health` verifies the HTTP process.
+- `GET /ready` verifies database connectivity.
 ## CI
 
 The repository already includes [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for:

@@ -44,8 +44,8 @@ const anamnesisRules = [
     pathTerms: ['doenca', 'disease', 'diabetes', 'hipertensao', 'cardiaco', 'condicao'],
     textTerms: ['diabetes', 'hipertensao', 'cardiaco', 'epilepsia', 'cancer'],
     title: 'Revisar condicoes clinicas',
-    description: 'A anamnese contem condicao clinica que deve ser considerada na avaliacao profissional.',
-    actionLabel: 'Revisar historico clinico',
+    description: 'A anamnese contém condição clínica que deve ser considerada na avaliação profissional.',
+    actionLabel: 'Revisar histórico clínico',
   },
 ]
 
@@ -112,7 +112,7 @@ function buildInventoryPredictiveInsights(products = [], equipmentItems = [], op
         kind: 'EXPIRED_PRODUCT',
         priority: 'CRITICAL',
         title: `Produto vencido: ${product.name}`,
-        description: 'Produto ativo esta vencido e deve ser retirado do uso ate revisao da clinica.',
+        description: 'Produto ativo está vencido e deve ser retirado do uso até revisão da clínica.',
         evidence: productEvidence,
         actionLabel: 'Bloquear uso e revisar descarte',
         metadata: { id: product.id, name: product.name, daysUntilDue: product.daysUntilDue },
@@ -171,7 +171,7 @@ function buildInventoryPredictiveInsights(products = [], equipmentItems = [], op
         kind: 'MAINTENANCE_DUE_SOON',
         priority: 'WARNING',
         title: `Manutencao proxima: ${equipment.name}`,
-        description: 'Equipamento ativo esta proximo da manutencao preventiva.',
+        description: 'Equipamento ativo está próximo da manutenção preventiva.',
         evidence: equipmentEvidence,
         actionLabel: 'Planejar manutencao',
         metadata: { id: equipment.id, name: equipment.name, daysUntilDue: equipment.daysUntilDue },
@@ -258,15 +258,39 @@ function countByPriority(insights) {
   }, { INFO: 0, WARNING: 0, CRITICAL: 0 })
 }
 
+function buildAiReadiness(env = process.env) {
+  const wantsExternalAi = env.CLINICAL_AI_ENABLED === 'true'
+  const provider = env.CLINICAL_AI_PROVIDER || (wantsExternalAi ? 'EXTERNAL_AI' : 'RULES_ENGINE')
+  const missing = []
+
+  if (wantsExternalAi && !env.CLINICAL_AI_API_KEY) missing.push('CLINICAL_AI_API_KEY')
+
+  const externalAiEnabled = wantsExternalAi && missing.length === 0
+
+  return {
+    mode: externalAiEnabled ? 'external_ai_ready' : 'deterministic_rules',
+    provider,
+    externalAiEnabled,
+    ready: !wantsExternalAi || externalAiEnabled,
+    missing,
+    safeguards: ['human_review_required', 'no_automatic_diagnosis', 'audit_friendly_rules'],
+    message: externalAiEnabled
+      ? 'IA externa habilitada com revisao humana obrigatoria antes de qualquer conduta.'
+      : 'Insights operando por regras auditaveis, sem diagnostico automatico e sem envio externo de dados clinicos.',
+  }
+}
+
 function buildClinicalInsights(input = {}) {
+  const readiness = buildAiReadiness(input.env || process.env)
   const inventoryInsights = buildInventoryPredictiveInsights(input.products || [], input.equipmentItems || [], input.options || {})
   const anamnesisInsights = extractAnamnesisRiskSignals(input.anamnesis || null)
   const limit = Number.isFinite(input.limit) ? input.limit : 12
   const insights = sortInsights([...inventoryInsights, ...anamnesisInsights]).slice(0, limit)
 
   return {
-    mode: 'deterministic',
-    externalAiEnabled: false,
+    mode: readiness.externalAiEnabled ? 'external_ai' : 'deterministic',
+    externalAiEnabled: readiness.externalAiEnabled,
+    readiness,
     generatedAt: (input.now instanceof Date ? input.now : new Date()).toISOString(),
     total: insights.length,
     countsByPriority: countByPriority(insights),
@@ -276,6 +300,7 @@ function buildClinicalInsights(input = {}) {
 }
 
 module.exports = {
+  buildAiReadiness,
   buildClinicalInsights,
   buildInventoryPredictiveInsights,
   extractAnamnesisRiskSignals,

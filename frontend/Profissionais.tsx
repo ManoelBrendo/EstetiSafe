@@ -32,7 +32,7 @@ const contractTypeOptions: Array<{ value: ProfessionalContractType; label: strin
 
 const paymentModelOptions: Array<{ value: ProfessionalPaymentModel; label: string }> = [
   { value: 'FIXED', label: 'Fixo' },
-  { value: 'COMMISSION', label: 'Comissao' },
+  { value: 'COMMISSION', label: 'Comissão' },
   { value: 'HYBRID', label: 'Hibrido' },
   { value: 'DAILY', label: 'Diaria' },
 ]
@@ -109,7 +109,7 @@ function getInitials(name?: string | null) {
 }
 
 function formatCurrency(value?: number | string | null) {
-  if (value == null || value === '') return 'Nao definido'
+  if (value == null || value === '') return 'Não definido'
 
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -118,18 +118,18 @@ function formatCurrency(value?: number | string | null) {
 }
 
 function formatAvailabilitySummary(professional: ProfessionalSummary) {
-  return professional.availabilitySummary || 'Disponibilidade ainda nao configurada.'
+  return professional.availabilitySummary || 'Disponibilidade ainda não configurada.'
 }
 
 function formatCompensationSummary(professional: ProfessionalSummary) {
-  return professional.compensationSummary || 'Folha de pagamento ainda nao configurada.'
+  return professional.compensationSummary || 'Folha de pagamento ainda não configurada.'
 }
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada'))
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada'))
     reader.readAsDataURL(file)
   })
 }
@@ -183,15 +183,15 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }: Profession
       <div className="team-meta-grid team-meta-grid-rich">
         <div className="team-meta-item">
           <span>Telefone</span>
-          <strong>{professional.phone || 'Nao informado'}</strong>
+          <strong>{professional.phone || 'Não informado'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Regime</span>
-          <strong>{professional.contractTypeLabel || 'Nao definido'}</strong>
+          <strong>{professional.contractTypeLabel || 'Não definido'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Modelo</span>
-          <strong>{professional.paymentModelLabel || 'Nao definido'}</strong>
+          <strong>{professional.paymentModelLabel || 'Não definido'}</strong>
         </div>
         <div className="team-meta-item">
           <span>Base fixa</span>
@@ -212,7 +212,7 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }: Profession
 
         {professional.notes ? (
           <div className="team-card-note">
-            <strong>Observacoes</strong>
+            <strong>Observações</strong>
             <span>{professional.notes}</span>
           </div>
         ) : null}
@@ -280,7 +280,7 @@ export default function Profissionais() {
       const { data } = await api.get<ProfessionalSummary[]>('/professionals')
       setProfessionals(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os profissionais'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível carregar os profissionais'))
     } finally {
       setLoading(false)
     }
@@ -340,7 +340,7 @@ export default function Profissionais() {
       const dataUrl = await readFileAsDataUrl(file)
       setForm(current => ({ ...current, photoDataUrl: dataUrl }))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar a foto')
+      toast.error(error instanceof Error ? error.message : 'Não foi possível carregar a foto')
     } finally {
       event.target.value = ''
     }
@@ -383,7 +383,7 @@ export default function Profissionais() {
       setForm(createEmptyForm())
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a profissional'))
     } finally {
       setSaving(false)
     }
@@ -397,7 +397,7 @@ export default function Profissionais() {
       toast.success('Profissional desativada')
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel desativar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível desativar a profissional'))
     }
   }
 
@@ -406,7 +406,7 @@ export default function Profissionais() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Profissionais</h1>
-          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento reunidas em uma apresentacao elegante e funcional.</p>
+          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento reunidas em uma apresentação elegante e funcional.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
@@ -433,7 +433,7 @@ export default function Profissionais() {
         <div className="stat-card rose">
           <div className="stat-label">Especialidades</div>
           <div className="stat-value">{specialtyCount}</div>
-          <div className="stat-sub">Cobertura tecnica distribuida na clinica.</div>
+          <div className="stat-sub">Cobertura técnica distribuida na clínica.</div>
         </div>
       </div>
 
@@ -441,7 +441,7 @@ export default function Profissionais() {
         <div className="search-bar">
           <Icon name="search" />
           <input
-            placeholder="Buscar nome, especialidade ou observacao..."
+            placeholder="Buscar nome, especialidade ou observação..."
             value={search}
             onChange={event => setSearch(event.target.value)}
           />
@@ -463,7 +463,7 @@ export default function Profissionais() {
               <Icon name="person" size={24} />
             </div>
             <h3>Nenhuma profissional cadastrada</h3>
-            <p>Adicione a equipe da clinica para acompanhar agenda, repasse e observacoes com mais clareza.</p>
+            <p>Adicione a equipe da clínica para acompanhar agenda, repasse e observações com mais clareza.</p>
           </div>
         </div>
       ) : (
@@ -490,7 +490,7 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Dados principais</h3>
-                    <p className="section-copy">Identificacao, especialidade e apresentacao da profissional.</p>
+                    <p className="section-copy">Identificação, especialidade e apresentação da profissional.</p>
                   </div>
                 </div>
 
@@ -511,12 +511,12 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observacoes</label>
+                    <label className="form-label">Observações</label>
                     <textarea
                       className="form-textarea"
                       value={form.notes}
                       onChange={setField('notes')}
-                      placeholder="Informacoes relevantes sobre atendimento, perfil tecnico, preferencia de agenda ou estilo de cuidado."
+                      placeholder="Informações relevantes sobre atendimento, perfil técnico, preferência de agenda ou estilo de cuidado."
                     />
                   </div>
                 </div>
@@ -526,7 +526,7 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Foto e disponibilidade</h3>
-                    <p className="section-copy">Imagem de perfil e dias de atendimento para consulta rapida em qualquer tela.</p>
+                    <p className="section-copy">Imagem de perfil e dias de atendimento para consulta rápida em qualquer tela.</p>
                   </div>
                 </div>
 
@@ -601,13 +601,13 @@ export default function Profissionais() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Folha de pagamento</h3>
-                    <p className="section-copy">Defina regime, modelo de repasse e observacoes financeiras da profissional.</p>
+                    <p className="section-copy">Defina regime, modelo de repasse e observações financeiras da profissional.</p>
                   </div>
                 </div>
 
                 <div className="form-grid payroll-grid">
                   <div className="form-group">
-                    <label className="form-label">Regime de contratacao</label>
+                    <label className="form-label">Regime de contratação</label>
                     <select className="form-select" value={form.contractType} onChange={setField('contractType')}>
                       <option value="">Selecione</option>
                       {contractTypeOptions.map(option => (
@@ -632,7 +632,7 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Comissao (%)</label>
+                    <label className="form-label">Comissão (%)</label>
                     <input className="form-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={setField('commissionRate')} placeholder="0" />
                   </div>
 
@@ -642,12 +642,12 @@ export default function Profissionais() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observacoes da folha</label>
+                    <label className="form-label">Observações da folha</label>
                     <textarea
                       className="form-textarea"
                       value={form.payrollNotes}
                       onChange={setField('payrollNotes')}
-                      placeholder="Ex: comissao sobre procedimentos especificos, ajuda de custo, bonificacao ou politica de repasse."
+                      placeholder="Ex: comissão sobre procedimentos específicos, ajuda de custo, bonificação ou política de repasse."
                     />
                   </div>
                 </div>

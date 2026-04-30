@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  buildBillingGatewayReadiness,
   buildIntentPayload,
   createGatewayReference,
   getLatestGatewayIntent,
@@ -176,4 +177,37 @@ test('getLatestGatewayIntent returns null without a clinic id', async () => {
   })
 
   assert.equal(result, null)
+})
+
+test('buildBillingGatewayReadiness exposes missing live-provider requirements safely', () => {
+  const readiness = buildBillingGatewayReadiness({
+    env: {},
+    persistence: 'audit_log_fallback',
+  })
+
+  assert.equal(readiness.status, 'SIMULATION')
+  assert.equal(readiness.configured, false)
+  assert.equal(readiness.readyForLiveProvider, false)
+  assert.deepEqual(readiness.supportedMethods, ['PIX', 'CREDIT_CARD', 'BANK_TRANSFER'])
+  assert.ok(readiness.missing.includes('BILLING_GATEWAY_PROVIDER'))
+  assert.ok(readiness.missing.includes('BILLING_WEBHOOK_SECRET'))
+  assert.ok(readiness.missing.includes('billing_gateway_intents/billing_gateway_events'))
+})
+
+test('buildBillingGatewayReadiness marks live provider as ready when critical pieces exist', () => {
+  const readiness = buildBillingGatewayReadiness({
+    env: {
+      BILLING_GATEWAY_PROVIDER: 'STRIPE',
+      BILLING_WEBHOOK_SECRET: 'secret',
+      BILLING_AUTOMATION_ENABLED: 'true',
+    },
+    persistence: 'database',
+  })
+
+  assert.equal(readiness.status, 'READY')
+  assert.equal(readiness.configured, true)
+  assert.equal(readiness.readyForLiveProvider, true)
+  assert.equal(readiness.webhookConfigured, true)
+  assert.equal(readiness.automaticBillingEnabled, true)
+  assert.deepEqual(readiness.missing, [])
 })

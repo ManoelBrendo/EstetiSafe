@@ -32,7 +32,7 @@ function createDocumentsRouter(context) {
       : await getOrCreateMedicalRecordForClient(context.prisma, payload.clientId)
 
     if (!medicalRecord) {
-      throw httpError(404, 'Prontuario nao encontrado para o documento')
+      throw httpError(404, 'Prontuário não encontrado para o documento')
     }
 
     const document = await context.prisma.pdfDocument.create({

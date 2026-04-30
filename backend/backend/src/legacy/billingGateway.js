@@ -39,8 +39,8 @@ function createGatewayReference(clinicId) {
   return 'LAPPUI-' + clinicId + '-' + stamp + '-' + random
 }
 
-function getGatewayProviderName() {
-  return process.env.BILLING_GATEWAY_PROVIDER || 'MANUAL_READY'
+function getGatewayProviderName(env = process.env) {
+  return env.BILLING_GATEWAY_PROVIDER || 'MANUAL_READY'
 }
 
 function normalizeGatewayStatus(status, fallback = 'PENDING') {
@@ -55,6 +55,37 @@ function normalizeGatewayMethod(method, fallback = 'PIX') {
 
 function gatewayPersistenceAvailable(prisma) {
   return Boolean(prisma?.billingGatewayIntent && prisma?.billingGatewayEvent)
+}
+
+function buildBillingGatewayReadiness({ env = process.env, persistence = 'database' } = {}) {
+  const provider = getGatewayProviderName(env)
+  const hasRealProvider = provider !== 'MANUAL_READY'
+  const webhookConfigured = Boolean(env.BILLING_WEBHOOK_SECRET)
+  const automaticBillingEnabled = env.BILLING_AUTOMATION_ENABLED === 'true'
+  const missing = []
+
+  if (!hasRealProvider) missing.push('BILLING_GATEWAY_PROVIDER')
+  if (!webhookConfigured) missing.push('BILLING_WEBHOOK_SECRET')
+  if (persistence !== 'database') missing.push('billing_gateway_intents/billing_gateway_events')
+
+  const readyForLiveProvider = hasRealProvider && webhookConfigured && persistence === 'database'
+  const status = readyForLiveProvider ? 'READY' : (hasRealProvider || webhookConfigured ? 'PARTIAL' : 'SIMULATION')
+
+  return {
+    status,
+    provider,
+    mode: readyForLiveProvider ? 'live_provider_ready' : 'provider_agnostic',
+    persistence,
+    configured: readyForLiveProvider,
+    readyForLiveProvider,
+    webhookConfigured,
+    automaticBillingEnabled,
+    supportedMethods: gatewayPaymentMethods.slice(),
+    missing,
+    message: readyForLiveProvider
+      ? 'Gateway financeiro pronto para operar com provedor real, webhook assinado e persistencia dedicada.'
+      : 'Gateway em modo seguro de preparacao: gera intencoes rastreaveis e aguarda credenciais do provedor real.',
+  }
 }
 
 function isMissingGatewayPersistenceError(error) {
@@ -339,13 +370,13 @@ async function createGatewayIntentForSubscription({
   source = 'manual',
 }) {
   if (!user?.id) throw new Error('Usuario da assinatura nao informado')
-  if (!clinicId) throw new Error('Clinica da assinatura nao informada')
+  if (!clinicId) throw new Error('Clínica da assinatura não informada')
 
   const billingReference = reference || createGatewayReference(clinicId)
   const intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
 
   if (source === 'automatic') {
-    intent.message = 'Cobranca automatica de assinatura gerada pelo LAppui. O pagamento sera confirmado por webhook quando o provedor retornar sucesso.'
+    intent.message = 'Cobrança automática de assinatura gerada pelo LAppui. O pagamento será confirmado por webhook quando o provedor retornar sucesso.'
   }
 
   intent.source = source
@@ -369,8 +400,8 @@ function getGatewayAutomationSnapshot(env = process.env) {
     lookAheadDays: Number.isFinite(lookAheadDays) ? Math.max(0, Math.min(lookAheadDays, 30)) : 3,
     intervalMinutes: Number.isFinite(intervalMinutes) ? Math.max(5, Math.min(intervalMinutes, 1440)) : 60,
     message: enabled
-      ? 'Cobranca automatica ativa: o servidor prepara intencoes de pagamento para assinaturas proximas do vencimento.'
-      : 'Cobranca automatica pausada por configuracao de ambiente.',
+      ? 'Cobrança automática ativa: o servidor prepara intenções de pagamento para assinaturas próximas do vencimento.'
+      : 'Cobrança automática pausada por configuração de ambiente.',
   }
 }
 
@@ -538,15 +569,20 @@ function registerBillingGatewayRoutes({
     const clinicId = req.currentUser?.ownedClinic?.id || null
     const latestIntent = await getLatestGatewayIntent({ prisma, clinicId })
 
+    const persistence = gatewayPersistenceAvailable(prisma) ? 'database' : 'audit_log_fallback'
+    const readiness = buildBillingGatewayReadiness({ env: process.env, persistence })
+
     res.json({
-      provider: getGatewayProviderName(),
-      mode: 'provider_agnostic',
-      persistence: gatewayPersistenceAvailable(prisma) ? 'database' : 'audit_log_fallback',
-      configured: Boolean(process.env.BILLING_GATEWAY_PROVIDER && process.env.BILLING_WEBHOOK_SECRET),
-      webhookConfigured: Boolean(process.env.BILLING_WEBHOOK_SECRET),
+      provider: readiness.provider,
+      mode: readiness.mode,
+      persistence,
+      configured: readiness.configured,
+      webhookConfigured: readiness.webhookConfigured,
+      readiness,
+      supportedMethods: readiness.supportedMethods,
       automation: getGatewayAutomationSnapshot(),
       latestIntent,
-      message: 'Camada de gateway preparada para conectar Pix dinamico, cartao e recorrencia sem alterar a tela financeira.',
+      message: readiness.message,
     })
   }))
 
@@ -555,7 +591,7 @@ function registerBillingGatewayRoutes({
     const user = req.currentUser
     const clinicId = user?.ownedClinic?.id
 
-    if (!clinicId) throw httpError(409, 'Clinica nao encontrada para gerar cobranca')
+    if (!clinicId) throw httpError(409, 'Clínica não encontrada para gerar cobrança')
 
     const subscription = user.ownedClinic?.subscription
     const amount = data.amount ?? toNumber(subscription?.amount) ?? toNumber(user.billingAmount)
@@ -582,7 +618,7 @@ function registerBillingGatewayRoutes({
       clinicId,
       action: 'BILLING_GATEWAY_INTENT_CREATED',
       entityType: 'ClinicSubscription',
-      entityId: reference,
+      entityId: responseIntent.reference,
       metadata: { intent: responseIntent },
     })
 
@@ -601,7 +637,7 @@ function registerBillingGatewayRoutes({
     const payload = gatewayWebhookSchema.partial().parse(req.body || {})
     const user = req.currentUser
     const clinicId = user?.ownedClinic?.id
-    if (!clinicId) throw httpError(409, 'Clinica nao encontrada para confirmar cobranca')
+    if (!clinicId) throw httpError(409, 'Clínica não encontrada para confirmar cobrança')
 
     const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date()
     const nextDueAt = payload.nextDueAt ? parseDateOnly(payload.nextDueAt, 'nextDueAt') : null
@@ -750,10 +786,12 @@ function registerBillingGatewayRoutes({
 
 module.exports = {
   applyGatewayPayment,
+  buildBillingGatewayReadiness,
   buildIntentPayload,
   createGatewayIntentForSubscription,
   createGatewayReference,
   getGatewayAutomationSnapshot,
+  getGatewayProviderName,
   getLatestGatewayIntent,
   registerBillingGatewayRoutes,
   toNumber,

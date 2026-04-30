@@ -29,10 +29,22 @@ npm run build
 npm audit --omit=dev
 ```
 
+
+## Production release gate
+
+Run this only with real production environment variables configured:
+
+```bash
+cd backend/backend
+npm run verify:prod
+```
+
+This blocks common commercial deployment mistakes such as local CORS origins, placeholder secrets, missing billing webhook secret, or incomplete support credentials.
 ## Manual smoke test
 
 - Open `http://localhost:5173`.
 - Confirm backend health at `http://localhost:3000/health`.
+- Confirm backend readiness at `http://localhost:3000/ready`.
 - Login/register flow opens without network error.
 - Dashboard loads.
 - Clients, anamnesis, records, documents and billing pages open.

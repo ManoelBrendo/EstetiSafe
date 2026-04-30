@@ -5,8 +5,8 @@ export interface SelectOption {
   label: string
 }
 
-export interface FieldDefinition {
-  key: string
+export interface FieldDefinition<Key extends string = string> {
+  key: Key
   label: string
 }
 
@@ -18,6 +18,7 @@ export interface ClientSeed {
   email?: string
   birthDate?: string
   cpf?: string
+  photoDataUrl?: string | null
   sex?: string
   maritalStatus?: string
   profession?: string
@@ -156,6 +157,14 @@ export interface ObservedConditionsSection {
   stretchMarks: boolean
 }
 
+export type BooleanSectionKey<T> = {
+  [Key in keyof T]: T[Key] extends boolean ? Key : never
+}[keyof T] & string
+
+export type PreExistingConditionKey = BooleanSectionKey<PreExistingConditionsSection>
+export type DermatologicalHistoryKey = BooleanSectionKey<DermatologicalHistorySection>
+export type ObservedConditionKey = BooleanSectionKey<ObservedConditionsSection>
+
 export interface AestheticEvaluationSection {
   skinType: string
   fitzpatrick: string
@@ -186,6 +195,7 @@ export interface PhotoRecordSection {
   marketingUseAuthorized: boolean
   consentVersion: string
   consentAcceptedAt: string | null
+  consentAwarenessConfirmed: boolean
 }
 
 export interface TreatmentPlanSection {
@@ -226,6 +236,11 @@ export interface AnamnesisForm {
   signatures: SignaturesSection
 }
 
+export interface AnamnesisPayload extends Record<string, unknown> {
+  identification: Omit<IdentificationSection, 'age'> & { age: number }
+  photoRecord: PhotoRecordSection
+}
+
 export interface AnamnesisRecordVersion extends AnamnesisForm {
   id?: Identifier
   filledAt?: string | null
@@ -264,6 +279,7 @@ export interface ClientUpsertPayload {
   email: string
   birthDate: string
   cpf: string
+  photoDataUrl?: string | null
   sex: string
   maritalStatus: string
   profession: string
@@ -333,6 +349,7 @@ export interface ClientRecord {
   email?: string
   birthDate?: string
   cpf?: string
+  photoDataUrl?: string | null
   sex?: string
   maritalStatus?: string
   profession?: string
@@ -356,9 +373,39 @@ export interface ClientRecord {
   [key: string]: unknown
 }
 
+export interface MedicalRecordPhotoConsentSecurity {
+  photoCount: number
+  clinicalUseAuthorized: boolean
+  marketingUseAuthorized: boolean
+  consentAwarenessConfirmed: boolean
+  consentVersion: string | null
+  consentAcceptedAt: string | null
+  formalConsentStatus: string
+  formalConsentId: Identifier | null
+  formalConsentSignedAt: string | null
+  needsAttention: boolean
+  message: string
+  [key: string]: unknown
+}
+
+export interface MedicalRecordAuditTrail {
+  enabled: boolean
+  policy: string
+  sensitiveActions: string[]
+  [key: string]: unknown
+}
+
+export interface MedicalRecordSecuritySummary {
+  auditTrail: MedicalRecordAuditTrail
+  accessState: AccessState
+  photoConsent: MedicalRecordPhotoConsentSecurity
+  [key: string]: unknown
+}
+
 export interface MedicalRecordBundle {
   client: ClientRecord
   accessState: AccessState
+  security?: MedicalRecordSecuritySummary
   latestAnamnesis: AnamnesisRecordVersion | null
   anamnesisHistory: AnamnesisRecordVersion[]
   appointments: AppointmentSummary[]

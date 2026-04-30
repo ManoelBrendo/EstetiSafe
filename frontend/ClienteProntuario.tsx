@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { getApiErrorMessage } from './api'
@@ -9,6 +9,7 @@ import {
   getClientPayments,
   getClientProtocols,
 } from './clientRecordsApi'
+import { ClientAvatar } from './ClientAvatar'
 import { Icon } from './Icon'
 import {
   ANAMNESIS_ALCOHOL_FREQUENCY_OPTIONS,
@@ -24,6 +25,7 @@ import {
   normalizeAnamnesisRecord,
 } from './anamnesis'
 import type {
+  AestheticCondition,
   AnamnesisRecordVersion,
   ClientRecord,
   ConsentRecordSummary,
@@ -73,25 +75,31 @@ function formatDate(value: string | number | null | undefined) {
   const normalizedValue = String(value).length <= 10
     ? String(value).slice(0, 10) + 'T12:00:00.000Z'
     : value
+  const parsedDate = new Date(normalizedValue)
+
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
-  }).format(new Date(normalizedValue))
+  }).format(parsedDate)
 }
 
 function formatDateTime(value: string | number | null | undefined) {
   if (!value) return 'Não informado'
 
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
+
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
 }
 
 function formatReadableStatus(status: string | null | undefined) {
   if (!status) return 'Não informado'
 
-  const labels = {
+  const labels: Record<string, string> = {
     ACTIVE: 'Ativo',
     CANCELLED: 'Cancelado',
     COMPLETED: 'Concluído',
@@ -123,11 +131,11 @@ function isImageConsentRecord(record: ConsentRecordSummary | null | undefined) {
 }
 
 function formatImageConsentHelper(record: ConsentRecordSummary | null, isLocked: boolean) {
-  if (record?.status === 'SIGNED') return 'Termo formal assinado e vinculado ao prontuario.'
+  if (record?.status === 'SIGNED') return 'Termo formal assinado e vinculado ao prontuário.'
   if (record?.status === 'PENDING') return 'Termo gerado e aguardando assinatura da cliente.'
   if (record?.status === 'REVOKED') return 'Autorizacao revogada. Gere um novo termo antes de usar imagens.'
-  if (isLocked) return 'Prontuario bloqueado: consulte registros existentes ou retorne ao suporte antes de gerar novo termo.'
-  return 'Gere um termo separado para registrar a autorizacao formal de uso de imagem.'
+  if (isLocked) return 'Prontuário bloqueado: consulte registros existentes ou retorne ao suporte antes de gerar novo termo.'
+  return 'Gere um termo separado para registrar a autorização formal de uso de imagem.'
 }
 
 function formatProtocolStatus(status: string | null | undefined) {
@@ -152,7 +160,7 @@ function buildSummaryItem(label: string, value: string | number | null | undefin
   return label + ': ' + value
 }
 
-function joinConditionSummaries(conditions = []) {
+function joinConditionSummaries(conditions: Array<Partial<AestheticCondition>> = []) {
   const visibleConditions = Array.isArray(conditions)
     ? conditions.filter(condition => condition.present)
     : []
@@ -297,6 +305,7 @@ export default function ClienteProntuario() {
   const photoCount = latestAnamnesis?.photoRecord?.photos?.length || 0
   const clinicalPhotoConsent = Boolean(latestAnamnesis?.photoRecord?.clinicalUseAuthorized || latestAnamnesis?.photoRecord?.imageUseAuthorized)
   const marketingPhotoConsent = Boolean(latestAnamnesis?.photoRecord?.marketingUseAuthorized || latestAnamnesis?.photoRecord?.imageUseAuthorized)
+  const photoConsentAcknowledged = Boolean(latestAnamnesis?.photoRecord?.consentAwarenessConfirmed)
   const photoConsentAcceptedAt = latestAnamnesis?.photoRecord?.consentAcceptedAt || null
   const appointmentCount = medicalRecord?.appointments?.length || client?.appointments?.length || 0
   const isLocked = Boolean(medicalRecord?.accessState?.isLocked ?? client?.isLocked)
@@ -324,6 +333,13 @@ export default function ClienteProntuario() {
   const recentPayments = paymentsBundle?.items || []
   const unpaidAppointments = paymentsBundle?.unpaidAppointments || []
   const timelineItems = medicalRecord?.timeline || []
+  const securitySummary = medicalRecord?.security || null
+  const photoSecurity = securitySummary?.photoConsent || null
+  const auditTrailEnabled = securitySummary?.auditTrail?.enabled !== false
+  const photoSecurityNeedsAttention = Boolean(photoSecurity?.needsAttention || (photoCount > 0 && (!clinicalPhotoConsent || !photoConsentAcknowledged || imageConsentRecord?.status !== 'SIGNED')))
+  const photoSecurityMessage = photoSecurity?.message || (photoSecurityNeedsAttention
+    ? 'Revise o consentimento antes de usar ou divulgar imagens deste prontuário.'
+    : 'Sem alerta adicional de segurança para este prontuário.')
 
   async function handleDownloadPdf() {
     if (!client?.id) return
@@ -366,12 +382,13 @@ export default function ClienteProntuario() {
 
   const quickNavItems = [
     { id: 'cadastro', label: 'Cadastro' },
-    { id: 'visao-clinica', label: 'Resumo clínico' },
+    { id: 'visao-clínica', label: 'Resumo clínico' },
+    { id: 'seguranca-prontuario', label: 'Segurança' },
     ...(latestAnamnesis ? [
       { id: 'identificacao', label: 'Identificação' },
       { id: 'queixa-expectativas', label: 'Queixa e expectativas' },
       { id: 'historico-saude', label: 'Histórico de saúde' },
-      { id: 'avaliacao-estilo', label: 'Avaliação estética' },
+      { id: 'avaliação-estilo', label: 'Avaliação estética' },
       { id: 'conduta-plano', label: 'Plano e ciência' },
       { id: 'protocolo-financeiro', label: 'Protocolo e pagamentos' },
       { id: 'registro-fotografico', label: 'Fotos e assinaturas' },
@@ -438,12 +455,15 @@ export default function ClienteProntuario() {
 
       <section className="card prontuario-summary-card">
         <div className="prontuario-summary-head">
-          <div>
-            <span className="eyebrow">Leitura rápida do prontuário</span>
-            <h2 className="section-title">Panorama clínico do cliente</h2>
-            <p className="section-copy">
-              Cadastro, anamnese, termo e evidências organizados para consulta objetiva, sem excesso visual no topo da tela.
-            </p>
+          <div className="prontuario-client-identity">
+            <ClientAvatar name={client.name} photoDataUrl={client.photoDataUrl} size="hero" />
+            <div>
+              <span className="eyebrow">Leitura rápida do prontuário</span>
+              <h2 className="section-title">Panorama clínico do cliente</h2>
+              <p className="section-copy">
+                Cadastro, anamnese, termo e evidências organizados para consulta objetiva, sem excesso visual no topo da tela.
+              </p>
+            </div>
           </div>
 
           <div className="prontuario-summary-state">
@@ -471,13 +491,31 @@ export default function ClienteProntuario() {
           <SummaryMetric
             label="Fotos clínicas"
             value={String(photoCount)}
-            helper={imageConsentRecord?.status === 'SIGNED' ? 'Termo formal de imagem assinado.' : photoCount ? (clinicalPhotoConsent ? 'Registros com consentimento clinico vinculado.' : 'Registros antigos sem consentimento clinico estruturado.') : 'Nenhuma evidencia fotografica anexada.'}
+            helper={imageConsentRecord?.status === 'SIGNED' ? 'Termo formal de imagem assinado.' : photoCount ? (clinicalPhotoConsent && photoConsentAcknowledged ? 'Registros com aceite e confirmação vinculados.' : 'Registros exigem revisão de consentimento.') : 'Nenhuma evidência fotográfica anexada.'}
           />
           <SummaryMetric
             label="Atendimentos"
             value={String(appointmentCount)}
             helper={appointmentCount ? 'Procedimentos recentes vinculados a este cliente.' : 'Ainda sem procedimentos vinculados.'}
           />
+        </div>
+
+        <div id="seguranca-prontuario-status" className="prontuario-security-strip" aria-label="Camada de segurança do prontuário">
+          <article className={['prontuario-security-item', auditTrailEnabled ? 'is-ok' : 'is-alert'].join(' ')}>
+            <span>Auditoria</span>
+            <strong>{auditTrailEnabled ? 'Acesso auditado' : 'Auditoria indisponível'}</strong>
+            <small>{auditTrailEnabled ? 'Abertura, alteração sensível, tentativa bloqueada e PDF ficam registrados para rastreabilidade.' : 'Revise a configuração de auditoria antes de operar prontuários.'}</small>
+          </article>
+          <article className={['prontuario-security-item', isLocked ? 'is-locked' : 'is-ok'].join(' ')}>
+            <span>Controle</span>
+            <strong>{isLocked ? 'Somente consulta' : 'Edição controlada'}</strong>
+            <small>{isLocked ? 'O prontuário está protegido contra alterações críticas.' : 'A anamnese pode ser atualizada enquanto o prontuário estiver liberado.'}</small>
+          </article>
+          <article className={['prontuario-security-item', photoSecurityNeedsAttention ? 'is-alert' : 'is-ok'].join(' ')}>
+            <span>Imagem</span>
+            <strong>{photoSecurityNeedsAttention ? 'Revisar consentimento' : 'Consentimento acompanhado'}</strong>
+            <small>{photoSecurityMessage}</small>
+          </article>
         </div>
 
         <div className="prontuario-summary-foot">
@@ -508,7 +546,7 @@ export default function ClienteProntuario() {
           </div>
         </SectionCard>
 
-        <SectionCard id="visao-clinica" className="prontuario-overview-card" title="Visão clínica" description="Resumo do status assistencial e da rastreabilidade mais recente.">
+        <SectionCard id="visao-clínica" className="prontuario-overview-card" title="Visão clínica" description="Resumo do status assistencial e da rastreabilidade mais recente.">
           <div className="prontuario-grid">
             <ReadonlyField label="Consentimento" value={consentStatusLabel} />
             <ReadonlyField label="Assinado em" value={latestConsent?.signedAt ? formatDateTime(latestConsent.signedAt) : ''} />
@@ -516,6 +554,17 @@ export default function ClienteProntuario() {
             <ReadonlyField label="Anamnese" value={latestAnamnesis ? 'Atualizada' : 'Pendente'} />
             <ReadonlyField label="Última anamnese" value={latestAnamnesis?.filledAt ? formatDateTime(latestAnamnesis.filledAt) : ''} />
             <ReadonlyField label="Profissional na anamnese" value={anamnesisProfessionalName} />
+          </div>
+        </SectionCard>
+
+        <SectionCard id="seguranca-prontuario" className="prontuario-overview-card prontuario-security-overview" title="Segurança do prontuário" description="Resumo objetivo de bloqueio, consentimento e uso de imagem.">
+          <div className="prontuario-grid">
+            <ReadonlyField label="Edição do prontuário" value={isLocked ? 'Bloqueada' : 'Liberada'} />
+            <ReadonlyField label="Uso clínico de imagem" value={formatBooleanAnswer(clinicalPhotoConsent)} />
+            <ReadonlyField label="Confirmação de ciência" value={formatBooleanAnswer(photoConsentAcknowledged)} />
+            <ReadonlyField label="Termo formal de imagem" value={imageConsentStatusLabel} />
+            <ReadonlyField label="Fotos anexadas" value={String(photoCount)} />
+            <ReadonlyField label="Último aceite" value={photoConsentAcceptedAt ? formatDateTime(photoConsentAcceptedAt) : ''} />
           </div>
         </SectionCard>
       </div>
@@ -672,7 +721,7 @@ export default function ClienteProntuario() {
               </CollapsibleSectionCard>
 
               <CollapsibleSectionCard
-                id="avaliacao-estilo"
+                id="avaliação-estilo"
                 title="Avaliação estética e estilo de vida"
                 description="Leitura consolidada do perfil do paciente e do contexto de tratamento."
                 summaryItems={[
@@ -922,30 +971,32 @@ export default function ClienteProntuario() {
                 defaultOpen
                 summaryItems={[
                   buildSummaryItem('Fotos', String(photoCount)),
-                  buildSummaryItem('Uso clinico autorizado', formatBooleanAnswer(clinicalPhotoConsent)),
+                  buildSummaryItem('Uso clínico autorizado', formatBooleanAnswer(clinicalPhotoConsent)),
                   buildSummaryItem('Marketing autorizado', formatBooleanAnswer(marketingPhotoConsent)),
+                  buildSummaryItem('Confirmação de ciência', formatBooleanAnswer(photoConsentAcknowledged)),
                   buildSummaryItem('Profissional', anamnesisProfessionalName),
                 ]}
               >
                 <div className="prontuario-grid">
-                  <ReadonlyField label="Uso clinico de imagem" value={formatBooleanAnswer(clinicalPhotoConsent)} />
+                  <ReadonlyField label="Uso clínico de imagem" value={formatBooleanAnswer(clinicalPhotoConsent)} />
                   <ReadonlyField label="Uso em marketing" value={formatBooleanAnswer(marketingPhotoConsent)} />
                   <ReadonlyField label="Termo formal de imagem" value={imageConsentStatusLabel} />
+                  <ReadonlyField label="Confirmação de ciência" value={formatBooleanAnswer(photoConsentAcknowledged)} />
                   <ReadonlyField label="Aceite de imagem" value={photoConsentAcceptedAt ? formatDateTime(photoConsentAcceptedAt) : ''} />
                   <ReadonlyField label="Fotos anexadas" value={String(photoCount)} />
                   <ReadonlyField label="Data da assinatura" value={latestAnamnesis.signatures.signedAt ? formatDate(latestAnamnesis.signatures.signedAt) : ''} />
                   <ReadonlyField label="Profissional responsável" value={anamnesisProfessionalName} />
                 </div>
 
-                {photoCount && !clinicalPhotoConsent ? (
+                {photoCount && (!clinicalPhotoConsent || !photoConsentAcknowledged) ? (
                   <div className="prontuario-consent-alert">
-                    Este prontuario possui fotos antigas sem consentimento clinico estruturado. Antes de usar novas imagens, atualize a anamnese e registre o aceite.
+                    Este prontuário possui fotos que precisam de revisão de consentimento. Antes de usar novas imagens, atualize a anamnese, registre o aceite clínico e confirme a ciência da autorização.
                   </div>
                 ) : null}
 
                 <div className="image-consent-card" aria-live="polite">
                   <div className="image-consent-copy">
-                    <span className="eyebrow">Seguranca juridica de imagem</span>
+                    <span className="eyebrow">Segurança jurídica de imagem</span>
                     <strong>Termo formal de uso de imagem</strong>
                     <p>{imageConsentHelper}</p>
                     {imageConsentRecord?.signedAt ? <small>Assinado em {formatDateTime(imageConsentRecord.signedAt)}</small> : null}

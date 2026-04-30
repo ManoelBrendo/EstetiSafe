@@ -1,13 +1,148 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const express = require('express')
 
 const {
   buildClinicBillsDashboard,
   getBillDueStatus,
   normalizeClinicBillData,
+  registerBillingRoutes,
   summarizeClinicBill,
+  toSafeNumber,
 } = require('../src/legacy/billing')
 
+
+function createBillingRouteHarness() {
+  const currentUser = {
+    id: 77,
+    email: 'clinica@example.com',
+    clinicName: 'Clinica Teste',
+    createdAt: '2026-04-01T00:00:00.000Z',
+    billingStatus: 'ACTIVE',
+    ownedClinic: {
+      id: 12,
+      subscription: null,
+    },
+  }
+  const baseRecord = {
+    id: 123,
+    userId: currentUser.id,
+    title: 'Conta operacional',
+    category: 'Operacional',
+    amount: 120,
+    dueAt: '2026-05-10T00:00:00.000Z',
+    paidAt: null,
+    notes: null,
+    active: true,
+    createdAt: '2026-04-10T00:00:00.000Z',
+    updatedAt: '2026-04-10T00:00:00.000Z',
+  }
+  const calls = {
+    createData: [],
+    findWhere: [],
+    updateData: [],
+    updateManyWhere: [],
+    audit: [],
+  }
+  const app = express()
+
+  app.use(express.json())
+
+  registerBillingRoutes({
+    app,
+    prisma: {
+      clinicBill: {
+        findMany: async () => [],
+        create: async ({ data }) => {
+          calls.createData.push(data)
+          return {
+            ...baseRecord,
+            ...data,
+            id: 456,
+          }
+        },
+        findFirstOrThrow: async ({ where }) => {
+          calls.findWhere.push(where)
+          return {
+            ...baseRecord,
+            id: where.id,
+            userId: where.userId,
+          }
+        },
+        update: async ({ where, data }) => {
+          calls.updateData.push(data)
+          return {
+            ...baseRecord,
+            id: where.id,
+            ...data,
+          }
+        },
+        updateMany: async ({ where, data }) => {
+          calls.updateManyWhere.push(where)
+          calls.updateData.push(data)
+          return { count: 1 }
+        },
+      },
+      auditLog: {
+        findMany: async () => [],
+      },
+      user: {
+        update: async () => currentUser,
+      },
+      clinic: {
+        update: async () => currentUser.ownedClinic,
+      },
+      $transaction: async operations => Promise.all(operations),
+    },
+    authMiddleware: (req, _res, next) => {
+      req.currentUser = currentUser
+      req.user = { id: 999 }
+      next()
+    },
+    requireSupportBillingControl: (_req, _res, next) => next(),
+    handle: fn => async (req, res, next) => {
+      try {
+        await fn(req, res, next)
+      } catch (error) {
+        next(error)
+      }
+    },
+    parseId: value => Number(value),
+    parseDateOnly: value => new Date(`${value}T00:00:00.000Z`),
+    ensureClinicAggregate: async () => currentUser,
+    getBillingSnapshot: () => ({ status: 'ACTIVE', effectiveStatus: 'ACTIVE', blocked: false }),
+    mapBillingStatusToClinicStatus: () => 'ACTIVE',
+    createAuditLogFromRequest: async (_req, payload) => {
+      calls.audit.push(payload)
+      return payload
+    },
+    serializeAuditLog: log => log,
+    addDays: date => new Date(date),
+    supportAdminName: 'Suporte',
+    supportAdminEmail: 'suporte@example.com',
+    canManageSubscription: () => false,
+  })
+
+  app.use((error, _req, res, _next) => {
+    res.status(error.status || 500).json({ error: error.message })
+  })
+
+  const server = app.listen(0)
+  const address = server.address()
+  const baseUrl = `http://127.0.0.1:${address.port}`
+
+  return {
+    calls,
+    request: (path, options = {}) => fetch(`${baseUrl}${path}`, {
+      ...options,
+      headers: {
+        'content-type': 'application/json',
+        ...(options.headers || {}),
+      },
+    }),
+    close: () => new Promise(resolve => server.close(resolve)),
+  }
+}
 function isoDateFromOffset(daysOffset) {
   const date = new Date()
   date.setDate(date.getDate() + daysOffset)
@@ -121,4 +256,50 @@ test('normalizeClinicBillData trims values and delegates date parsing', () => {
     notes: 'observacao interna',
     active: true,
   })
+})
+
+test('toSafeNumber returns rounded numbers and safe fallback', () => {
+  assert.equal(toSafeNumber('199.999'), 200)
+  assert.equal(toSafeNumber('abc', 15), 15)
+})
+
+test('billing bill routes use current user scope and write audit trail', async t => {
+  const harness = createBillingRouteHarness()
+  t.after(() => harness.close())
+
+  const createResponse = await harness.request('/billing/bills', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'Conta nova',
+      category: 'Operacional',
+      amount: 199.9,
+      dueAt: '2026-05-10',
+    }),
+  })
+  assert.equal(createResponse.status, 201)
+  assert.equal(harness.calls.createData.at(-1).userId, 77)
+  assert.equal(harness.calls.audit.at(-1).action, 'CLINIC_BILL_CREATE')
+
+  const updateResponse = await harness.request('/billing/bills/123', {
+    method: 'PUT',
+    body: JSON.stringify({
+      title: 'Conta ajustada',
+      amount: 220,
+      dueAt: '2026-05-12',
+    }),
+  })
+  assert.equal(updateResponse.status, 200)
+  assert.deepEqual(harness.calls.findWhere.at(-1), { id: 123, userId: 77, active: true })
+  assert.equal(harness.calls.audit.at(-1).action, 'CLINIC_BILL_UPDATE')
+
+  const paidResponse = await harness.request('/billing/bills/123/mark-paid', { method: 'POST' })
+  assert.equal(paidResponse.status, 200)
+  assert.deepEqual(harness.calls.findWhere.at(-1), { id: 123, userId: 77, active: true })
+  assert.ok(harness.calls.updateData.at(-1).paidAt instanceof Date)
+  assert.equal(harness.calls.audit.at(-1).action, 'CLINIC_BILL_MARK_PAID')
+
+  const deleteResponse = await harness.request('/billing/bills/123', { method: 'DELETE' })
+  assert.equal(deleteResponse.status, 200)
+  assert.deepEqual(harness.calls.updateManyWhere.at(-1), { id: 123, userId: 77 })
+  assert.equal(harness.calls.audit.at(-1).action, 'CLINIC_BILL_DELETE')
 })

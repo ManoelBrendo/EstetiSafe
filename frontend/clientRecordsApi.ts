@@ -2,13 +2,17 @@ import api, { downloadApiFile } from './api'
 import type {
   AccessState,
   AnamnesisForm,
+  AnamnesisPayload,
   AnamnesisHistoryBundle,
   ClientListResponse,
   ClientRecord,
   ConsentRecordSummary,
   ClientSeed,
   ClientUpsertPayload,
+  MedicalRecordAuditTrail,
   MedicalRecordBundle,
+  MedicalRecordPhotoConsentSecurity,
+  MedicalRecordSecuritySummary,
   PaymentItem,
   PaymentsBundle,
   ProtocolEntry,
@@ -17,12 +21,12 @@ import type {
 } from './clinicalTypes'
 import { buildAnamnesisPayload } from './anamnesis'
 
-function toNumber(value, fallback = 0) {
+function toNumber(value: unknown, fallback = 0): number {
   const parsedValue = Number(value)
   return Number.isFinite(parsedValue) ? parsedValue : fallback
 }
 
-function slugifyFilePart(value) {
+function slugifyFilePart(value: unknown): string {
   return (
     String(value || 'cliente')
       .normalize('NFD')
@@ -32,6 +36,10 @@ function slugifyFilePart(value) {
       .toLowerCase()
       || 'cliente'
   )
+}
+
+function asAccessState(value: unknown): Partial<AccessState> | undefined {
+  return value && typeof value === 'object' ? value as Partial<AccessState> : undefined
 }
 
 function normalizeAccessState(accessState: Partial<AccessState> = {}): AccessState {
@@ -54,8 +62,38 @@ function normalizeAccessState(accessState: Partial<AccessState> = {}): AccessSta
   }
 }
 
+function normalizeMedicalRecordSecurity(security: Partial<MedicalRecordSecuritySummary> = {}, accessState: AccessState): MedicalRecordSecuritySummary {
+  const auditTrail: Partial<MedicalRecordAuditTrail> = security.auditTrail || {}
+  const photoConsent: Partial<MedicalRecordPhotoConsentSecurity> = security.photoConsent || {}
+
+  return {
+    ...security,
+    accessState: normalizeAccessState(security.accessState || accessState),
+    auditTrail: {
+      ...auditTrail,
+      enabled: auditTrail.enabled !== false,
+      policy: auditTrail.policy || 'Ações sensíveis do prontuário são registradas para auditoria.',
+      sensitiveActions: Array.isArray(auditTrail.sensitiveActions) ? auditTrail.sensitiveActions : [],
+    },
+    photoConsent: {
+      ...photoConsent,
+      photoCount: toNumber(photoConsent.photoCount),
+      clinicalUseAuthorized: Boolean(photoConsent.clinicalUseAuthorized),
+      marketingUseAuthorized: Boolean(photoConsent.marketingUseAuthorized),
+      consentAwarenessConfirmed: Boolean(photoConsent.consentAwarenessConfirmed),
+      consentVersion: photoConsent.consentVersion || null,
+      consentAcceptedAt: photoConsent.consentAcceptedAt || null,
+      formalConsentStatus: photoConsent.formalConsentStatus || 'MISSING',
+      formalConsentId: photoConsent.formalConsentId || null,
+      formalConsentSignedAt: photoConsent.formalConsentSignedAt || null,
+      needsAttention: Boolean(photoConsent.needsAttention),
+      message: photoConsent.message || 'Sem alerta adicional de segurança para este prontuário.',
+    },
+  }
+}
+
 function normalizeClientRecord(client: Partial<ClientRecord> = {}): ClientRecord {
-  const accessState = normalizeAccessState(client.prontuarioStatus || client.accessState)
+  const accessState = normalizeAccessState(client.prontuarioStatus || asAccessState(client.accessState))
   const appointments = Array.isArray(client.appointments) ? client.appointments : []
   const consentRecords = Array.isArray(client.consentRecords) ? client.consentRecords : []
   const anamneses = Array.isArray(client.anamneses) ? client.anamneses : []
@@ -66,6 +104,7 @@ function normalizeClientRecord(client: Partial<ClientRecord> = {}): ClientRecord
     id: client.id || '',
     fullName: client.fullName || client.name || '',
     name: client.name || client.fullName || '',
+    photoDataUrl: client.photoDataUrl || null,
     latestAnamnesis: client.latestAnamnesis || anamneses[0] || null,
     latestConsentRecord: client.latestConsentRecord || consentRecords[0] || null,
     latestAppointment: client.latestAppointment || appointments[0] || null,
@@ -90,6 +129,7 @@ function buildClientUpsertPayload(payload: Partial<ClientSeed> = {}): ClientUpse
     email: String(payload.email || '').trim(),
     birthDate: payload.birthDate ? String(payload.birthDate).slice(0, 10) : '',
     cpf: String(payload.cpf || '').trim(),
+    photoDataUrl: payload.photoDataUrl === null ? null : typeof payload.photoDataUrl === 'string' ? payload.photoDataUrl : undefined,
     sex: String(payload.sex || '').trim(),
     maritalStatus: String(payload.maritalStatus || '').trim(),
     profession: String(payload.profession || '').trim(),
@@ -99,7 +139,7 @@ function buildClientUpsertPayload(payload: Partial<ClientSeed> = {}): ClientUpse
 }
 
 function buildAnamnesisUpsertPayload(form: AnamnesisForm): { client: ClientUpsertPayload; answers: Record<string, unknown> } {
-  const answers = buildAnamnesisPayload(form) as any
+  const answers: AnamnesisPayload = buildAnamnesisPayload(form)
 
   return {
     client: {
@@ -121,6 +161,7 @@ function buildAnamnesisUpsertPayload(form: AnamnesisForm): { client: ClientUpser
 function normalizeMedicalRecordBundle(data: Partial<MedicalRecordBundle> = {}): MedicalRecordBundle {
   const client = normalizeClientRecord(data.client || {})
   const accessState = normalizeAccessState(data.accessState || client.prontuarioStatus)
+  const security = normalizeMedicalRecordSecurity(data.security, accessState)
 
   return {
     ...data,
@@ -135,6 +176,7 @@ function normalizeMedicalRecordBundle(data: Partial<MedicalRecordBundle> = {}): 
       prontuarioStatus: accessState,
     },
     accessState,
+    security,
     latestAnamnesis: data.latestAnamnesis || client.latestAnamnesis || null,
     anamnesisHistory: Array.isArray(data.anamnesisHistory) ? data.anamnesisHistory : client.anamneses,
     appointments: Array.isArray(data.appointments) ? data.appointments : client.appointments,

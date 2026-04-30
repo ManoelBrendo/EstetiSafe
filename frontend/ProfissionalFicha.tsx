@@ -32,7 +32,7 @@ const contractTypeOptions: Array<{ value: ProfessionalContractType; label: strin
 
 const paymentModelOptions: Array<{ value: ProfessionalPaymentModel; label: string }> = [
   { value: 'FIXED', label: 'Fixo' },
-  { value: 'COMMISSION', label: 'Comissao' },
+  { value: 'COMMISSION', label: 'Comissão' },
   { value: 'HYBRID', label: 'Hibrido' },
   { value: 'DAILY', label: 'Diaria' },
 ]
@@ -96,13 +96,13 @@ function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada'))
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada'))
     reader.readAsDataURL(file)
   })
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return 'Nao informado'
+  if (!value) return 'Não informado'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -111,7 +111,7 @@ function formatDateTime(value?: string | null) {
 }
 
 function formatCurrency(value?: number | string | null) {
-  if (value == null || value === '') return 'Nao definido'
+  if (value == null || value === '') return 'Não definido'
 
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -144,7 +144,7 @@ function ReadonlyField({ label, value }: ReadonlyFieldProps) {
   return (
     <div className="prontuario-field">
       <span>{label}</span>
-      <strong>{value || 'Nao informado'}</strong>
+      <strong>{value || 'Não informado'}</strong>
     </div>
   )
 }
@@ -160,7 +160,7 @@ export default function ProfissionalFicha() {
 
   const load = useCallback(async () => {
     if (!professionalId) {
-      toast.error('Nao foi possivel identificar a profissional selecionada')
+      toast.error('Não foi possível identificar a profissional selecionada')
       navigate('/profissionais', { replace: true })
       return
     }
@@ -172,7 +172,7 @@ export default function ProfissionalFicha() {
       setProfessional(data)
       setForm(createFormFromProfessional(data))
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir a ficha desta profissional'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível abrir a ficha desta profissional'))
       navigate('/profissionais', { replace: true })
     } finally {
       setLoading(false)
@@ -223,7 +223,7 @@ export default function ProfissionalFicha() {
       const dataUrl = await readFileAsDataUrl(file)
       setForm(current => ({ ...current, photoDataUrl: dataUrl }))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Nao foi possivel carregar a foto')
+      toast.error(error instanceof Error ? error.message : 'Não foi possível carregar a foto')
     } finally {
       event.target.value = ''
     }
@@ -259,7 +259,7 @@ export default function ProfissionalFicha() {
       setEditing(false)
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a profissional'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a profissional'))
     } finally {
       setSaving(false)
     }
@@ -287,7 +287,7 @@ export default function ProfissionalFicha() {
           </button>
           <h1 className="page-title">{professional.name}</h1>
           <p className="page-subtitle">
-            Ficha individual com apresentacao profissional, agenda semanal, folha de pagamento e historico recente.
+            Ficha individual com apresentação profissional, agenda semanal, folha de pagamento e histórico recente.
           </p>
         </div>
 
@@ -321,7 +321,7 @@ export default function ProfissionalFicha() {
           <div className="section-head">
             <div>
               <h2 className="section-title">Cadastro profissional</h2>
-              <p className="section-copy">Leitura rapida do perfil operacional e financeiro.</p>
+              <p className="section-copy">Leitura rápida do perfil operacional e financeiro.</p>
             </div>
           </div>
 
@@ -331,7 +331,7 @@ export default function ProfissionalFicha() {
             <ReadonlyField label="Regime" value={professional.contractTypeLabel} />
             <ReadonlyField label="Modelo de pagamento" value={professional.paymentModelLabel} />
             <ReadonlyField label="Base fixa" value={formatCurrency(professional.salaryAmount)} />
-            <ReadonlyField label="Comissao" value={professional.commissionRate != null ? `${professional.commissionRate}%` : ''} />
+            <ReadonlyField label="Comissão" value={professional.commissionRate != null ? `${professional.commissionRate}%` : ''} />
             <ReadonlyField label="Dia do repasse" value={professional.paymentDay != null ? `Dia ${professional.paymentDay}` : ''} />
             <ReadonlyField label="Cadastro" value={formatDateTime(professional.createdAt)} />
           </div>
@@ -340,16 +340,16 @@ export default function ProfissionalFicha() {
         <section className="card section-card">
           <div className="section-head">
             <div>
-              <h2 className="section-title">Visao da operacao</h2>
-              <p className="section-copy">Indicadores uteis para gestao da equipe.</p>
+              <h2 className="section-title">Visao da operação</h2>
+              <p className="section-copy">Indicadores úteis para gestão da equipe.</p>
             </div>
           </div>
 
           <div className="prontuario-grid">
             <ReadonlyField label="Atendimentos totais" value={String(professional.metrics?.totalAppointments ?? 0)} />
-            <ReadonlyField label="Concluidos" value={String(professional.metrics?.completedAppointments ?? 0)} />
-            <ReadonlyField label="Proximos" value={String(professional.metrics?.upcomingAppointments ?? 0)} />
-            <ReadonlyField label="Disponibilidade" value={activeAvailability.length ? `${activeAvailability.length} dia(s) ativo(s)` : 'Nao configurada'} />
+            <ReadonlyField label="Concluídos" value={String(professional.metrics?.completedAppointments ?? 0)} />
+            <ReadonlyField label="Próximos" value={String(professional.metrics?.upcomingAppointments ?? 0)} />
+            <ReadonlyField label="Disponibilidade" value={activeAvailability.length ? `${activeAvailability.length} dia(s) ativo(s)` : 'Não configurada'} />
           </div>
         </section>
       </div>
@@ -366,30 +366,30 @@ export default function ProfissionalFicha() {
 
             <div className="prontuario-grid">
               <ReadonlyField label="Receita paga" value={formatCurrency(professional.payroll?.paidRevenue)} />
-              <ReadonlyField label="Comissao calculada" value={formatCurrency(professional.payroll?.commissionAmount)} />
+              <ReadonlyField label="Comissão calculada" value={formatCurrency(professional.payroll?.commissionAmount)} />
               <ReadonlyField label="Repasse projetado" value={formatCurrency(professional.payroll?.projectedPayout)} />
               <ReadonlyField label="Atendimentos pagos" value={String(professional.payroll?.paidAppointments ?? 0)} />
               <ReadonlyField label="Dias trabalhados" value={String(professional.payroll?.workedDays ?? 0)} />
-              <ReadonlyField label="Ultimo pagamento" value={formatDateTime(professional.payroll?.lastPaidAt)} />
+              <ReadonlyField label="Último pagamento" value={formatDateTime(professional.payroll?.lastPaidAt)} />
             </div>
 
             <div className="team-card-note">
-              <strong>Configuracao da folha</strong>
-              <span>{professional.payrollNotes || 'Nenhuma observacao financeira registrada ate o momento.'}</span>
+              <strong>Configuração da folha</strong>
+              <span>{professional.payrollNotes || 'Nenhuma observação financeira registrada até o momento.'}</span>
             </div>
           </section>
 
           <section className="card section-card">
             <div className="section-head">
               <div>
-                <h2 className="section-title">Observacoes da profissional</h2>
-                <p className="section-copy">Contexto operacional, perfil de atendimento e observacoes livres.</p>
+                <h2 className="section-title">Observações da profissional</h2>
+                <p className="section-copy">Contexto operacional, perfil de atendimento e observações livres.</p>
               </div>
             </div>
 
             <div className="team-card-note">
               <strong>Notas internas</strong>
-              <span>{professional.notes || 'Nenhuma observacao registrada.'}</span>
+              <span>{professional.notes || 'Nenhuma observação registrada.'}</span>
             </div>
           </section>
         </section>
@@ -398,7 +398,7 @@ export default function ProfissionalFicha() {
           <section className="card documents-side-card">
             <div className="eyebrow">Agenda semanal</div>
             {!activeAvailability.length ? (
-              <p className="text-muted">Disponibilidade ainda nao configurada.</p>
+              <p className="text-muted">Disponibilidade ainda não configurada.</p>
             ) : (
               <div className="anamnese-history-list">
                 {activeAvailability.map(slot => (
@@ -419,8 +419,8 @@ export default function ProfissionalFicha() {
               <div className="anamnese-history-list">
                 {professional.appointments.map(appointment => (
                   <div className="anamnese-history-item" key={appointment.id}>
-                    <strong>{appointment.service?.name || 'Servico'}</strong>
-                    <span>{appointment.client?.name || 'Cliente nao informado'}</span>
+                    <strong>{appointment.service?.name || 'Serviço'}</strong>
+                    <span>{appointment.client?.name || 'Cliente não informado'}</span>
                     <small>
                       {formatDateTime(appointment.startAt)} - {appointment.status} - {formatCurrency(appointment.price)}
                     </small>
@@ -442,7 +442,7 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Dados principais</h3>
-                    <p className="section-copy">Identificacao, especialidade e apresentacao da profissional.</p>
+                    <p className="section-copy">Identificação, especialidade e apresentação da profissional.</p>
                   </div>
                 </div>
 
@@ -463,12 +463,12 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observacoes</label>
+                    <label className="form-label">Observações</label>
                     <textarea
                       className="form-textarea"
                       value={form.notes}
                       onChange={setField('notes')}
-                      placeholder="Informacoes relevantes sobre atendimento, perfil tecnico, preferencia de agenda ou estilo de cuidado."
+                      placeholder="Informações relevantes sobre atendimento, perfil técnico, preferência de agenda ou estilo de cuidado."
                     />
                   </div>
                 </div>
@@ -478,7 +478,7 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Foto e disponibilidade</h3>
-                    <p className="section-copy">Imagem de perfil e agenda semanal para leitura rapida em qualquer dispositivo.</p>
+                    <p className="section-copy">Imagem de perfil e agenda semanal para leitura rápida em qualquer dispositivo.</p>
                   </div>
                 </div>
 
@@ -553,13 +553,13 @@ export default function ProfissionalFicha() {
                 <div className="section-head section-head-inline">
                   <div>
                     <h3 className="section-title section-title-sm">Folha de pagamento</h3>
-                    <p className="section-copy">Defina regime, modelo de repasse e observacoes financeiras da profissional.</p>
+                    <p className="section-copy">Defina regime, modelo de repasse e observações financeiras da profissional.</p>
                   </div>
                 </div>
 
                 <div className="form-grid payroll-grid">
                   <div className="form-group">
-                    <label className="form-label">Regime de contratacao</label>
+                    <label className="form-label">Regime de contratação</label>
                     <select className="form-select" value={form.contractType} onChange={setField('contractType')}>
                       <option value="">Selecione</option>
                       {contractTypeOptions.map(option => (
@@ -584,7 +584,7 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Comissao (%)</label>
+                    <label className="form-label">Comissão (%)</label>
                     <input className="form-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={setField('commissionRate')} placeholder="0" />
                   </div>
 
@@ -594,12 +594,12 @@ export default function ProfissionalFicha() {
                   </div>
 
                   <div className="form-group form-full">
-                    <label className="form-label">Observacoes da folha</label>
+                    <label className="form-label">Observações da folha</label>
                     <textarea
                       className="form-textarea"
                       value={form.payrollNotes}
                       onChange={setField('payrollNotes')}
-                      placeholder="Ex: comissao sobre procedimentos especificos, ajuda de custo, bonificacao ou politica de repasse."
+                      placeholder="Ex: comissão sobre procedimentos específicos, ajuda de custo, bonificação ou política de repasse."
                     />
                   </div>
                 </div>
@@ -611,7 +611,7 @@ export default function ProfissionalFicha() {
                 Cancelar
               </button>
               <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? <span className="spinner" /> : 'Salvar alteracoes'}
+                {saving ? <span className="spinner" /> : 'Salvar alterações'}
               </button>
             </div>
           </div>

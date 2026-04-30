@@ -16,12 +16,12 @@ interface RegisterFormState {
 
 function validateRegisterForm(form: RegisterFormState, passwordStatus: { isValid: boolean }) {
   if (!form.clinicName.trim()) {
-    return 'Informe o nome da clinica para continuar.'
+    return 'Informe o nome da clínica para continuar.'
   }
 
   const normalizedEmail = form.email.trim().toLowerCase()
   if (!normalizedEmail) {
-    return 'Informe o e-mail oficial da clinica.'
+    return 'Informe o e-mail oficial da clínica.'
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -68,7 +68,7 @@ export default function Register() {
       toast.success('Conta criada com sucesso')
       navigate('/painel')
     } catch (error) {
-      const message = getApiErrorMessage(error, 'Nao foi possivel criar sua conta')
+      const message = getApiErrorMessage(error, 'Não foi possível criar sua conta')
       setFormError(message)
       toast.error(message)
     } finally {
@@ -85,10 +85,10 @@ export default function Register() {
           </div>
 
           <div className="login-brand-copy">
-            <span className="eyebrow">Cadastro da clinica</span>
+            <span className="eyebrow">Cadastro da clínica</span>
             <strong className="login-brand-name">L'Appui</strong>
             <p className="login-brand-subtitle">
-              Crie a conta da clinica com um fluxo direto, consistente e pronto para a operacao web.
+              Crie a conta da clínica com um fluxo direto, consistente e pronto para a operação web.
             </p>
           </div>
         </div>
@@ -96,15 +96,15 @@ export default function Register() {
         <form className="login-form register-form" onSubmit={handleSubmit} noValidate>
           <div className="login-heading register-heading">
             <h1>Criar conta</h1>
-            <p>Preencha apenas o essencial para comecar. Depois, seguimos para a configuracao da operacao.</p>
+            <p>Preencha apenas o essencial para começar. Depois, seguimos para a configuração da operação.</p>
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="register-clinic-name">Nome da clinica</label>
+            <label className="form-label" htmlFor="register-clinic-name">Nome da clínica</label>
             <input
               id="register-clinic-name"
               className="form-input"
-              placeholder="Ex: Clinica Aurora"
+              placeholder="Ex: Clínica Aurora"
               value={form.clinicName}
               onChange={updateField('clinicName')}
               autoComplete="organization"
@@ -118,7 +118,7 @@ export default function Register() {
               id="register-email"
               className="form-input"
               type="email"
-              placeholder="contato@clinica.com"
+              placeholder="contato@clínica.com"
               value={form.email}
               onChange={updateField('email')}
               autoComplete="email"

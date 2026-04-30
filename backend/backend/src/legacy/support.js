@@ -1,4 +1,4 @@
-﻿const { z } = require('zod')
+const { z } = require('zod')
 
 const supportAssumeSchema = z.object({ userId: z.coerce.number().int().positive() })
 
@@ -31,7 +31,7 @@ function getSupportBillingSnapshot() {
     nextDueAt: null,
     blockAt: null,
     daysRemaining: null,
-    message: 'Acesso tecnico liberado para manutencao, diagnostico e suporte.',
+    message: 'Acesso técnico liberado para manutenção, diagnóstico e suporte.',
   }
 }
 
@@ -55,7 +55,7 @@ function isSupportPayload(payload, supportAdminEmail) {
 
 function requireSupport(req, res, next) {
   if (!req.user?.support) {
-    return res.status(403).json({ error: 'Acesso restrito ao suporte tecnico.' })
+    return res.status(403).json({ error: 'Acesso restrito ao suporte técnico.' })
   }
 
   next()

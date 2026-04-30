@@ -33,7 +33,7 @@ export function getClinicBranding(user?: AuthUser | null, fallbackName = "L'Appu
       clinicName: user?.clinicName || 'Central de suporte',
       brandLogo: defaultLogoPath,
       hasCustomLogo: false,
-      brandSubtitle: 'Operacao tecnica',
+      brandSubtitle: 'Operação técnica',
       initials: 'SU',
     }
   }
@@ -45,7 +45,7 @@ export function getClinicBranding(user?: AuthUser | null, fallbackName = "L'Appu
     clinicName,
     brandLogo: user?.clinicLogoDataUrl || defaultLogoPath,
     hasCustomLogo,
-    brandSubtitle: hasCustomLogo ? 'Painel da clinica' : "Plataforma L'Appui",
+    brandSubtitle: hasCustomLogo ? 'Painel da clínica' : "Plataforma L'Appui",
     initials: getClinicInitials(clinicName),
   }
 }
@@ -54,7 +54,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada'))
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada'))
     reader.readAsDataURL(file)
   })
 }
@@ -63,7 +63,7 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image()
     image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error('Nao foi possivel processar a imagem selecionada'))
+    image.onerror = () => reject(new Error('Não foi possível processar a imagem selecionada'))
     image.src = dataUrl
   })
 }
@@ -75,7 +75,7 @@ export async function prepareClinicLogoDataUrl(
   const { size = 512, quality = 0.9, maxInputBytes = 5 * 1024 * 1024 } = options
 
   if (file.size > maxInputBytes) {
-    throw new Error('Use uma imagem de ate 5 MB para a logo da clinica')
+    throw new Error('Use uma imagem de até 5 MB para a logo da clínica')
   }
 
   const sourceDataUrl = await readFileAsDataUrl(file)
@@ -87,7 +87,7 @@ export async function prepareClinicLogoDataUrl(
 
   const context = canvas.getContext('2d')
   if (!context) {
-    throw new Error('Nao foi possivel preparar a area de edicao da logo')
+    throw new Error('Não foi possível preparar a area de edicao da logo')
   }
 
   context.clearRect(0, 0, size, size)

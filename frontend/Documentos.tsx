@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { Icon } from './Icon'
@@ -51,6 +52,8 @@ type DocumentModalMode = 'create' | 'edit' | null
 type DocumentCategoryFilter = 'ALL' | DocumentCategory
 type DocumentRiskFilter = 'ALL' | 'CRITICAL' | DocumentStatus
 
+const MAX_DOCUMENT_FILE_SIZE_BYTES = 8 * 1024 * 1024
+
 const categoryOptions: DocumentCategoryOption[] = [
   { value: 'LEGAL', label: 'Legal' },
   { value: 'SANITARY', label: 'Sanitário' },
@@ -86,18 +89,36 @@ const emptyForm: DocumentFormState = {
 function formatDate(value: string | number | null | undefined) {
   if (!value) return 'Sem vencimento'
 
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
+
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
 }
 
 function formatDateTime(value: string | number | null | undefined) {
   if (!value) return 'Agora'
 
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
+
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
+}
+
+function pluralize(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -236,6 +257,10 @@ function DocumentCard({ document, onDownload, onEdit, onDelete, loadingFileId }:
 
 function DocumentsCategoryCard({ item, onSelectCategory, onCreateMissing }: DocumentsCategoryCardProps) {
   const completion = item.requiredCount ? Math.round((item.fulfilledCount / item.requiredCount) * 100) : 100
+  const categoryStatusLabel = item.criticalCount
+    ? pluralize(item.criticalCount, 'ponto de atenção', 'pontos de atenção')
+    : 'Completo'
+  const categoryStatusClass = item.criticalCount ? 'badge badge-gold' : 'badge badge-green'
 
   return (
     <article className="documents-category-card">
@@ -244,7 +269,7 @@ function DocumentsCategoryCard({ item, onSelectCategory, onCreateMissing }: Docu
           <span className="documents-category-label">{item.categoryLabel}</span>
           <h3>{item.fulfilledCount}/{item.requiredCount} obrigatórios cobertos</h3>
         </div>
-        <span className="badge badge-muted">{item.score}%</span>
+        <span className={categoryStatusClass}>{categoryStatusLabel}</span>
       </div>
 
       <div className="documents-progress-rail" aria-hidden="true">
@@ -252,8 +277,8 @@ function DocumentsCategoryCard({ item, onSelectCategory, onCreateMissing }: Docu
       </div>
 
       <div className="documents-category-stats">
-        <span>{item.total} anexo(s) na base</span>
-        <span>{item.criticalCount} ponto(s) de atenção</span>
+        <span>{pluralize(item.total, 'anexo na base', 'anexos na base')}</span>
+        <span>{item.criticalCount ? pluralize(item.criticalCount, 'ponto de aten??o', 'pontos de aten??o') : 'Sem pontos de aten??o'}</span>
       </div>
 
       {item.missing?.length ? (
@@ -340,13 +365,10 @@ export default function Documentos() {
   )
 
   const filteredDocuments = useMemo(() => {
-    const query = search.trim().toLowerCase()
+    const query = normalizeSearchText(search)
     return documents.filter(document => {
-      const matchesQuery = !query || (
-        document.title.toLowerCase().includes(query)
-        || document.documentType.toLowerCase().includes(query)
-        || document.fileName.toLowerCase().includes(query)
-      )
+      const searchable = normalizeSearchText(`${document.title} ${document.documentType} ${document.fileName}`)
+      const matchesQuery = !query || searchable.includes(query)
 
       const matchesRisk = (
         riskFilter === 'ALL'
@@ -362,6 +384,40 @@ export default function Documentos() {
     () => getDocumentsStateSummary(summary),
     [summary]
   )
+
+  const nextDocumentAction = useMemo(() => {
+    const missing = summary?.missingCount ?? 0
+    const critical = (summary?.expiring ?? 0) + (summary?.expired ?? 0)
+    const next30Days = summary?.windows?.next30Days ?? 0
+
+    if (critical > 0) {
+      return {
+        title: 'Atualizar documentos críticos',
+        description: `${pluralize(critical, 'documento está vencido ou próximo do vencimento', 'documentos estão vencidos ou próximos do vencimento')}. Priorize a substituição dos anexos para manter a rotina segura.`,
+        primary: pluralize(critical, 'crítico', 'críticos'),
+        secondary: pluralize(next30Days, 'vence em até 30 dias', 'vencem em até 30 dias'),
+        tone: 'warning',
+      }
+    }
+
+    if (missing > 0) {
+      return {
+        title: 'Completar acervo recomendado',
+        description: `${pluralize(missing, 'documento recomendado ainda não foi anexado', 'documentos recomendados ainda não foram anexados')}. Use esta área para anexar ou substituir arquivos.`,
+        primary: pluralize(missing, 'faltante', 'faltantes'),
+        secondary: `${summary?.recommendedCoveredCount ?? 0}/${summary?.recommendedRequiredCount ?? 0} itens cobertos`,
+        tone: 'neutral',
+      }
+    }
+
+    return {
+      title: 'Acervo operacional em dia',
+      description: 'Os principais documentos recomendados já estão representados. Continue usando esta tela para anexar, abrir e substituir arquivos.',
+      primary: 'Sem urgências',
+      secondary: pluralize(summary?.total ?? 0, 'documento cadastrado', 'documentos cadastrados'),
+      tone: 'safe',
+    }
+  }, [summary])
 
   function openCreate() {
     setSelected(null)
@@ -425,6 +481,11 @@ export default function Documentos() {
     event.target.value = ''
 
     if (!file) return
+
+    if (file.size > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+      toast.error('Arquivo muito grande. Use anexos de até 8 MB para manter a tela rápida no navegador.')
+      return
+    }
 
     setUploading(true)
 
@@ -531,9 +592,14 @@ export default function Documentos() {
           </p>
         </div>
 
-        <button type="button" className="btn btn-primary" onClick={openCreate}>
-          <Icon name="plus" /> Novo documento
-        </button>
+        <div className="page-actions">
+          <Link className="btn btn-outline" to="/auditoria">
+            <Icon name="shield" /> Ver auditoria
+          </Link>
+          <button type="button" className="btn btn-primary" onClick={openCreate}>
+            <Icon name="plus" /> Novo documento
+          </button>
+        </div>
       </div>
 
       <section className="documents-hero-grid">
@@ -555,22 +621,24 @@ export default function Documentos() {
           </div>
         </article>
 
-        <aside className="card documents-score-card">
-          <span className="eyebrow">Score regulatório</span>
-          <div className="documents-score-value">{summary?.complianceScore ?? 0}%</div>
-          <p className="section-copy">
-            Cobertura dos documentos recomendados considerando presença, vencimento e criticidade do acervo.
-          </p>
-          <div className="documents-score-meta">
+        <aside className={`card documents-action-card ${nextDocumentAction.tone}`}>
+          <span className="eyebrow">Próxima ação documental</span>
+          <div className="documents-action-icon"><Icon name="clipboard" size={22} /></div>
+          <h2>{nextDocumentAction.title}</h2>
+          <p className="section-copy">{nextDocumentAction.description}</p>
+          <div className="documents-action-meta">
             <div>
-              <span>Faltando</span>
-              <strong>{summary?.missingCount ?? 0}</strong>
+              <span>Prioridade</span>
+              <strong>{nextDocumentAction.primary}</strong>
             </div>
             <div>
-              <span>Críticos</span>
-              <strong>{(summary?.expiring ?? 0) + (summary?.expired ?? 0)}</strong>
+              <span>Contexto</span>
+              <strong>{nextDocumentAction.secondary}</strong>
             </div>
           </div>
+          <button type="button" className="btn btn-outline btn-sm" onClick={nextDocumentAction.tone === 'neutral' ? scrollToMissingList : scrollToDocumentsList}>
+            {nextDocumentAction.tone === 'safe' ? 'Ver acervo' : 'Resolver agora'}
+          </button>
         </aside>
       </section>
 

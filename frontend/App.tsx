@@ -16,9 +16,12 @@ const ClienteProntuario = lazy(() => import('./ClienteProntuario'))
 const ClienteConsentimentoAssinatura = lazy(() => import('./ClienteConsentimentoAssinatura'))
 const ClienteAnamnese = lazy(() => import('./ClienteAnamnese'))
 const Documentos = lazy(() => import('./Documentos'))
+const Auditoria = lazy(() => import('./Auditoria'))
+const Intercorrencias = lazy(() => import('./Intercorrencias'))
 const ProdutosEquipamentos = lazy(() => import('./ProdutosEquipamentos'))
 const Agendamentos = lazy(() => import('./Agendamentos'))
 const Assinatura = lazy(() => import('./Pagamentos'))
+const Configuracoes = lazy(() => import('./Configuracoes'))
 const Servicos = lazy(() => import('./Servicos'))
 const Profissionais = lazy(() => import('./Profissionais'))
 const ProfissionalFicha = lazy(() => import('./ProfissionalFicha'))
@@ -29,7 +32,7 @@ interface RouteLoaderProps {
   label?: string
 }
 
-function RouteLoader({ label = "Preparando sua experiencia L'Appui..." }: RouteLoaderProps) {
+function RouteLoader({ label = "Preparando sua experiÃªncia L'Appui..." }: RouteLoaderProps) {
   return (
     <div className="loading-page loading-page-full">
       <span className="spinner" />
@@ -79,7 +82,7 @@ function ClinicRoute({ children }: { children: ReactNode }) {
 
 function SupportOnlyRoute({ children }: { children: ReactNode }) {
   const { isAuth, isReady, user } = useAuth()
-  if (!isReady) return <RouteLoader label="Validando acesso tecnico..." />
+  if (!isReady) return <RouteLoader label="Validando acesso tÃ©cnico..." />
   if (!isAuth) return <Navigate to="/login" replace />
   if (user?.role !== 'SUPPORT') return <Navigate to="/painel" replace />
   return <>{children}</>
@@ -103,7 +106,7 @@ function HomeRoute() {
   if (user?.role === 'SUPPORT') return <Navigate to="/suporte" replace />
 
   return (
-    <LayoutScreen label="Carregando o painel clinico...">
+    <LayoutScreen label="Carregando o painel clÃ­nico...">
       <Dashboard />
     </LayoutScreen>
   )
@@ -134,7 +137,7 @@ function LocalDemoLogin() {
     })
       .then(response => {
         if (!response.ok) {
-          throw new Error('Falha ao buscar a sessao da demo local')
+          throw new Error('Falha ao buscar a sessÃ£o da demo local')
         }
         return response.json()
       })
@@ -144,7 +147,7 @@ function LocalDemoLogin() {
         window.location.replace(redirect)
       })
       .catch(error => {
-        console.error('Nao foi possivel preparar a demo local', error)
+        console.error('NÃ£o foi possÃ­vel preparar a demo local', error)
       })
   }, [])
 
@@ -156,22 +159,25 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingRoute />} />
       <Route path="/site" element={<MarketingSite />} />
-      <Route path="/login" element={<PublicRoute><LazyScreen label="Abrindo acesso da clinica..."><Login /></LazyScreen></PublicRoute>} />
-      <Route path="/register" element={<PublicRoute><LazyScreen label="Preparando o cadastro da clinica..."><Register /></LazyScreen></PublicRoute>} />
+      <Route path="/login" element={<PublicRoute><LazyScreen label="Abrindo acesso da clÃ­nica..."><Login /></LazyScreen></PublicRoute>} />
+      <Route path="/register" element={<PublicRoute><LazyScreen label="Preparando o cadastro da clÃ­nica..."><Register /></LazyScreen></PublicRoute>} />
       <Route path="/local-demo-login" element={<LocalDemoLogin />} />
       <Route path="/painel" element={<PrivateRoute><HomeRoute /></PrivateRoute>} />
       <Route path="/suporte" element={<SupportOnlyRoute><LayoutScreen label="Carregando central de suporte..."><SupportHub /></LayoutScreen></SupportOnlyRoute>} />
       <Route path="/contatar-suporte" element={<PrivateRoute><LayoutScreen label="Abrindo canais de suporte..."><SupportContato /></LayoutScreen></PrivateRoute>} />
-      <Route path="/documentos" element={<ClinicRoute><LayoutScreen label="Abrindo documentos sanitarios..."><Documentos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/documentos" element={<ClinicRoute><LayoutScreen label="Abrindo documentos sanitÃ¡rios..."><Documentos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/auditoria" element={<ClinicRoute><LayoutScreen label="Carregando auditoria da clÃ­nica..."><Auditoria /></LayoutScreen></ClinicRoute>} />
       <Route path="/produtos-e-equipamentos" element={<ClinicRoute><LayoutScreen label="Carregando produtos e equipamentos..."><ProdutosEquipamentos /></LayoutScreen></ClinicRoute>} />
-      <Route path="/clientes" element={<ClinicRoute><LayoutScreen label="Carregando clientes e prontuarios..."><Clientes /></LayoutScreen></ClinicRoute>} />
-      <Route path="/clientes/:clientId" element={<ClinicRoute><LayoutScreen label="Abrindo prontuario do cliente..."><ClienteProntuario /></LayoutScreen></ClinicRoute>} />
-      <Route path="/assinatura" element={<ClinicRoute><LayoutScreen label="Carregando assinatura da clinica..."><Assinatura /></LayoutScreen></ClinicRoute>} />
+      <Route path="/clientes" element={<ClinicRoute><LayoutScreen label="Carregando clientes e prontuÃ¡rios..."><Clientes /></LayoutScreen></ClinicRoute>} />
+      <Route path="/intercorrencias" element={<ClinicRoute><LayoutScreen label="Carregando intercorrÃªncias da clÃ­nica..."><Intercorrencias /></LayoutScreen></ClinicRoute>} />
+      <Route path="/clientes/:clientId" element={<ClinicRoute><LayoutScreen label="Abrindo prontuÃ¡rio do cliente..."><ClienteProntuario /></LayoutScreen></ClinicRoute>} />
+      <Route path="/assinatura" element={<ClinicRoute><LayoutScreen label="Carregando assinatura da clÃ­nica..."><Assinatura /></LayoutScreen></ClinicRoute>} />
       <Route path="/pagamentos" element={<Navigate to="/assinatura" replace />} />
+      <Route path="/configuracoes" element={<ClinicRoute><LayoutScreen label="Abrindo configuracoes da clinica..."><Configuracoes /></LayoutScreen></ClinicRoute>} />
       <Route path="/clientes/:clientId/anamnese" element={<ClinicRoute><LayoutScreen label="Abrindo anamnese do cliente..."><ClienteAnamnese /></LayoutScreen></ClinicRoute>} />
       <Route path="/clientes/:clientId/consentimentos/:consentRecordId/assinar" element={<ClinicRoute><LayoutScreen label="Preparando assinatura do consentimento..."><ClienteConsentimentoAssinatura /></LayoutScreen></ClinicRoute>} />
-      <Route path="/agendamentos" element={<ClinicRoute><LayoutScreen label="Carregando agenda da clinica..."><Agendamentos /></LayoutScreen></ClinicRoute>} />
-      <Route path="/servicos" element={<ClinicRoute><LayoutScreen label="Abrindo catalogo de servicos..."><Servicos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/agendamentos" element={<ClinicRoute><LayoutScreen label="Carregando agenda da clÃ­nica..."><Agendamentos /></LayoutScreen></ClinicRoute>} />
+      <Route path="/servicos" element={<ClinicRoute><LayoutScreen label="Abrindo catÃ¡logo de serviÃ§os..."><Servicos /></LayoutScreen></ClinicRoute>} />
       <Route path="/profissionais" element={<ClinicRoute><LayoutScreen label="Carregando equipe profissional..."><Profissionais /></LayoutScreen></ClinicRoute>} />
       <Route path="/profissionais/:professionalId" element={<ClinicRoute><LayoutScreen label="Abrindo ficha da profissional..."><ProfissionalFicha /></LayoutScreen></ClinicRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -209,3 +215,5 @@ export default function App() {
     </AuthProvider>
   )
 }
+
+

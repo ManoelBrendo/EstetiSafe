@@ -4,6 +4,7 @@ const {
   WhatsAppProvider,
   buildMetaSignature,
   buildTemplateComponents,
+  buildWhatsAppReadiness,
   extractWebhookEvents,
   isMetaSignatureValid,
   normalizePhoneNumber,
@@ -147,4 +148,32 @@ test('validates Meta webhook HMAC signature when app secret is configured', () =
   assert.equal(isMetaSignatureValid({ signature, rawBody, appSecret: 'app-secret' }), true)
   assert.equal(isMetaSignatureValid({ signature: 'sha256=invalid', rawBody, appSecret: 'app-secret' }), false)
   assert.equal(isMetaSignatureValid({ signature: null, rawBody, appSecret: undefined }), true)
+})
+test('buildWhatsAppReadiness separates configured code from live readiness', () => {
+  const readiness = buildWhatsAppReadiness({
+    env: {
+      WHATSAPP_APP_SECRET: 'app-secret',
+      WHATSAPP_CONFIRMATION_JOB_ENABLED: 'true',
+    },
+    activeConfigCount: 1,
+    outboundLast24h: 3,
+    inboundLast24h: 2,
+    failedLast24h: 1,
+  })
+
+  assert.equal(readiness.status, 'READY')
+  assert.equal(readiness.readyForLive, true)
+  assert.equal(readiness.webhookConfigured, true)
+  assert.equal(readiness.confirmationWindowHours, 24)
+  assert.equal(readiness.outboundLast24h, 3)
+  assert.deepEqual(readiness.missing, [])
+})
+
+test('buildWhatsAppReadiness reports missing production controls without exposing secrets', () => {
+  const readiness = buildWhatsAppReadiness({ env: {}, activeConfigCount: 0 })
+
+  assert.equal(readiness.status, 'NOT_CONFIGURED')
+  assert.equal(readiness.readyForLive, false)
+  assert.ok(readiness.missing.includes('whatsappClinicConfig ativa'))
+  assert.ok(readiness.missing.includes('WHATSAPP_APP_SECRET'))
 })

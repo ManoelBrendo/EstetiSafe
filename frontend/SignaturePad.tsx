@@ -143,7 +143,7 @@ export function SignaturePad({
           </div>
           <div className="signature-meta">
             <strong>Assinatura registrada</strong>
-            <span>Voce pode manter ou refazer antes de salvar a anamnese.</span>
+            <span>Você pode manter ou refazer antes de salvar a anamnese.</span>
           </div>
           {disabled ? null : (
             <div className="consent-actions consent-actions-start">

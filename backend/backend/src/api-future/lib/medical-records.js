@@ -41,7 +41,7 @@ async function getMedicalRecordById(prisma, medicalRecordId) {
   })
 
   if (!record) {
-    throw httpError(404, 'Prontuario nao encontrado')
+    throw httpError(404, 'Prontuário não encontrado')
   }
 
   return record
@@ -78,7 +78,7 @@ async function getOrCreateMedicalRecordForClient(prisma, clientId) {
 
 function assertMedicalRecordEditable(medicalRecord) {
   if (medicalRecord?.isLocked) {
-    throw httpError(423, 'Prontuario bloqueado apos confirmacao de pagamento')
+    throw httpError(423, 'Prontuário bloqueado após confirmação de pagamento')
   }
 }
 

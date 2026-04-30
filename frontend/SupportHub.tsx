@@ -16,13 +16,13 @@ const billingMeta: Record<BillingStatusKey, { label: string; className: string }
 }
 
 const clinicStatusMeta: Record<ClinicStatusKey, { label: string }> = {
-  ACTIVE: { label: 'Operacao ativa' },
-  SUSPENDED: { label: 'Operacao suspensa' },
-  ARCHIVED: { label: 'Clinica arquivada' },
+  ACTIVE: { label: 'Operação ativa' },
+  SUSPENDED: { label: 'Operação suspensa' },
+  ARCHIVED: { label: 'Clínica arquivada' },
 }
 
 function formatDate(value?: string | null) {
-  if (!value) return 'Nao informado'
+  if (!value) return 'Não informado'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
@@ -61,7 +61,7 @@ export default function SupportHub() {
         if (active) setData(response)
       })
       .catch(error => {
-        toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar as clinicas disponiveis para suporte'))
+        toast.error(getApiErrorMessage(error, 'Não foi possível carregar as clínicas disponiveis para suporte'))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -91,10 +91,10 @@ export default function SupportHub() {
 
     try {
       await assumeClinic(clinicId)
-      toast.success('Sessao da clinica carregada para manutencao')
+      toast.success('Sessão da clínica carregada para manutenção')
       navigate('/')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel assumir esta clinica'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível assumir esta clínica'))
     } finally {
       setAssumingClinicId(null)
     }
@@ -115,39 +115,39 @@ export default function SupportHub() {
         <div>
           <h1 className="page-title">Central de suporte</h1>
           <p className="page-subtitle">
-            {user?.clinicName || 'Central de suporte'} - selecione a clinica correta para manutencao, ajustes e acompanhamento.
+            {user?.clinicName || 'Central de suporte'} - selecione a clínica correta para manutenção, ajustes e acompanhamento.
           </p>
         </div>
 
-        <span className="badge badge-gold">Operacao tecnica</span>
+        <span className="badge badge-gold">Operação técnica</span>
       </div>
 
       <div className="stats-grid compact-stats stats-grid-adaptive">
         <div className="stat-card gold">
-          <div className="stat-label">Clinicas</div>
+          <div className="stat-label">Clínicas</div>
           <div className="stat-value">{data.totalClinics}</div>
-          <div className="stat-sub">Base disponivel para suporte e manutencao.</div>
+          <div className="stat-sub">Base disponível para suporte e manutenção.</div>
         </div>
         <div className="stat-card rose">
           <div className="stat-label">Bloqueadas</div>
           <div className="stat-value">{data.blockedCount}</div>
-          <div className="stat-sub">Acessos suspensos aguardando regularizacao.</div>
+          <div className="stat-sub">Acessos suspensos aguardando regularização.</div>
         </div>
         <div className="stat-card green">
           <div className="stat-label">Pendentes</div>
           <div className="stat-value">{data.overdueCount}</div>
-          <div className="stat-sub">Clinicas com cobranca em atraso e risco de bloqueio.</div>
+          <div className="stat-sub">Clínicas com cobrança em atraso e risco de bloqueio.</div>
         </div>
       </div>
 
       <section className="card section-card support-toolbar">
         <div>
-          <h2 className="section-title">Localizar clinica</h2>
-          <p className="section-copy">Filtre por nome da clinica, e-mail, ID interno ou situacao operacional para entrar no ambiente correto sem confusao.</p>
+          <h2 className="section-title">Localizar clínica</h2>
+          <p className="section-copy">Filtre por nome da clínica, e-mail, ID interno ou situacao operacional para entrar no ambiente correto sem confusao.</p>
         </div>
 
         <div className="form-group support-search-group">
-          <label className="form-label">Busca rapida</label>
+          <label className="form-label">Busca rápida</label>
           <div className="toolbar-card clientes-search-row">
             <input
               className="form-input"
@@ -164,7 +164,7 @@ export default function SupportHub() {
           </div>
           <p className="filter-helper-text" aria-live="polite">
             {hasQuery
-              ? `${filteredClinics.length} clinica(s) correspondem aos criterios atuais.`
+              ? `${filteredClinics.length} clínica(s) correspondem aos criterios atuais.`
               : 'Use busca por nome, e-mail, ID ou situacao operacional para chegar a conta correta com menos risco de erro.'}
           </p>
         </div>
@@ -203,11 +203,11 @@ export default function SupportHub() {
                     <strong>{formatDate(clinic.createdAt)}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
-                    <span>ID da clinica</span>
-                    <strong>{clinic.clinicId || 'Nao definido'}</strong>
+                    <span>ID da clínica</span>
+                    <strong>{clinic.clinicId || 'Não definido'}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
-                    <span>Proximo vencimento</span>
+                    <span>Próximo vencimento</span>
                     <strong>{formatDate(clinic.billing?.nextDueAt || clinic.billing?.graceEndsAt)}</strong>
                   </div>
                   <div className="document-meta-item support-clinic-meta-item">
@@ -216,7 +216,7 @@ export default function SupportHub() {
                   </div>
                 </div>
 
-                <p className="support-clinic-note"><strong>{clinicStatus.label}</strong> - {clinic.billing?.message || 'Sem observacoes de cobranca no momento.'}</p>
+                <p className="support-clinic-note"><strong>{clinicStatus.label}</strong> - {clinic.billing?.message || 'Sem observações de cobrança no momento.'}</p>
 
                 <div className="support-card-actions">
                   <button
@@ -234,8 +234,8 @@ export default function SupportHub() {
         </section>
       ) : (
         <section className="card section-card support-empty-state">
-          <h2 className="section-title">Nenhuma clinica encontrada</h2>
-          <p className="section-copy">Ajuste ou limpe a busca para localizar a conta certa antes de iniciar a manutencao.</p>
+          <h2 className="section-title">Nenhuma clínica encontrada</h2>
+          <p className="section-copy">Ajuste ou limpe a busca para localizar a conta certa antes de iniciar a manutenção.</p>
           {hasQuery ? (
             <button type="button" className="btn btn-outline btn-sm" onClick={() => setQuery('')}>
               Limpar busca

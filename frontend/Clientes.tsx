@@ -1,13 +1,15 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import api, { getApiErrorMessage } from './api'
 import { createClientRecord, listClientRecords, updateClientRecord } from './clientRecordsApi'
+import { ClientAvatar } from './ClientAvatar'
 import { Icon } from './Icon'
 import type { ClientRecord, ConsentRecordSummary, Identifier } from './clinicalTypes'
 
 type ClientModalMode = 'create' | 'edit' | null
+const CLIENT_PHOTO_MAX_BYTES = 5 * 1024 * 1024
 
 interface ClientFormState {
   name: string
@@ -15,6 +17,7 @@ interface ClientFormState {
   email: string
   birthDate: string
   cpf: string
+  photoDataUrl: string | null
   notes: string
 }
 
@@ -35,7 +38,7 @@ interface ClientesOverviewMetricProps {
 interface ClientCardProps {
   client: ClientRecord
   consentLoadingId: Identifier | null
-  onOpenProntuario: (clientId: Identifier) => void
+  onOpenProntuário: (clientId: Identifier) => void
   onConsent: (client: ClientRecord) => void | Promise<void>
   onEdit: (client: ClientRecord) => void
   onDelete: (id: Identifier) => void | Promise<void>
@@ -67,10 +70,11 @@ const emptyForm: ClientFormState = {
   email: '',
   birthDate: '',
   cpf: '',
+  photoDataUrl: null,
   notes: '',
 }
 
-const consentStatusMeta = {
+const consentStatusMeta: Record<string, { label: string; className: string }> = {
   none: { label: 'Sem termo', className: 'badge badge-muted' },
   PENDING: { label: 'Pendente', className: 'badge badge-gold' },
   SIGNED: { label: 'Assinado', className: 'badge badge-green' },
@@ -95,7 +99,7 @@ function getGeneralConsentRecord(client: ClientRecord) {
 
 function getConsentStatusMeta(client: ClientRecord) {
   const status = getGeneralConsentRecord(client)?.status
-  return consentStatusMeta[status] || consentStatusMeta.none
+  return consentStatusMeta[status || 'none'] || consentStatusMeta.none
 }
 
 function getAnamnesisStatusMeta(client: ClientRecord) {
@@ -104,6 +108,23 @@ function getAnamnesisStatusMeta(client: ClientRecord) {
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function readClientPhotoAsDataUrl(file: File) {
+  if (!file.type.startsWith('image/')) {
+    return Promise.reject(new Error('Selecione um arquivo de imagem válido.'))
+  }
+
+  if (file.size > CLIENT_PHOTO_MAX_BYTES) {
+    return Promise.reject(new Error('Use uma imagem de até 5 MB para manter o prontuário leve.'))
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 function ClientesOverviewMetric({ label, value, helper }: ClientesOverviewMetricProps) {
@@ -148,7 +169,7 @@ function getClientWorkflowMeta(client: ClientRecord) {
   }
 }
 
-function ClientCard({ client, consentLoadingId, onOpenProntuario, onConsent, onEdit, onDelete }: ClientCardProps) {
+function ClientCard({ client, consentLoadingId, onOpenProntuário, onConsent, onEdit, onDelete }: ClientCardProps) {
   const consentMeta = getConsentStatusMeta(client)
   const anamnesisMeta = getAnamnesisStatusMeta(client)
   const workflowMeta = getClientWorkflowMeta(client)
@@ -167,14 +188,17 @@ function ClientCard({ client, consentLoadingId, onOpenProntuario, onConsent, onE
     <article className="client-list-item">
       <div className="client-list-main">
         <div className="client-list-head">
-          <span className="eyebrow">Base clínica organizada</span>
-          <div className="client-list-head-main">
-            <button type="button" className="client-name-link client-list-title" onClick={() => onOpenProntuario(client.id)}>
-              {client.name}
-            </button>
-            <p className="client-list-subtitle">
-              Acesso direto ao prontuário, consentimento e histórico clínico em uma leitura contínua.
-            </p>
+          <div className="client-list-profile">
+            <ClientAvatar name={client.name} photoDataUrl={client.photoDataUrl} size="lg" />
+            <div className="client-list-head-main">
+              <span className="eyebrow">Base clínica organizada</span>
+              <button type="button" className="client-name-link client-list-title" onClick={() => onOpenProntuário(client.id)}>
+                {client.name}
+              </button>
+              <p className="client-list-subtitle">
+                Acesso direto ao prontuário, consentimento e histórico clínico em uma leitura contínua.
+              </p>
+            </div>
           </div>
 
           <div className="client-badge-stack client-list-badges">
@@ -232,7 +256,7 @@ function ClientCard({ client, consentLoadingId, onOpenProntuario, onConsent, onE
       </div>
 
       <div className="client-list-actions">
-        <button type="button" className="btn btn-gold btn-sm" onClick={() => onOpenProntuario(client.id)}>
+        <button type="button" className="btn btn-gold btn-sm" onClick={() => onOpenProntuário(client.id)}>
           <Icon name="clipboard" /> Ver prontuário
         </button>
         <button
@@ -313,13 +337,14 @@ export default function Clientes() {
       email: client.email || '',
       birthDate: client.birthDate ? client.birthDate.slice(0, 10) : '',
       cpf: client.cpf || '',
+      photoDataUrl: client.photoDataUrl || null,
       notes: client.notes || '',
     })
     setSelected(client)
     setModal('edit')
   }
 
-  function openProntuario(clientId: Identifier) {
+  function openProntuário(clientId: Identifier) {
     navigate('/clientes/' + clientId)
   }
 
@@ -348,6 +373,7 @@ export default function Clientes() {
         email: normalizedEmail,
         notes: form.notes.trim(),
         cpf: form.cpf.trim(),
+        photoDataUrl: form.photoDataUrl,
       }
 
       if (modal === 'create') {
@@ -409,6 +435,20 @@ export default function Clientes() {
 
   const setField = (key: keyof ClientFormState) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm(current => ({ ...current, [key]: event.target.value }))
+  }
+
+  async function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const photoDataUrl = await readClientPhotoAsDataUrl(file)
+      setForm(current => ({ ...current, photoDataUrl }))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível carregar a foto')
+    } finally {
+      event.target.value = ''
+    }
   }
 
   return (
@@ -484,7 +524,7 @@ export default function Clientes() {
               key={client.id}
               client={client}
               consentLoadingId={consentLoadingId}
-              onOpenProntuario={openProntuario}
+              onOpenProntuário={openProntuário}
               onConsent={handleConsent}
               onEdit={openEdit}
               onDelete={handleDelete}
@@ -507,6 +547,25 @@ export default function Clientes() {
           loading={saving}
         >
           <div className="form-grid">
+            <div className="form-group form-full">
+              <label className="form-label">Foto de identificação</label>
+              <div className="client-photo-upload">
+                <ClientAvatar name={form.name || selected?.name} photoDataUrl={form.photoDataUrl} size="hero" />
+                <div className="client-photo-upload-actions">
+                  <label className="btn btn-outline btn-sm photo-upload-btn">
+                    <Icon name="camera" /> Escolher foto
+                    <input type="file" accept="image/*" hidden onChange={handlePhotoChange} />
+                  </label>
+                  {form.photoDataUrl ? (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm(current => ({ ...current, photoDataUrl: null }))}>
+                      Remover foto
+                    </button>
+                  ) : null}
+                  <p className="text-muted media-upload-copy">Use uma imagem frontal e clara. Ela aparece no prontuário para reduzir risco de abrir a ficha errada.</p>
+                </div>
+              </div>
+            </div>
+
             <div className="form-group form-full">
               <label className="form-label">Nome completo *</label>
               <input className="form-input" value={form.name} onChange={setField('name')} />

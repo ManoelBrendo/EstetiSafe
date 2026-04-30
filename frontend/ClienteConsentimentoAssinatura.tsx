@@ -9,6 +9,7 @@ import type { ProfessionalSummary } from './operationsTypes'
 
 const CANVAS_WIDTH = 960
 const CANVAS_HEIGHT = 280
+const PROFESSIONALS_LOAD_TIMEOUT_MS = 4500
 
 type ConsentStatus = 'PENDING' | 'SIGNED' | 'REVOKED'
 
@@ -45,12 +46,32 @@ const consentStatusMeta: Record<ConsentStatus, { label: string; className: strin
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return 'Ainda nao assinado'
+  if (!value) return 'Ainda não assinado'
+
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
 
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs)
+
+    promise.then(
+      value => {
+        window.clearTimeout(timeout)
+        resolve(value)
+      },
+      error => {
+        window.clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
 }
 
 function prepareCanvas(canvas: HTMLCanvasElement) {
@@ -80,11 +101,14 @@ export default function ClienteConsentimentoAssinatura() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const drawingRef = useRef(false)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [revoking, setRevoking] = useState(false)
   const [record, setRecord] = useState<ConsentRecordDetail | null>(null)
   const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
+  const [professionalsLoading, setProfessionalsLoading] = useState(false)
+  const [professionalsLoadWarning, setProfessionalsLoadWarning] = useState('')
   const [signerName, setSignerName] = useState('')
   const [signerDocument, setSignerDocument] = useState('')
   const [professionalId, setProfessionalId] = useState('')
@@ -99,40 +123,83 @@ export default function ClienteConsentimentoAssinatura() {
   )
 
   const resolvedProfessionalName =
-    selectedProfessional?.name || professionalName.trim() || record?.professionalName || 'Nao informado'
+    selectedProfessional?.name || professionalName.trim() || record?.professionalName || 'Não informado'
 
   const loadRecord = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
+    setProfessionals([])
+    setProfessionalsLoadWarning('')
+    setProfessionalsLoading(false)
+
+    if (!clientId || !consentRecordId) {
+      setRecord(null)
+      setLoadError('Link do termo incompleto. Volte ao prontuário do cliente e abra o termo novamente.')
+      setLoading(false)
+      return
+    }
+
+    let consentData: ConsentRecordDetail
 
     try {
-      const [{ data }, { data: professionalsData }] = await Promise.all([
-        api.get<ConsentRecordDetail>('/consent-records/' + consentRecordId),
-        api.get<ProfessionalSummary[]>('/professionals'),
-      ])
+      const { data } = await api.get<ConsentRecordDetail>('/consent-records/' + consentRecordId)
 
       if (String(data.clientId) !== String(clientId)) {
-        throw new Error('O termo informado nao pertence a este cliente')
+        throw new Error('O termo informado não pertence a este cliente')
       }
 
-      const matchedProfessional =
-        professionalsData.find(item => String(item.id) === String(data.professionalId || '')) || null
-
+      consentData = data
       setRecord(data)
-      setProfessionals(professionalsData)
       setSignerName(data.signerName || data.client?.name || '')
       setSignerDocument(data.signerDocument || data.client?.cpf || '')
       setAccepted(data.status === 'SIGNED')
       setHasSignature(data.status === 'SIGNED')
-      setProfessionalId(matchedProfessional ? String(matchedProfessional.id) : '')
-      setProfessionalName(matchedProfessional ? matchedProfessional.name : data.professionalName || '')
-      setUseManualProfessional(!professionalsData.length || Boolean(data.professionalName && !matchedProfessional))
+      setProfessionalId(data.professionalId ? String(data.professionalId) : '')
+      setProfessionalName(data.professionalName || '')
+      setUseManualProfessional(!data.professionalId || Boolean(data.professionalName))
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir o termo de consentimento'))
-      navigate('/clientes', { replace: true })
+      const message = getApiErrorMessage(error, 'Não foi possível abrir o termo de consentimento')
+
+      setRecord(null)
+      setLoadError(message)
+      toast.error(message)
+      return
     } finally {
       setLoading(false)
     }
-  }, [clientId, consentRecordId, navigate])
+
+    setProfessionalsLoading(true)
+
+    try {
+      const { data: professionalsData } = await withTimeout(
+        api.get<ProfessionalSummary[]>('/professionals'),
+        PROFESSIONALS_LOAD_TIMEOUT_MS,
+        'Tempo esgotado ao carregar profissionais'
+      )
+      const safeProfessionals = Array.isArray(professionalsData) ? professionalsData : []
+      const matchedProfessional =
+        safeProfessionals.find(item => String(item.id) === String(consentData.professionalId || '')) || null
+
+      setProfessionals(safeProfessionals)
+      setProfessionalId(matchedProfessional ? String(matchedProfessional.id) : '')
+      setProfessionalName(matchedProfessional ? matchedProfessional.name : consentData.professionalName || '')
+      setUseManualProfessional(!safeProfessionals.length || Boolean(consentData.professionalName && !matchedProfessional))
+    } catch (error) {
+      const message = getApiErrorMessage(
+        error,
+        'Termo aberto, mas não foi possível carregar profissionais. Informe manualmente.'
+      )
+
+      setProfessionals([])
+      setProfessionalsLoadWarning(message)
+      setProfessionalId('')
+      setProfessionalName(consentData.professionalName || '')
+      setUseManualProfessional(true)
+      toast.error(message)
+    } finally {
+      setProfessionalsLoading(false)
+    }
+  }, [clientId, consentRecordId])
 
   useEffect(() => {
     void loadRecord()
@@ -248,7 +315,7 @@ export default function ClienteConsentimentoAssinatura() {
     const selectedName = useManualProfessional ? professionalName.trim() : selectedProfessional?.name || ''
 
     if (!selectedProfessional && !selectedName) {
-      toast.error('Selecione ou informe o profissional responsavel')
+      toast.error('Selecione ou informe o profissional responsável')
       return
     }
 
@@ -283,7 +350,7 @@ export default function ClienteConsentimentoAssinatura() {
       setUseManualProfessional(!data.professionalId && Boolean(data.professionalName))
       toast.success('Termo assinado e salvo no cadastro do cliente')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar a assinatura'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a assinatura'))
     } finally {
       setSaving(false)
     }
@@ -292,10 +359,10 @@ export default function ClienteConsentimentoAssinatura() {
   async function handleRevokeConsent() {
     if (!record?.id || record.status !== 'SIGNED') return
 
-    const reason = window.prompt('Informe o motivo da revogacao. Este texto ficara registrado na auditoria interna.')
+    const reason = window.prompt('Informe o motivo da revogação. Este texto ficara registrado na auditoria interna.')
     if (reason === null) return
 
-    const confirmed = window.confirm('Confirmar revogacao deste termo? A assinatura e o PDF permanecem preservados, mas o status passa a ser revogado.')
+    const confirmed = window.confirm('Confirmar revogação deste termo? A assinatura e o PDF permanecem preservados, mas o status passa a ser revogado.')
     if (!confirmed) return
 
     setRevoking(true)
@@ -309,7 +376,7 @@ export default function ClienteConsentimentoAssinatura() {
       setAccepted(false)
       toast.success('Termo revogado com rastreabilidade preservada')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel revogar o termo'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível revogar o termo'))
     } finally {
       setRevoking(false)
     }
@@ -327,7 +394,7 @@ export default function ClienteConsentimentoAssinatura() {
       )
       toast.success('PDF do termo baixado com sucesso')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel baixar o PDF do termo'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível baixar o PDF do termo'))
     } finally {
       setDownloadingPdf(false)
     }
@@ -344,7 +411,35 @@ export default function ClienteConsentimentoAssinatura() {
     )
   }
 
-  if (!record) return null
+  if (!record) {
+    return (
+      <div className="page consent-page">
+        <section className="card consent-panel consent-load-error">
+          <div className="empty-icon">
+            <Icon name="clipboard" size={24} />
+          </div>
+          <div>
+            <p className="eyebrow">Termo de consentimento</p>
+            <h1 className="section-title">Não conseguimos abrir este termo</h1>
+            <p className="section-copy">
+              {loadError || 'O termo não retornou os dados esperados. Tente novamente ou volte ao prontuário do cliente.'}
+            </p>
+          </div>
+          <div className="consent-actions consent-actions-start">
+            <button type="button" className="btn btn-gold" onClick={() => void loadRecord()}>
+              <Icon name="refresh" /> Tentar novamente
+            </button>
+            <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes/' + clientId)}>
+              <Icon name="back" /> Voltar ao prontuário
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => navigate('/clientes')}>
+              Voltar para clientes
+            </button>
+          </div>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="page consent-page">
@@ -355,7 +450,7 @@ export default function ClienteConsentimentoAssinatura() {
           </button>
           <h1 className="page-title">Termo de consentimento</h1>
           <p className="page-subtitle">
-            Assinatura digital vinculada diretamente ao prontuario de {record.client.name}.
+            Assinatura digital vinculada diretamente ao prontuário de {record.client.name}.
           </p>
         </div>
 
@@ -387,7 +482,7 @@ export default function ClienteConsentimentoAssinatura() {
               <div>
                 <h2 className="section-title">Assinatura digital</h2>
                 <p className="section-copy">
-                  Capture a assinatura com o dedo, mouse ou caneta para arquivar a evidencia deste termo.
+                  Capture a assinatura com o dedo, mouse ou caneta para arquivar a evidência deste termo.
                 </p>
               </div>
             </div>
@@ -417,7 +512,7 @@ export default function ClienteConsentimentoAssinatura() {
 
               {professionals.length ? (
                 <div className="form-group">
-                  <label className="form-label">Profissional responsavel *</label>
+                  <label className="form-label">Profissional responsável *</label>
                   <select
                     className="form-select"
                     value={useManualProfessional ? 'MANUAL' : professionalId}
@@ -430,19 +525,21 @@ export default function ClienteConsentimentoAssinatura() {
                         {professional.name}
                       </option>
                     ))}
-                    <option value="MANUAL">Profissional nao cadastrado</option>
+                    <option value="MANUAL">Profissional não cadastrado</option>
                   </select>
                   {!useManualProfessional && selectedProfessional ? (
                     <p className="text-sm text-muted consent-professional-hint">
-                      {selectedProfessional.specialty || 'Profissional ativo no cadastro da clinica.'}
+                      {selectedProfessional.specialty || 'Profissional ativo no cadastro da clínica.'}
                     </p>
                   ) : null}
                 </div>
               ) : (
                 <div className="form-group form-full">
-                  <label className="form-label">Profissional responsavel *</label>
+                  <label className="form-label">Profissional responsável *</label>
                   <p className="text-sm text-muted consent-professional-hint">
-                    Nenhum profissional ativo cadastrado. Informe manualmente para concluir o termo.
+                    {professionalsLoading
+                      ? 'Carregando profissionais. Você tambem pode informar manualmente se precisar concluir agora.'
+                      : professionalsLoadWarning || 'Nenhum profissional ativo cadastrado. Informe manualmente para concluir o termo.'}
                   </p>
                 </div>
               )}
@@ -468,7 +565,7 @@ export default function ClienteConsentimentoAssinatura() {
                 </div>
                 <h3>Termo revogado</h3>
                 <p>
-                  Este termo permanece arquivado para consulta, PDF e auditoria, mas nao deve mais ser usado como autorizacao ativa.
+                  Este termo permanece arquivado para consulta, PDF e auditoria, mas não deve mais ser usado como autorização ativa.
                 </p>
                 <div className="detail-list consent-revoked-details">
                   <div className="detail-row">
@@ -480,13 +577,13 @@ export default function ClienteConsentimentoAssinatura() {
                     <strong>{formatDateTime(record.updatedAt)}</strong>
                   </div>
                   <div className="detail-row">
-                    <span>Profissional responsavel</span>
+                    <span>Profissional responsável</span>
                     <strong>{resolvedProfessionalName}</strong>
                   </div>
                 </div>
                 <div className="consent-actions consent-actions-start">
                   <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes/' + record.client.id)}>
-                    Voltar ao prontuario
+                    Voltar ao prontuário
                   </button>
                   <button type="button" className="btn btn-outline" onClick={handleDownloadPdf} disabled={downloadingPdf}>
                     {downloadingPdf ? <span className="spinner" /> : <><Icon name="download" /> Baixar PDF</>}
@@ -501,7 +598,7 @@ export default function ClienteConsentimentoAssinatura() {
                 <div className="signature-meta">
                   <strong>Assinatura concluida</strong>
                   <span>Registro salvo em {formatDateTime(record.signedAt)}</span>
-                  <span>Profissional responsavel: {resolvedProfessionalName}</span>
+                  <span>Profissional responsável: {resolvedProfessionalName}</span>
                 </div>
                 <div className="consent-actions consent-actions-start">
                   <button type="button" className="btn btn-outline" onClick={() => navigate('/clientes')}>
@@ -549,8 +646,8 @@ export default function ClienteConsentimentoAssinatura() {
 
                 <div className="signature-toolbar">
                   <span className="signature-note">
-                    Assine no campo acima. O sistema salva a evidencia no cadastro do cliente junto do profissional
-                    responsavel.
+                    Assine no campo acima. O sistema salva a evidência no cadastro do cliente junto do profissional
+                    responsável.
                   </span>
                   <button type="button" className="btn btn-outline" onClick={clearSignature}>
                     <Icon name="x" /> Limpar assinatura
@@ -584,15 +681,15 @@ export default function ClienteConsentimentoAssinatura() {
             <div className="detail-list">
               <div className="detail-row">
                 <span>Telefone</span>
-                <strong>{record.client.phone || 'Nao informado'}</strong>
+                <strong>{record.client.phone || 'Não informado'}</strong>
               </div>
               <div className="detail-row">
                 <span>E-mail</span>
-                <strong>{record.client.email || 'Nao informado'}</strong>
+                <strong>{record.client.email || 'Não informado'}</strong>
               </div>
               <div className="detail-row">
                 <span>CPF</span>
-                <strong>{record.client.cpf || 'Nao informado'}</strong>
+                <strong>{record.client.cpf || 'Não informado'}</strong>
               </div>
             </div>
           </section>
@@ -613,7 +710,7 @@ export default function ClienteConsentimentoAssinatura() {
                 <strong>{formatDateTime(record.signedAt)}</strong>
               </div>
               <div className="detail-row">
-                <span>Profissional responsavel</span>
+                <span>Profissional responsável</span>
                 <strong>{resolvedProfessionalName}</strong>
               </div>
             </div>

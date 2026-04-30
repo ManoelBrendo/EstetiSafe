@@ -1,8 +1,8 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
-import { getClientMedicalRecord, saveClientAnamnesis } from './clientRecordsApi'
+import { generateClientImageConsentRecord, getClientMedicalRecord, saveClientAnamnesis } from './clientRecordsApi'
 import { Icon } from './Icon'
 import { useAuth } from './useAuth'
 import { getClinicBranding } from './branding'
@@ -38,9 +38,20 @@ import type {
   AnamnesisForm,
   AnamnesisRecordVersion,
   ClientRecord,
+  ConsentRecordSummary,
   Identifier,
   TreatmentService,
 } from './clinicalTypes'
+
+const IMAGE_CONSENT_TITLE_FRAGMENT = 'uso de imagem'
+const MAX_ANAMNESIS_PHOTO_SIZE_BYTES = 8 * 1024 * 1024
+const ALLOWED_ANAMNESIS_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const ALLOWED_ANAMNESIS_PHOTO_EXTENSION = /\.(jpe?g|png|webp)$/i
+
+function isImageConsentRecord(record: ConsentRecordSummary | null | undefined) {
+  const title = typeof record?.title === 'string' ? record.title : ''
+  return title.toLowerCase().includes(IMAGE_CONSENT_TITLE_FRAGMENT)
+}
 
 interface ProfessionalSummary {
   id: Identifier
@@ -51,7 +62,7 @@ interface ProfessionalSummary {
 
 type FormPath = Array<string | number>
 type PhotoFieldKey = 'caption' | 'dataUrl' | 'fileName'
-type PhotoConsentField = 'clinicalUseAuthorized' | 'marketingUseAuthorized'
+type PhotoConsentField = 'clinicalUseAuthorized' | 'marketingUseAuthorized' | 'consentAwarenessConfirmed'
 
 interface SectionCardProps {
   eyebrow?: string
@@ -100,10 +111,28 @@ interface AestheticHistoryEntryCardProps {
 function formatDateTime(value: string | number | null | undefined) {
   if (!value) return 'Sem registro'
 
+  const parsedDate = new Date(value)
+  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
+
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
     timeStyle: 'short',
-  }).format(new Date(value))
+  }).format(parsedDate)
+}
+
+function validatePhotoFile(file: File) {
+  const hasAllowedType = ALLOWED_ANAMNESIS_PHOTO_TYPES.has(file.type.toLowerCase())
+  const hasAllowedExtension = ALLOWED_ANAMNESIS_PHOTO_EXTENSION.test(file.name)
+
+  if (!hasAllowedType && !hasAllowedExtension) {
+    return `A foto "${file.name}" precisa estar em JPG, PNG ou WebP.`
+  }
+
+  if (file.size > MAX_ANAMNESIS_PHOTO_SIZE_BYTES) {
+    return `A foto "${file.name}" tem mais de 8 MB. Envie uma imagem menor.`
+  }
+
+  return null
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -134,6 +163,10 @@ async function compressImage(file: File): Promise<string> {
   canvas.height = height
 
   const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Não foi possível preparar a imagem selecionada')
+  }
+
   context.fillStyle = '#fffaf4'
   context.fillRect(0, 0, width, height)
   context.drawImage(image, 0, 0, width, height)
@@ -346,6 +379,7 @@ export default function ClienteAnamnese() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [generatingImageConsent, setGeneratingImageConsent] = useState(false)
   const [client, setClient] = useState<ClientRecord | null>(null)
   const [history, setHistory] = useState<AnamnesisRecordVersion[]>([])
   const [professionals, setProfessionals] = useState<ProfessionalSummary[]>([])
@@ -430,7 +464,14 @@ export default function ClienteAnamnese() {
   const isLocked = Boolean(client?.isLocked)
   const lockedAt = client?.lockedAt || null
   const clinicalPhotoConsent = Boolean(form.photoRecord.clinicalUseAuthorized || form.photoRecord.imageUseAuthorized)
-  const photoUploadDisabled = isLocked || uploading || !clinicalPhotoConsent
+  const marketingPhotoConsent = Boolean(form.photoRecord.marketingUseAuthorized || form.photoRecord.imageUseAuthorized)
+  const imageConsentRecord = (client?.consentRecords || []).find(isImageConsentRecord) || null
+  const imageConsentStatusLabel = imageConsentRecord?.status === 'SIGNED' ? 'Termo assinado' : imageConsentRecord?.status === 'PENDING' ? 'Aguardando assinatura' : imageConsentRecord?.status === 'REVOKED' ? 'Termo revogado' : 'Sem termo formal'
+  const imageConsentButtonLabel = imageConsentRecord?.id ? (imageConsentRecord.status === 'SIGNED' ? 'Ver termo de imagem' : imageConsentRecord.status === 'REVOKED' ? 'Gerar novo termo' : 'Assinar termo de imagem') : 'Gerar termo de imagem'
+  const imageConsentButtonDisabled = generatingImageConsent || ((!imageConsentRecord?.id || imageConsentRecord.status === 'REVOKED') && (isLocked || !clinicalPhotoConsent))
+  const photoConsentConfirmed = Boolean(form.photoRecord.consentAwarenessConfirmed)
+  const photoUploadReady = clinicalPhotoConsent && photoConsentConfirmed
+  const photoUploadDisabled = isLocked || uploading || !photoUploadReady
 
   function setTextField(path: FormPath) {
     return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -472,6 +513,7 @@ export default function ClienteAnamnese() {
           if (!checked) {
             nextPhotoRecord.marketingUseAuthorized = false
             nextPhotoRecord.imageUseAuthorized = false
+            nextPhotoRecord.consentAwarenessConfirmed = false
           }
         }
 
@@ -482,6 +524,15 @@ export default function ClienteAnamnese() {
             nextPhotoRecord.clinicalUseAuthorized = true
             nextPhotoRecord.consentAcceptedAt = current.photoRecord.consentAcceptedAt || new Date().toISOString()
           }
+        }
+
+        if (field === 'consentAwarenessConfirmed') {
+          if (checked && !nextPhotoRecord.clinicalUseAuthorized) {
+            nextPhotoRecord.clinicalUseAuthorized = true
+            nextPhotoRecord.consentAcceptedAt = current.photoRecord.consentAcceptedAt || new Date().toISOString()
+          }
+
+          nextPhotoRecord.consentAwarenessConfirmed = checked
         }
 
         return {
@@ -497,6 +548,39 @@ export default function ClienteAnamnese() {
     setForm(current => updateFormValue(current, path, value))
   }
 
+  async function handleImageConsentTerm() {
+    if (!client?.id) return
+
+    if (imageConsentRecord?.id && imageConsentRecord.status !== 'REVOKED') {
+      navigate('/clientes/' + client.id + '/consentimentos/' + imageConsentRecord.id + '/assinar')
+      return
+    }
+
+    if (!clinicalPhotoConsent) {
+      toast.error('Marque o aceite clínico de imagem antes de gerar o termo formal')
+      return
+    }
+
+    setGeneratingImageConsent(true)
+
+    try {
+      const record = await generateClientImageConsentRecord(client.id, {
+        clinicalUseAuthorized: clinicalPhotoConsent,
+        marketingUseAuthorized: marketingPhotoConsent,
+      })
+
+      if (!record.id) {
+        throw new Error('Termo gerado sem identificador')
+      }
+
+      toast.success('Termo de uso de imagem gerado para assinatura')
+      navigate('/clientes/' + client.id + '/consentimentos/' + record.id + '/assinar')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível gerar o termo de uso de imagem'))
+    } finally {
+      setGeneratingImageConsent(false)
+    }
+  }
   function handleProfessionalSelect(event: ChangeEvent<HTMLSelectElement>) {
     if (isLocked) return
 
@@ -537,11 +621,21 @@ export default function ClienteAnamnese() {
     if (isLocked) return
     if (!files.length) return
     if (!clinicalPhotoConsent) {
-      toast.error('Registre o consentimento clinico antes de anexar fotos ao prontuario')
+      toast.error('Registre o consentimento clínico antes de anexar fotos ao prontuário')
+      return
+    }
+    if (!photoConsentConfirmed) {
+      toast.error('Confirme que a autorização de imagem foi explicada e registrada antes de anexar fotos')
       return
     }
     if ((form.photoRecord.photos?.length || 0) + files.length > 8) {
       toast.error('Adicione no máximo 8 fotos por anamnese')
+      return
+    }
+
+    const invalidFileMessage = files.reduce<string | null>((message, file) => message || validatePhotoFile(file), null)
+    if (invalidFileMessage) {
+      toast.error(invalidFileMessage)
       return
     }
 
@@ -703,6 +797,11 @@ export default function ClienteAnamnese() {
   }
 
   async function handleSave() {
+    if (!clientId) {
+      toast.error('Não foi possível identificar o cliente da anamnese')
+      return
+    }
+
     if (isLocked) {
       toast.error('Prontuário bloqueado após confirmação de pagamento')
       return
@@ -767,7 +866,12 @@ export default function ClienteAnamnese() {
     }
 
     if ((form.photoRecord.photos?.length || 0) > 0 && !clinicalPhotoConsent) {
-      toast.error('As fotos do prontuario precisam do aceite de uso clinico de imagem')
+      toast.error('As fotos do prontuário precisam do aceite de uso clínico de imagem')
+      return
+    }
+
+    if ((form.photoRecord.photos?.length || 0) > 0 && !photoConsentConfirmed) {
+      toast.error('Confirme a ciência da autorização de imagem antes de salvar fotos no prontuário')
       return
     }
 
@@ -1197,10 +1301,10 @@ export default function ClienteAnamnese() {
           <SectionCard
             eyebrow="9. Registro fotográfico"
             title="Registro fotográfico"
-            description="Fotos antes do procedimento com legenda curta e autorização vinculada ao prontuário."
+            description="Fotos antes do procedimento com legenda curta e autorização vinculada ao prontuário. Aceita JPG, PNG ou WebP até 8 MB cada."
             actions={(
               <label className={['btn btn-outline photo-upload-btn', photoUploadDisabled ? 'is-disabled' : ''].filter(Boolean).join(' ')}>
-                <input type="file" accept="image/*" multiple onChange={handleFiles} hidden disabled={photoUploadDisabled} />
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleFiles} hidden disabled={photoUploadDisabled} />
                 {uploading ? <span className="spinner" /> : <><Icon name="camera" /> Adicionar fotos</>}
               </label>
             )}
@@ -1213,29 +1317,36 @@ export default function ClienteAnamnese() {
                     <p>Separe o registro clínico do uso de marketing para reduzir risco e deixar a decisão clara para a cliente.</p>
                   </div>
                   <span className={clinicalPhotoConsent ? 'badge badge-green' : 'badge badge-muted'}>
-                    {clinicalPhotoConsent ? 'Consentimento clinico ativo' : 'Aguardando aceite'}
+                    {photoUploadReady ? 'Fotos liberadas' : clinicalPhotoConsent ? 'Falta confirmação' : 'Aguardando aceite'}
                   </span>
                 </div>
 
                 <div className="checkbox-grid form-full anamnesis-photo-consent-grid">
                   <ToggleField
-                    label="Autorizo registrar fotos para acompanhamento clinico no prontuario"
+                    label="Autorizo registrar fotos para acompanhamento clínico no prontuário"
                     checked={clinicalPhotoConsent}
                     onChange={setPhotoConsentField('clinicalUseAuthorized')}
                   />
                   <ToggleField
-                    label="Autorizo uso de imagem em divulgacao e marketing"
+                    label="Autorizo uso de imagem em divulgação e marketing"
                     checked={Boolean(form.photoRecord.marketingUseAuthorized || form.photoRecord.imageUseAuthorized)}
                     onChange={setPhotoConsentField('marketingUseAuthorized')}
+                  />
+                  <ToggleField
+                    label="Confirmo que a autorização de imagem foi explicada e registrada antes do envio das fotos"
+                    checked={photoConsentConfirmed}
+                    onChange={setPhotoConsentField('consentAwarenessConfirmed')}
                   />
                 </div>
 
                 <p className="photo-consent-guidance">
-                  O aceite clinico permite anexar fotos ao prontuario para evolucao do tratamento. O aceite de marketing e separado e deve ser usado apenas quando a cliente concordar com divulgacao externa.
+                  O aceite clínico permite anexar fotos ao prontuário para evolução do tratamento. A confirmação operacional registra que a autorização foi explicada antes do anexo. O aceite de marketing continua separado e deve ser usado apenas quando a cliente concordar com divulgação externa.
                 </p>
 
                 {!clinicalPhotoConsent ? (
-                  <p className="photo-consent-warning">O envio de fotos fica bloqueado ate o consentimento clinico ser marcado.</p>
+                  <p className="photo-consent-warning">O envio de fotos fica bloqueado até o consentimento clínico ser marcado.</p>
+                ) : !photoConsentConfirmed ? (
+                  <p className="photo-consent-warning">Marque a confirmação de ciência para liberar o envio de fotos.</p>
                 ) : null}
               </div>
 
@@ -1282,7 +1393,7 @@ export default function ClienteAnamnese() {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Número de sessões</label>
-                  <input className="form-input" type="number" min="1" max="99" value={form.treatmentPlan.sessionCount} onChange={setTextField(['treatmentPlan', 'sessionCount'])} />
+                  <input className="form-input" type="number" min="1" max="99" value={form.treatmentPlan.sessionCount ?? ''} onChange={setTextField(['treatmentPlan', 'sessionCount'])} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Intervalo entre sessões</label>
@@ -1443,6 +1554,33 @@ export default function ClienteAnamnese() {
                 <span>Consentimento</span>
                 <strong>{client.consentRecords?.[0]?.status === 'SIGNED' ? 'Assinado' : 'Pendente'}</strong>
               </div>
+            </div>
+          </section>
+
+          <section className="card anamnesis-side-card prontuario-security-card">
+            <div className="eyebrow">Segurança do prontuário</div>
+            <h2 className="section-title">Controle de imagem</h2>
+            <p className="section-copy">Fotos so ficam liberadas quando ha aceite clínico e confirmação de ciência no formulário.</p>
+            <div className="detail-list">
+              <div className="detail-row">
+                <span>Uso clínico</span>
+                <strong>{clinicalPhotoConsent ? 'Autorizado' : 'Pendente'}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Confirmação</span>
+                <strong>{photoConsentConfirmed ? 'Registrada' : 'Pendente'}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Status das fotos</span>
+                <strong>{photoUploadReady ? 'Liberado' : 'Bloqueado'}</strong>
+              </div>
+            </div>
+            <div className="anamnesis-security-actions">
+              <button type="button" className="btn btn-outline btn-block" onClick={handleImageConsentTerm} disabled={imageConsentButtonDisabled}>
+                {generatingImageConsent ? <span className="spinner" /> : <Icon name="signature" />}
+                {imageConsentButtonLabel}
+              </button>
+              <p><strong>{imageConsentStatusLabel}.</strong> O checkbox libera o registro operacional; o termo formal registra a assinatura digital da cliente.</p>
             </div>
           </section>
 

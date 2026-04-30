@@ -16,9 +16,9 @@ const STATUS_MAP: Record<string, [string, string]> = {
   SCHEDULED: ['badge-blue', 'Agendado'],
   CONFIRMED: ['badge-green', 'Confirmado'],
   IN_PROGRESS: ['badge-gold', 'Em andamento'],
-  COMPLETED: ['badge-muted', 'Concluido'],
+  COMPLETED: ['badge-muted', 'Concluído'],
   CANCELLED: ['badge-red', 'Cancelado'],
-  NO_SHOW: ['badge-rose', 'Nao compareceu'],
+  NO_SHOW: ['badge-rose', 'Não compareceu'],
 }
 
 const STATUSES = Object.entries(STATUS_MAP).map(([value, [, label]]) => ({ value, label }))
@@ -143,12 +143,12 @@ function AppointmentCard({ appointment, onEdit, onPay, onCancel }: AppointmentCa
 
       <div className="appointment-meta-grid">
         <div className="appointment-meta-item">
-          <span>Servico</span>
-          <strong>{appointment.service?.name || 'Nao informado'}</strong>
+          <span>Serviço</span>
+          <strong>{appointment.service?.name || 'Não informado'}</strong>
         </div>
         <div className="appointment-meta-item">
           <span>Profissional</span>
-          <strong>{appointment.professional?.name || 'Nao informado'}</strong>
+          <strong>{appointment.professional?.name || 'Não informado'}</strong>
         </div>
         <div className="appointment-meta-item">
           <span>Valor</span>
@@ -216,7 +216,7 @@ export default function Agendamentos() {
       const { data } = await api.get<AppointmentRecord[]>('/appointments', { params })
       setAppointments(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os agendamentos'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível carregar os agendamentos'))
     } finally {
       setLoading(false)
     }
@@ -238,7 +238,7 @@ export default function Agendamentos() {
         setProfessionals(professionalsResponse.data)
       })
       .catch(error => {
-        toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar as listas de apoio'))
+        toast.error(getApiErrorMessage(error, 'Não foi possível carregar as listas de apoio'))
       })
   }, [])
 
@@ -349,7 +349,7 @@ export default function Agendamentos() {
       setSelected(null)
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar o agendamento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar o agendamento'))
     } finally {
       setSaving(false)
     }
@@ -363,7 +363,7 @@ export default function Agendamentos() {
       toast.success('Agendamento cancelado')
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel cancelar o agendamento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível cancelar o agendamento'))
     }
   }
 
@@ -393,7 +393,7 @@ export default function Agendamentos() {
       setSelected(null)
       load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel registrar o pagamento'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível registrar o pagamento'))
     } finally {
       setSaving(false)
     }
@@ -404,7 +404,7 @@ export default function Agendamentos() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Agendamentos</h1>
-          <p className="page-subtitle">Organize a agenda com mais seguranca, contexto e clareza visual.</p>
+          <p className="page-subtitle">Organize a agenda com mais segurança, contexto e clareza visual.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
@@ -515,7 +515,7 @@ export default function Agendamentos() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Servico *</label>
+                <label className="form-label">Serviço *</label>
                 <select className="form-select" value={form.serviceId} onChange={handleServiceChange}>
                   <option value="">Selecione</option>
                   {services.map(service => (
@@ -561,7 +561,7 @@ export default function Agendamentos() {
               ) : null}
 
               <div className="form-group form-full">
-                <label className="form-label">Observacoes</label>
+                <label className="form-label">Observações</label>
                 <textarea className="form-textarea" value={form.notes} onChange={setField('notes')} placeholder="Detalhes importantes para a equipe e recepcao." />
               </div>
             </div>

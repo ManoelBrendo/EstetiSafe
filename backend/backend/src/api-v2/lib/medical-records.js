@@ -1,4 +1,4 @@
-﻿const { httpError, parseOptionalDate, sanitizeCpf, compactObject } = require('./http')
+const { httpError, parseOptionalDate, sanitizeCpf, compactObject } = require('./http')
 
 const PHOTO_CONSENT_VERSION = 'photo-consent-v1'
 
@@ -23,7 +23,7 @@ const clientDetailInclude = {
 }
 
 function getProntuarioLockMessage() {
-  return 'Prontuario bloqueado apos confirmacao de pagamento. Apenas visualizacao dos dados e download em PDF estao disponiveis.'
+  return 'Prontuário bloqueado após confirmação de pagamento. Apenas visualização dos dados e download em PDF estão disponíveis.'
 }
 
 function assertEditableClient(client) {
@@ -146,9 +146,83 @@ function summarizeAnamnesis(record) {
         marketingUseAuthorized: Boolean(photoRecord.marketingUseAuthorized || photoRecord.imageUseAuthorized),
         consentVersion: photoRecord.consentVersion || null,
         consentAcceptedAt: photoRecord.consentAcceptedAt || null,
+        consentAwarenessConfirmed: Boolean(photoRecord.consentAwarenessConfirmed),
       },
     },
     answers,
+  }
+}
+
+function buildPhotoConsentSecurity(client) {
+  const latestAnamnesis = summarizeAnamnesis(client.anamneses?.[0] || null)
+  const photoSummary = latestAnamnesis?.summary || {}
+  const photoConsent = photoSummary.photoConsent || {}
+  const photoCount = Number(photoSummary.photoCount || 0)
+  const consentRecords = Array.isArray(client.consentRecords) ? client.consentRecords : []
+  const imageConsentRecord = consentRecords.find(record => isImageConsentRecord(record)) || null
+  const formalConsentStatus = imageConsentRecord?.status || 'MISSING'
+  const formalConsentSigned = formalConsentStatus === 'SIGNED'
+  const clinicalUseAuthorized = Boolean(photoConsent.clinicalUseAuthorized)
+  const marketingUseAuthorized = Boolean(photoConsent.marketingUseAuthorized)
+  const consentAwarenessConfirmed = Boolean(photoConsent.consentAwarenessConfirmed)
+  const needsAttention = photoCount > 0 && (!clinicalUseAuthorized || !consentAwarenessConfirmed || !formalConsentSigned)
+
+  return {
+    photoCount,
+    clinicalUseAuthorized,
+    marketingUseAuthorized,
+    consentAwarenessConfirmed,
+    consentVersion: photoConsent.consentVersion || null,
+    consentAcceptedAt: photoConsent.consentAcceptedAt || null,
+    formalConsentStatus,
+    formalConsentId: imageConsentRecord?.id || null,
+    formalConsentSignedAt: imageConsentRecord?.signedAt || null,
+    needsAttention,
+    message: needsAttention
+      ? 'Revise o consentimento antes de usar ou divulgar imagens deste prontuario.'
+      : photoCount > 0
+        ? 'Fotos vinculadas com consentimento clinico e termo formal acompanhados.'
+        : 'Sem fotos anexadas ao prontuario ate o momento.',
+  }
+}
+
+function buildMedicalRecordSecuritySummary(client) {
+  return {
+    auditTrail: {
+      enabled: true,
+      policy: 'Abertura do prontuário, consulta de histórico sensível, alteração de anamnese, tentativa bloqueada de edição e download de PDF ficam registrados para auditoria.',
+      sensitiveActions: [
+        'view_medical_record',
+        'view_anamnesis_history',
+        'create_anamnesis_version',
+        'download_medical_record_pdf',
+        'manage_image_consent',
+        'blocked_client_update_attempt',
+      ],
+    },
+    accessState: buildAccessState(client),
+    photoConsent: buildPhotoConsentSecurity(client),
+  }
+}
+
+function buildMedicalRecordAuditMetadata(client, path, extra = {}) {
+  const photoConsent = buildPhotoConsentSecurity(client)
+
+  return {
+    path,
+    clientId: client.id,
+    clientName: client.name,
+    isPaid: Boolean(client.isPaid),
+    isLocked: Boolean(client.isLocked),
+    photoConsent: {
+      photoCount: photoConsent.photoCount,
+      clinicalUseAuthorized: photoConsent.clinicalUseAuthorized,
+      marketingUseAuthorized: photoConsent.marketingUseAuthorized,
+      consentAwarenessConfirmed: photoConsent.consentAwarenessConfirmed,
+      formalConsentStatus: photoConsent.formalConsentStatus,
+      needsAttention: photoConsent.needsAttention,
+    },
+    ...extra,
   }
 }
 
@@ -179,6 +253,7 @@ function serializeClientBase(client) {
     phone: client.phone,
     birthDate: client.birthDate,
     cpf: client.cpf,
+    photoDataUrl: client.photoDataUrl || null,
     sex: client.sex,
     maritalStatus: client.maritalStatus,
     profession: client.profession,
@@ -302,6 +377,7 @@ function buildMedicalRecord(client) {
     sourceTables: ['clients', 'anamneses', 'appointments', 'payments', 'consent_records'],
     client: detail,
     accessState: buildAccessState(client),
+    security: buildMedicalRecordSecuritySummary(client),
     latestAnamnesis: detail.anamneses[0] || null,
     anamnesisHistory: detail.anamneses,
     appointments: detail.appointments,
@@ -364,6 +440,7 @@ function extractExplicitClientPatch(clientPayload = {}) {
     phone: clientPayload.phone?.trim() || undefined,
     birthDate: parseOptionalDate(clientPayload.birthDate, 'client.birthDate') || undefined,
     cpf: sanitizeCpf(clientPayload.cpf) || undefined,
+    photoDataUrl: clientPayload.photoDataUrl === null ? null : clientPayload.photoDataUrl?.trim() || undefined,
     sex: clientPayload.sex?.trim() || undefined,
     maritalStatus: clientPayload.maritalStatus?.trim() || undefined,
     profession: clientPayload.profession?.trim() || undefined,
@@ -418,6 +495,7 @@ function normalizePhotoRecordConsent(answers) {
   const legacyImageUseAuthorized = Boolean(photoRecord.imageUseAuthorized)
   const clinicalUseAuthorized = Boolean(photoRecord.clinicalUseAuthorized || legacyImageUseAuthorized)
   const marketingUseAuthorized = Boolean(photoRecord.marketingUseAuthorized || legacyImageUseAuthorized)
+  const consentAwarenessConfirmed = Boolean(photoRecord.consentAwarenessConfirmed && clinicalUseAuthorized)
 
   if (photos.length > 0 && !clinicalUseAuthorized) {
     throw httpError(400, 'Para anexar fotos ao prontuario, registre o consentimento clinico de imagem.')
@@ -427,12 +505,17 @@ function normalizePhotoRecordConsent(answers) {
     throw httpError(400, 'O uso de imagem em marketing depende do consentimento clinico registrado no prontuario.')
   }
 
+  if (photos.length > 0 && !consentAwarenessConfirmed) {
+    throw httpError(400, 'Para anexar fotos ao prontuario, confirme que a autorizacao de imagem foi explicada e registrada.')
+  }
+
   clonedAnswers.photoRecord = {
     ...photoRecord,
     photos,
     imageUseAuthorized: marketingUseAuthorized,
     clinicalUseAuthorized,
     marketingUseAuthorized,
+    consentAwarenessConfirmed,
     consentVersion: typeof photoRecord.consentVersion === 'string' && photoRecord.consentVersion.trim()
       ? photoRecord.consentVersion.trim()
       : PHOTO_CONSENT_VERSION,
@@ -487,6 +570,9 @@ module.exports = {
   buildClientTimeline,
   buildMedicalRecord,
   buildMedicalRecordSummary,
+  buildMedicalRecordSecuritySummary,
+  buildMedicalRecordAuditMetadata,
   buildAccessState,
+  normalizePhotoRecordConsent,
   createAnamnesisVersion,
 }

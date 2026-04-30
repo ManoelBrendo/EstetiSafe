@@ -6,6 +6,7 @@ const { createMedicalRecordsRouter } = require('./modules/medical-records.routes
 const { createProtocolsRouter } = require('./modules/protocols.routes')
 const { createPaymentsRouter } = require('./modules/payments.routes')
 const { createPdfRouter } = require('./modules/pdf.routes')
+const { createAuditLogsRouter } = require('./modules/audit-logs.routes')
 
 function createApiV2Router(config) {
   const router = express.Router()
@@ -20,7 +21,7 @@ function createApiV2Router(config) {
       name: "L'Appui API v2",
       status: 'ready',
       mode: 'legacy-schema-compat',
-      modules: ['auth', 'clients', 'medical-records', 'anamnesis', 'protocols', 'payments', 'pdf'],
+      modules: ['auth', 'clients', 'medical-records', 'anamnesis', 'protocols', 'payments', 'pdf', 'audit-logs'],
     })
   })
 
@@ -39,6 +40,7 @@ function createApiV2Router(config) {
   router.use('/protocols', createProtocolsRouter(context))
   router.use('/payments', createPaymentsRouter(context))
   router.use('/pdf', createPdfRouter(context))
+  router.use('/audit-logs', createAuditLogsRouter(context))
 
   return router
 }
@@ -46,3 +48,4 @@ function createApiV2Router(config) {
 module.exports = {
   createApiV2Router,
 }
+

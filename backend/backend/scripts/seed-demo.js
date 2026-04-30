@@ -47,7 +47,7 @@ const clientsSeed = [
     email: 'patricia.melo@cliente.local',
     birthDate: '1986-01-31',
     cpf: '129.730.540-19',
-    notes: 'Gosta de sair com o proximo retorno ja reservado.',
+    notes: 'Gosta de sair com o próximo retorno já reservado.',
   },
 ]
 

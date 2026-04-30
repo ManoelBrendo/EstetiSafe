@@ -41,6 +41,7 @@ model User {
   billingGatewayIntents BillingGatewayIntent[]
   whatsappConfig WhatsappClinicConfig?
   whatsappLogs   WhatsappLog[]
+  clinicalIntercurrences ClinicalIntercurrence[]
 
   @@map("users")
 }
@@ -192,6 +193,7 @@ model Client {
   phone     String
   birthDate DateTime?
   cpf       String?
+  photoDataUrl String?   @db.Text
   sex       String?
   maritalStatus String?
   profession String?
@@ -207,6 +209,7 @@ model Client {
   appointments   Appointment[]
   anamneses      Anamnesis[]
   consentRecords ConsentRecord[]
+  clinicalIntercurrences ClinicalIntercurrence[]
 
   @@map("clients")
 }
@@ -234,6 +237,7 @@ model Professional {
   user           User            @relation(fields: [userId], references: [id])
   appointments   Appointment[]
   consentRecords ConsentRecord[]
+  clinicalIntercurrences ClinicalIntercurrence[]
 
   @@map("professionals")
 }
@@ -252,6 +256,7 @@ model Service {
   user         User          @relation(fields: [userId], references: [id])
   appointments Appointment[]
   servicePop   ServicePop?
+  clinicalIntercurrences ClinicalIntercurrence[]
 
   @@map("services")
 }
@@ -363,6 +368,53 @@ model ConsentRecord {
   @@index([clientId, createdAt])
   @@index([professionalId])
   @@map("consent_records")
+}
+
+model ClinicalIntercurrence {
+  id                 Int      @id @default(autoincrement())
+  userId             Int
+  clientId           Int
+  serviceId          Int?
+  professionalId     Int?
+  procedureName      String
+  occurredAt         DateTime
+  description        String   @db.Text
+  conduct            String   @db.Text
+  notes              String?  @db.Text
+  professionalName   String
+  createdByUserId    Int?
+  createdByEmail     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  client       Client        @relation(fields: [clientId], references: [id])
+  service      Service?      @relation(fields: [serviceId], references: [id])
+  professional Professional? @relation(fields: [professionalId], references: [id])
+  edits        ClinicalIntercurrenceEdit[]
+
+  @@index([userId, occurredAt])
+  @@index([userId, clientId, occurredAt])
+  @@index([userId, professionalId, occurredAt])
+  @@index([userId, serviceId, occurredAt])
+  @@map("clinical_intercurrences")
+}
+
+model ClinicalIntercurrenceEdit {
+  id               Int      @id @default(autoincrement())
+  intercurrenceId  Int
+  editedByUserId   Int?
+  editedByEmail    String?
+  editReason       String?
+  changes          Json
+  snapshotBefore   Json?
+  snapshotAfter    Json?
+  createdAt        DateTime @default(now())
+
+  intercurrence ClinicalIntercurrence @relation(fields: [intercurrenceId], references: [id])
+
+  @@index([intercurrenceId, createdAt])
+  @@map("clinical_intercurrence_edits")
 }
 
 model ServicePop {

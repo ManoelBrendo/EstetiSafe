@@ -8,6 +8,7 @@
   "scope": "/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
   "background_color": "#fffaf3",
   "theme_color": "#2a1f17",
   "prefer_related_applications": false,
@@ -26,26 +27,28 @@
       "short_name": "Agenda",
       "description": "Abrir a agenda da clinica.",
       "url": "/agendamentos",
-      "icons": [
-        {
-          "src": "/pwa-icon.svg",
-          "sizes": "any",
-          "type": "image/svg+xml"
-        }
-      ]
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     },
     {
       "name": "Clientes",
       "short_name": "Clientes",
       "description": "Abrir a central de clientes e prontuarios.",
       "url": "/clientes",
-      "icons": [
-        {
-          "src": "/pwa-icon.svg",
-          "sizes": "any",
-          "type": "image/svg+xml"
-        }
-      ]
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Auditoria",
+      "short_name": "Auditoria",
+      "description": "Abrir o controle documental e operacional.",
+      "url": "/auditoria",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Assinatura",
+      "short_name": "Assinatura",
+      "description": "Abrir assinatura, contas e gateway financeiro.",
+      "url": "/assinatura",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ]
 }

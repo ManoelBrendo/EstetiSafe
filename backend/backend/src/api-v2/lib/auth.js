@@ -1,4 +1,4 @@
-﻿const crypto = require('node:crypto')
+const crypto = require('node:crypto')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const { httpError } = require('./http')
@@ -103,7 +103,7 @@ function getSupportBillingSnapshot() {
     nextDueAt: null,
     blockAt: null,
     daysRemaining: null,
-    message: 'Acesso tecnico liberado para suporte e manutencao.',
+    message: 'Acesso técnico liberado para suporte e manutenção.',
   }
 }
 
@@ -135,7 +135,7 @@ function getBillingSnapshot(user) {
 
   let message = 'Configure o valor e a proxima cobranca da assinatura.'
   if (effectiveStatus === 'BLOCKED') {
-    message = 'Acesso da clinica bloqueado ate a confirmacao do pagamento.'
+    message = 'Acesso da clínica bloqueado até a confirmação do pagamento.'
   } else if (effectiveStatus === 'OVERDUE') {
     message = 'Pagamento em atraso. O acesso sera bloqueado apos o periodo de tolerancia.'
   } else if (effectiveStatus === 'ACTIVE') {
@@ -309,7 +309,7 @@ function createAuthToolkit(config) {
       const bypassBillingBlock = Boolean(payload.impersonatedBySupport)
       const allowBlockedRoute = bypassBillingBlock || req.path === '/me' || req.path.startsWith('/billing')
       if (req.billing.blocked && !allowBlockedRoute) {
-        throw httpError(402, 'Acesso da clinica bloqueado ate a confirmacao do pagamento.')
+        throw httpError(402, 'Acesso da clínica bloqueado até a confirmação do pagamento.')
       }
 
       return next()
@@ -320,7 +320,7 @@ function createAuthToolkit(config) {
 
   function requireSupport(req, res, next) {
     if (!req.user?.support) {
-      return next(httpError(403, 'Acesso restrito ao suporte tecnico.'))
+      return next(httpError(403, 'Acesso restrito ao suporte técnico.'))
     }
 
     return next()
@@ -328,11 +328,11 @@ function createAuthToolkit(config) {
 
   function requireScopedClinicUser(req, res, next) {
     if (req.user?.support && !req.user?.impersonatedBySupport) {
-      return next(httpError(409, 'Selecione uma clinica na central de suporte para acessar dados clinicos.'))
+      return next(httpError(409, 'Selecione uma clínica na central de suporte para acessar dados clínicos.'))
     }
 
     if (!req.currentUser?.id) {
-      return next(httpError(403, 'Sessao sem contexto de clinica.'))
+      return next(httpError(403, 'Sessão sem contexto de clínica.'))
     }
 
     return next()

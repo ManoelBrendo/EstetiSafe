@@ -17,7 +17,8 @@
     "test": "node --test tests/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "backfill:clinic-aggregates": "node scripts/backfill-clinic-aggregates.js",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "verify:prod": "node scripts/verify-production.js"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",

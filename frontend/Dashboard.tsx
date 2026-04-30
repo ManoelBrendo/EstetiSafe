@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
@@ -50,7 +50,7 @@ function fmtBRL(value: number | string | null | undefined) {
   })
 }
 
-const statusBadge = {
+const statusBadge: Record<string, [string, string]> = {
   SCHEDULED: ['badge-blue', 'Agendado'],
   CONFIRMED: ['badge-green', 'Confirmado'],
   COMPLETED: ['badge-muted', 'Concluído'],
@@ -59,14 +59,14 @@ const statusBadge = {
   IN_PROGRESS: ['badge-gold', 'Em andamento'],
 }
 
-const billingMeta = {
+const billingMeta: Record<string, { label: string; className: string }> = {
   TRIAL: { label: 'Cortesia ativa', className: 'badge badge-blue' },
   ACTIVE: { label: 'Pagamento em dia', className: 'badge badge-green' },
   OVERDUE: { label: 'Pagamento pendente', className: 'badge badge-gold' },
   BLOCKED: { label: 'Acesso bloqueado', className: 'badge badge-red' },
 }
 
-const clinicStatusMeta = {
+const clinicStatusMeta: Record<string, { label: string; className: string }> = {
   ACTIVE: { label: 'Operação ativa', className: 'badge badge-green' },
   SUSPENDED: { label: 'Operação suspensa', className: 'badge badge-gold' },
   ARCHIVED: { label: 'Clínica arquivada', className: 'badge badge-muted' },
@@ -91,6 +91,18 @@ function formatDate(value: string | number | null | undefined) {
   return new Intl.DateTimeFormat('pt-BR', {
     dateStyle: 'short',
   }).format(new Date(value))
+}
+
+function getInsightBadgeClass(priority?: string | null): string {
+  if (priority === 'CRITICAL') return 'badge-red'
+  if (priority === 'WARNING') return 'badge-gold'
+  return 'badge-blue'
+}
+
+function getInsightPriorityLabel(priority?: string | null): string {
+  if (priority === 'CRITICAL') return 'Critico'
+  if (priority === 'WARNING') return 'Atencao'
+  return 'Informativo'
 }
 
 function AlertCard({ title, subtitle, statusLabel, badgeClass, dateLabel }: AlertCardProps) {
@@ -267,13 +279,16 @@ export default function Dashboard() {
   const previewHasCustomLogo = Boolean(brandingForm.clinicLogoDataUrl)
   const nextAppointment = data?.upcoming?.[0]
   const billingSnapshot = data?.billing || user?.billing
-  const billing = billingMeta[billingSnapshot?.effectiveStatus] || billingMeta.TRIAL
-  const clinicStatus = clinicStatusMeta[user?.clinicStatus] || clinicStatusMeta.ACTIVE
+  const billing = billingMeta[billingSnapshot?.effectiveStatus || 'TRIAL'] || billingMeta.TRIAL
+  const clinicStatus = clinicStatusMeta[user?.clinicStatus || 'ACTIVE'] || clinicStatusMeta.ACTIVE
   const documents = data?.documents
   const criticalAlerts: DashboardResponse['documents']['alerts'] = documents?.alerts || []
   const criticalDocumentsCount = (documents?.expiring ?? 0) + (documents?.expired ?? 0)
   const inventory = data?.inventory
   const inventoryAlerts: InventoryAlert[] = inventory?.alerts || []
+  const clinicalInsights = data?.clinicalInsights
+  const clinicalInsightItems = clinicalInsights?.insights || []
+  const clinicalCriticalCount = clinicalInsights?.countsByPriority?.CRITICAL ?? 0
 
   async function handleBrandLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -354,7 +369,7 @@ export default function Dashboard() {
           </div>
 
           <p className="section-copy dashboard-brand-copy-text">
-            Comece pelo que mais impacta a operacao: agenda, documentos criticos e assinatura. O restante continua acessivel, mas sem disputar atencao no primeiro olhar.
+            Comece pelo que mais impacta a operação: agenda, documentos críticos e assinatura. O restante continua acessível, mas sem disputar atenção no primeiro olhar.
           </p>
 
           <div className="dashboard-brand-meta">
@@ -396,12 +411,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <section className="dashboard-focus-row" aria-label="Acoes principais do painel clinico">
+      <section className="dashboard-focus-row" aria-label="Ações principais do painel clínico">
         <Link to="/agendamentos" className="dashboard-focus-card">
           <Icon name="calendar" />
           <span>
             <strong>Agenda</strong>
-            <p>Veja a proxima rotina da clinica.</p>
+            <p>Veja a próxima rotina da clínica.</p>
           </span>
         </Link>
         <Link to="/documentos" className={`dashboard-focus-card ${criticalDocumentsCount ? 'attention' : ''}`}>
@@ -568,6 +583,62 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="card section-card dashboard-section-card">
+          <div className="section-head">
+            <div>
+              <h2 className="section-title">Inteligencia operacional</h2>
+              <p className="section-copy">Sinais de estoque, equipamentos e anamnese gerados por regras auditaveis.</p>
+            </div>
+
+            <span className={clinicalInsights?.externalAiEnabled ? 'badge badge-green' : 'badge badge-muted'}>
+              {clinicalInsights?.externalAiEnabled ? 'IA externa ativa' : 'Regras auditaveis'}
+            </span>
+          </div>
+
+          <div className="documents-summary-grid compact-docs-grid">
+            <div className="mini-stat-card">
+              <span>Sinais</span>
+              <strong>{clinicalInsights?.total ?? 0}</strong>
+            </div>
+            <div className="mini-stat-card mini-stat-card-alert">
+              <span>Criticos</span>
+              <strong>{clinicalCriticalCount}</strong>
+            </div>
+            <div className="mini-stat-card">
+              <span>Modo</span>
+              <strong>{clinicalInsights?.externalAiEnabled ? 'IA' : 'Regras'}</strong>
+            </div>
+          </div>
+
+          {!clinicalInsightItems.length ? (
+            <div className="empty empty-tight">
+              <div className="empty-icon">
+                <Icon name="sparkles" size={24} />
+              </div>
+              <h3>Nenhum sinal operacional agora</h3>
+              <p>Quando houver risco em anamnese, estoque ou equipamento, o painel destaca aqui sem gerar diagnostico automatico.</p>
+            </div>
+          ) : (
+            <div className="snapshot-card-list">
+              {clinicalInsightItems.slice(0, 3).map(insight => (
+                <AlertCard
+                  key={insight.id}
+                  title={insight.title}
+                  subtitle={insight.description}
+                  statusLabel={getInsightPriorityLabel(insight.priority)}
+                  badgeClass={getInsightBadgeClass(insight.priority)}
+                  dateLabel={insight.actionLabel}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="inline-tip inline-tip-gold">
+            <Icon name="shield" />
+            {clinicalInsights?.readiness?.message || 'Leitura de apoio, sempre com revisao da profissional.'}
+          </div>
         </section>
 
         <section className="card section-card dashboard-section-card">

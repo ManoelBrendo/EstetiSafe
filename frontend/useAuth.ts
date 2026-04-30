@@ -93,7 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const currentToken = authStorage.getToken()
     const currentUser = authStorage.getUser()
 
-    if (!currentToken || !isSupportUser(currentUser)) {
+    if (!currentToken || !currentUser || !isSupportUser(currentUser)) {
       throw new Error('A sessão de suporte precisa estar ativa para assumir uma clínica.')
     }
 

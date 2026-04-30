@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import toast from 'react-hot-toast'
 import api, { downloadApiFile, getApiErrorMessage } from './api'
@@ -25,7 +25,11 @@ const emptyForm: ServiceFormState = {
 }
 
 function formatPrice(value: number | string | null | undefined) {
-  return Number(value || 0).toLocaleString('pt-BR', {
+  const amount = Number(value || 0)
+
+  if (!Number.isFinite(amount)) return 'R$ 0,00'
+
+  return amount.toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
@@ -74,7 +78,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }: Ser
         <div>
           <h3 className="service-card-title">{service.name}</h3>
           <p className="service-card-description">
-            {service.description || 'Servico com descricao enxuta e operacao pronta para a agenda.'}
+            {service.description || 'Serviço com descrição enxuta e operação pronta para a agenda.'}
           </p>
         </div>
         <span className={hasPop ? 'badge badge-green' : 'badge badge-muted'}>
@@ -84,7 +88,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }: Ser
 
       <div className="service-meta-grid">
         <div className="service-meta-item">
-          <span>Duracao</span>
+          <span>Duração</span>
           <strong>{service.duration} min</strong>
         </div>
         <div className="service-meta-item">
@@ -99,7 +103,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }: Ser
         </button>
 
         {!hasPop ? (
-          <span className="service-inline-note">Se o POP ainda nao aparecer no card, voce pode gerar agora sem sair da lista.</span>
+          <span className="service-inline-note">Se o POP ainda não aparecer no card, você pode gerar agora sem sair da lista.</span>
         ) : null}
 
         <button type="button" className="btn btn-outline btn-sm" onClick={() => onEdit(service)}>
@@ -113,7 +117,7 @@ function ServiceCard({ service, loadingPopId, onOpenPop, onEdit, onDelete }: Ser
   )
 }
 
-export default function Servicos() {
+export default function Serviços() {
   const [services, setServices] = useState<ServiceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ServiceModalMode>(null)
@@ -131,7 +135,7 @@ export default function Servicos() {
       const { data } = await api.get<ServiceRecord[]>('/services')
       setServices(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel carregar os servicos'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível carregar os serviços'))
     } finally {
       setLoading(false)
     }
@@ -173,7 +177,7 @@ export default function Servicos() {
       const { data } = await api.get<ServicePopSummary>(`/services/${serviceId}/pop`)
       setPopModal(data)
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel abrir o POP deste servico'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível abrir o POP deste serviço'))
     } finally {
       setLoadingPopId(null)
     }
@@ -181,7 +185,20 @@ export default function Servicos() {
 
   async function handleSave() {
     if (!form.name.trim() || !form.price) {
-      toast.error('Nome e valor sao obrigatorios')
+      toast.error('Nome e valor são obrigatórios')
+      return
+    }
+
+    const parsedDuration = Number(form.duration)
+    const parsedPrice = Number(form.price)
+
+    if (!Number.isFinite(parsedDuration) || parsedDuration < 5) {
+      toast.error('Informe uma duração válida, a partir de 5 minutos')
+      return
+    }
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      toast.error('Informe um valor válido para o serviço')
       return
     }
 
@@ -190,14 +207,14 @@ export default function Servicos() {
     try {
       const payload = {
         ...form,
-        duration: Number(form.duration),
-        price: Number(form.price),
+        duration: parsedDuration,
+        price: parsedPrice,
       }
 
       if (modal === 'create') {
         const { data } = await api.post<ServiceRecord>('/services', payload)
         const nextPopModal = buildPopModalFromService(data)
-        toast.success('Servico criado com POP automatico')
+        toast.success('Serviço criado com POP automático')
         setModal(null)
         setSelected(null)
         setForm(emptyForm)
@@ -208,32 +225,32 @@ export default function Servicos() {
         } else if (data?.id) {
           await openPop(data.id)
         } else {
-          toast.error('O servico foi salvo, mas o POP nao retornou com um identificador valido.')
+          toast.error('O serviço foi salvo, mas o POP não retornou com um identificador válido.')
         }
       } else if (selected) {
         await api.put(`/services/${selected.id}`, payload)
-        toast.success('Servico atualizado com sucesso')
+        toast.success('Serviço atualizado com sucesso')
         setModal(null)
         setSelected(null)
         setForm(emptyForm)
         await load()
       }
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel salvar o servico'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar o serviço'))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id: Identifier) {
-    if (!window.confirm('Deseja desativar este servico?')) return
+    if (!window.confirm('Deseja desativar este serviço?')) return
 
     try {
       await api.delete(`/services/${id}`)
-      toast.success('Servico desativado')
+      toast.success('Serviço desativado')
       await load()
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel desativar o servico'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível desativar o serviço'))
     }
   }
 
@@ -242,9 +259,9 @@ export default function Servicos() {
 
     try {
       await navigator.clipboard.writeText(popModal.content)
-      toast.success('POP copiado para a area de transferencia')
+      toast.success('POP copiado para a área de transferência')
     } catch {
-      toast.error('Nao foi possivel copiar o POP')
+      toast.error('Não foi possível copiar o POP')
     }
   }
 
@@ -260,7 +277,7 @@ export default function Servicos() {
       )
       toast.success('PDF do POP baixado com sucesso')
     } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Nao foi possivel baixar o PDF do POP'))
+      toast.error(getApiErrorMessage(error, 'Não foi possível baixar o PDF do POP'))
     } finally {
       setDownloadingPopPdf(false)
     }
@@ -270,12 +287,12 @@ export default function Servicos() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Servicos</h1>
-          <p className="page-subtitle">Monte um catalogo claro, elegante e pronto para a agenda.</p>
+          <h1 className="page-title">Serviços</h1>
+          <p className="page-subtitle">Monte um catálogo claro, elegante e pronto para a agenda.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
-          <Icon name="plus" /> Novo servico
+          <Icon name="plus" /> Novo serviço
         </button>
       </div>
 
@@ -289,8 +306,8 @@ export default function Servicos() {
             <div className="empty-icon">
               <Icon name="scissors" size={24} />
             </div>
-            <h3>Nenhum servico cadastrado</h3>
-            <p>Cadastre os tratamentos disponiveis para facilitar a montagem da agenda.</p>
+            <h3>Nenhum serviço cadastrado</h3>
+            <p>Cadastre os tratamentos disponíveis para facilitar a montagem da agenda.</p>
           </div>
         ) : (
           <div className="service-card-list">
@@ -311,7 +328,7 @@ export default function Servicos() {
       {modal ? (
         <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setModal(null)}>
           <div className="modal">
-            <h2 className="modal-title">{modal === 'create' ? 'Novo servico' : 'Editar servico'}</h2>
+            <h2 className="modal-title">{modal === 'create' ? 'Novo serviço' : 'Editar serviço'}</h2>
 
             <div className="form-grid">
               <div className="form-group form-full">
@@ -320,12 +337,12 @@ export default function Servicos() {
               </div>
 
               <div className="form-group form-full">
-                <label className="form-label">Descricao</label>
-                <input className="form-input" value={form.description} onChange={setField('description')} placeholder="Breve descricao do procedimento" />
+                <label className="form-label">Descrição</label>
+                <input className="form-input" value={form.description} onChange={setField('description')} placeholder="Breve descrição do procedimento" />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Duracao (min)</label>
+                <label className="form-label">Duração (min)</label>
                 <input className="form-input" type="number" min="5" value={form.duration} onChange={setField('duration')} />
               </div>
 
@@ -338,7 +355,7 @@ export default function Servicos() {
             {modal === 'create' ? (
               <div className="inline-tip inline-tip-gold">
                 <Icon name="fileText" />
-                Ao salvar, o sistema gera automaticamente um POP com opcao de baixar em `.txt` ou PDF.
+                Ao salvar, o sistema gera automaticamente um POP com opção de baixar em `.txt` ou PDF.
               </div>
             ) : null}
 

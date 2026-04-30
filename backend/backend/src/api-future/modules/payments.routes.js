@@ -47,7 +47,7 @@ function createPaymentsRouter(context) {
       : await getOrCreateMedicalRecordForClient(context.prisma, payload.clientId)
 
     if (!medicalRecord) {
-      throw httpError(404, 'Prontuario nao encontrado para o pagamento')
+      throw httpError(404, 'Prontuário não encontrado para o pagamento')
     }
 
     const payment = await context.prisma.payment.create({
