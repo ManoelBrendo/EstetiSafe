@@ -171,7 +171,7 @@ async function compressImage(file: File): Promise<string> {
   context.fillRect(0, 0, width, height)
   context.drawImage(image, 0, 0, width, height)
 
-  return canvas.toDataURL('image/jpeg', 0.82)
+  return canvas.toDataURL('image/webp', 0.80)
 }
 
 function SectionCard({ eyebrow, title, description, children, actions }: SectionCardProps) {
@@ -888,6 +888,15 @@ export default function ClienteAnamnese() {
     }
   }
 
+  const activeClinicalAlerts: string[] = []
+  if (form) {
+    if (form.contraindications?.pregnancy) activeClinicalAlerts.push('Gravidez ativa')
+    if (form.healthHistory?.medications?.anticoagulants) activeClinicalAlerts.push('Uso de anticoagulantes')
+    if (form.healthHistory?.allergies?.medicationAllergy) activeClinicalAlerts.push('Alergia a medicamentos')
+    if (form.healthHistory?.allergies?.cosmeticsAllergy) activeClinicalAlerts.push('Alergia a cosméticos')
+    if (form.healthHistory?.allergies?.anestheticsAllergy) activeClinicalAlerts.push('Alergia a anestésicos')
+  }
+
   if (loading) {
     return (
       <div className="page">
@@ -918,6 +927,42 @@ export default function ClienteAnamnese() {
           {saving ? <span className="spinner" /> : <><Icon name="clipboard" /> Salvar nova versão</>}
         </button>
       </div>
+
+      {activeClinicalAlerts.length > 0 && (
+        <section
+          className="card"
+          style={{
+            borderLeft: '4px solid var(--danger)',
+            background: 'rgba(239, 68, 68, 0.04)',
+            padding: '16px 20px',
+            marginBottom: '20px',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            borderRadius: '8px'
+          }}
+        >
+          <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', width: '38px', height: '38px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="shield" size={20} />
+          </div>
+          <div>
+            <strong style={{ color: 'var(--ink)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>
+              🚨 ALERTA CLÍNICO: Risco ou Contraindicação Selecionada
+            </strong>
+            <p className="section-copy" style={{ fontSize: '13px', margin: '0 0 10px 0', color: 'var(--ink-light)' }}>
+              Esta versão da anamnese contém condições clínicas de risco indicadas abaixo. Certifique-se de que os procedimentos planejados estão de acordo com essas restrições:
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {activeClinicalAlerts.map(alert => (
+                <span key={alert} className="badge badge-red" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '10px' }}>
+                  {alert}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {isLocked ? (
         <section className="card prontuario-lock-banner" aria-live="polite">
@@ -1363,7 +1408,7 @@ export default function ClienteAnamnese() {
                   {form.photoRecord.photos.map(photo => (
                     <div className="anamnese-photo-card" key={photo.id}>
                       <div className="anamnese-photo-wrap">
-                        <img src={photo.dataUrl} alt={photo.caption || 'Registro da anamnese'} className="anamnese-photo" />
+                        <img src={photo.dataUrl} alt={photo.caption || 'Registro da anamnese'} className="anamnese-photo" loading="lazy" />
                       </div>
                       <textarea
                         className="form-textarea anamnese-photo-caption"

@@ -1,9 +1,9 @@
-﻿import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { getClinicBranding, prepareClinicLogoDataUrl } from './branding'
 import { Icon } from './Icon'
-import type { BillingGatewayStatusResponse } from './operationsTypes'
+import type { BillingGatewayStatusResponse, ClinicOperationalScope } from './operationsTypes'
 import type { AuthUser } from './types'
 import { useAuth } from './useAuth'
 
@@ -77,6 +77,29 @@ const emptyDeletionReviewForm: DeletionReviewForm = {
   reason: '',
 }
 
+const clinicOperationalScopeOptions: Array<{
+  value: ClinicOperationalScope
+  label: string
+  helper: string
+}> = [
+  { value: 'FACIAL', label: 'Estética facial', helper: 'Fichas, imagem e higienização.' },
+  { value: 'INJECTABLES', label: 'Injetáveis', helper: 'Termos específicos e intercorrências.' },
+  { value: 'LASER', label: 'Laser e tecnologias', helper: 'Equipamentos, treinamento e consentimento.' },
+  { value: 'BODY', label: 'Corporais', helper: 'Medidas, evolução e acessórios.' },
+  { value: 'ADVANCED', label: 'Protocolos avançados', helper: 'Riscos, eventos adversos e emergência.' },
+]
+
+function normalizeOperationalScopes(scopes: unknown): ClinicOperationalScope[] {
+  if (!Array.isArray(scopes)) return []
+
+  const allowed = new Set(clinicOperationalScopeOptions.map(option => option.value))
+  return Array.from(new Set(
+    scopes
+      .map(scope => String(scope || '').trim().toUpperCase() as ClinicOperationalScope)
+      .filter(scope => allowed.has(scope))
+  ))
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) return 'Ainda nao registrado'
 
@@ -136,6 +159,9 @@ export default function Configuracoes() {
   const branding = useMemo(() => getClinicBranding(user), [user])
   const [clinicName, setClinicName] = useState(user?.clinicName || '')
   const [clinicLogoDataUrl, setClinicLogoDataUrl] = useState<string | null>(user?.clinicLogoDataUrl || null)
+  const [clinicOperationalScopes, setClinicOperationalScopes] = useState<ClinicOperationalScope[]>(() => (
+    normalizeOperationalScopes(user?.clinicOperationalScopes)
+  ))
   const [privacy, setPrivacy] = useState<PrivacySummaryResponse | null>(null)
   const [gatewayStatus, setGatewayStatus] = useState<BillingGatewayStatusResponse | null>(null)
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatusResponse | null>(null)
@@ -145,25 +171,40 @@ export default function Configuracoes() {
   const [preparingLogo, setPreparingLogo] = useState(false)
   const [exportingPrivacy, setExportingPrivacy] = useState(false)
   const [requestingReview, setRequestingReview] = useState(false)
+  const [editingWhatsapp, setEditingWhatsapp] = useState(false)
+  const [whatsappForm, setWhatsappForm] = useState({
+    phoneNumberId: '',
+    businessAccountId: '',
+    accessToken: '',
+    verifyToken: '',
+    defaultLanguage: 'pt_BR',
+    appointmentTemplateName: 'appointment_confirmation',
+    consentTemplateName: 'consent_link',
+    active: false
+  })
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false)
 
   useEffect(() => {
     setClinicName(user?.clinicName || '')
     setClinicLogoDataUrl(user?.clinicLogoDataUrl || null)
-  }, [user?.clinicLogoDataUrl, user?.clinicName])
+    setClinicOperationalScopes(normalizeOperationalScopes(user?.clinicOperationalScopes))
+  }, [user?.clinicLogoDataUrl, user?.clinicName, user?.clinicOperationalScopes])
 
   const loadSettings = useCallback(async () => {
     setLoading(true)
 
-    const [profileResult, privacyResult, gatewayResult, notificationResult] = await Promise.allSettled([
+    const [profileResult, privacyResult, gatewayResult, notificationResult, whatsappConfigResult] = await Promise.allSettled([
       api.get<AuthUser>('/clinic/profile'),
       api.get<PrivacySummaryResponse>('/clinic/privacy/summary'),
       api.get<BillingGatewayStatusResponse>('/billing/gateway/status'),
       api.get<NotificationStatusResponse>('/notifications/status'),
+      api.get('/notifications/config'),
     ])
 
     if (profileResult.status === 'fulfilled') {
       setClinicName(profileResult.value.data.clinicName || '')
       setClinicLogoDataUrl(profileResult.value.data.clinicLogoDataUrl || null)
+      setClinicOperationalScopes(normalizeOperationalScopes(profileResult.value.data.clinicOperationalScopes))
     }
 
     if (privacyResult.status === 'fulfilled') {
@@ -182,6 +223,19 @@ export default function Configuracoes() {
       setNotificationStatus(notificationResult.value.data)
     } else {
       setNotificationStatus(null)
+    }
+
+    if (whatsappConfigResult.status === 'fulfilled') {
+      setWhatsappForm({
+        phoneNumberId: whatsappConfigResult.value.data.phoneNumberId || '',
+        businessAccountId: whatsappConfigResult.value.data.businessAccountId || '',
+        accessToken: whatsappConfigResult.value.data.accessToken || '',
+        verifyToken: whatsappConfigResult.value.data.verifyToken || '',
+        defaultLanguage: whatsappConfigResult.value.data.defaultLanguage || 'pt_BR',
+        appointmentTemplateName: whatsappConfigResult.value.data.appointmentTemplateName || 'appointment_confirmation',
+        consentTemplateName: whatsappConfigResult.value.data.consentTemplateName || 'consent_link',
+        active: whatsappConfigResult.value.data.active || false
+      })
     }
 
     setLoading(false)
@@ -208,6 +262,14 @@ export default function Configuracoes() {
     }
   }
 
+  function toggleOperationalScope(scope: ClinicOperationalScope) {
+    setClinicOperationalScopes(current => (
+      current.includes(scope)
+        ? current.filter(item => item !== scope)
+        : [...current, scope]
+    ))
+  }
+
   async function handleSaveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -221,6 +283,7 @@ export default function Configuracoes() {
       await api.put('/clinic/profile', {
         clinicName: clinicName.trim(),
         clinicLogoDataUrl,
+        clinicOperationalScopes,
       })
       await refreshUser()
       toast.success('Identidade da clinica atualizada')
@@ -266,6 +329,31 @@ export default function Configuracoes() {
       toast.error(getApiErrorMessage(error, 'Nao foi possivel registrar a revisao'))
     } finally {
       setRequestingReview(false)
+    }
+  }
+
+  async function handleSaveWhatsapp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!whatsappForm.phoneNumberId.trim()) {
+      toast.error('Informe o Phone Number ID')
+      return
+    }
+    if (!whatsappForm.verifyToken.trim()) {
+      toast.error('Informe o Token de Verificação')
+      return
+    }
+
+    setSavingWhatsapp(true)
+    try {
+      await api.put('/notifications/config', whatsappForm)
+      toast.success('Configuração de WhatsApp salva com sucesso')
+      setEditingWhatsapp(false)
+      void loadSettings()
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível salvar a configuração de WhatsApp'))
+    } finally {
+      setSavingWhatsapp(false)
     }
   }
 
@@ -335,6 +423,31 @@ export default function Configuracoes() {
                 <button className="btn btn-ghost" type="button" onClick={() => setClinicLogoDataUrl(null)}>
                   Remover logo
                 </button>
+              </div>
+            </div>
+
+            <div className="form-group form-full">
+              <span className="form-label">Perfil operacional para documentos e auditoria</span>
+              <div className="settings-scope-grid">
+                {clinicOperationalScopeOptions.map(option => {
+                  const selectedScope = clinicOperationalScopes.includes(option.value)
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`settings-scope-option ${selectedScope ? 'is-selected' : ''}`}
+                      aria-pressed={selectedScope}
+                      onClick={() => toggleOperationalScope(option.value)}
+                    >
+                      <Icon name={selectedScope ? 'check' : 'plus'} size={16} />
+                      <span>
+                        <strong>{option.label}</strong>
+                        <small>{option.helper}</small>
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -509,6 +622,15 @@ export default function Configuracoes() {
               <small>
                 Enviadas 24h: {whatsapp?.outboundLast24h || 0} | Recebidas 24h: {whatsapp?.inboundLast24h || 0}
               </small>
+              <div style={{ marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-xs"
+                  onClick={() => setEditingWhatsapp(true)}
+                >
+                  <Icon name="edit" size={12} /> Configurar
+                </button>
+              </div>
             </div>
           </article>
 
@@ -525,6 +647,107 @@ export default function Configuracoes() {
           </article>
         </div>
       </section>
+
+      {editingWhatsapp && (
+        <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setEditingWhatsapp(false)}>
+          <div className="modal">
+            <h2 className="modal-title">Configurar WhatsApp</h2>
+            <form onSubmit={handleSaveWhatsapp} className="form-grid">
+              <label className="form-group form-full">
+                <span className="form-label">Phone Number ID</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.phoneNumberId}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, phoneNumberId: e.target.value })}
+                  placeholder="Ex: 104847294827"
+                  required
+                />
+              </label>
+              <label className="form-group form-full">
+                <span className="form-label">Business Account ID (Opcional)</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.businessAccountId}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, businessAccountId: e.target.value })}
+                  placeholder="Ex: 2948274928"
+                />
+              </label>
+              <label className="form-group form-full">
+                <span className="form-label">Access Token (Meta Developer)</span>
+                <input
+                  type="password"
+                  className="form-input"
+                  value={whatsappForm.accessToken}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, accessToken: e.target.value })}
+                  placeholder={whatsappForm.accessToken ? '••••••••' : 'Insira o token permanente'}
+                />
+              </label>
+              <label className="form-group form-full">
+                <span className="form-label">Verify Token (Webhook validation)</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.verifyToken}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, verifyToken: e.target.value })}
+                  placeholder="Ex: meu_token_seguro"
+                  required
+                />
+              </label>
+              <label className="form-group">
+                <span className="form-label">Idioma Padrão</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.defaultLanguage}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, defaultLanguage: e.target.value })}
+                  placeholder="pt_BR"
+                />
+              </label>
+              <label className="form-group">
+                <span className="form-label">Template de Confirmação</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.appointmentTemplateName}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, appointmentTemplateName: e.target.value })}
+                  placeholder="appointment_confirmation"
+                />
+              </label>
+              <label className="form-group form-full">
+                <span className="form-label">Template do TCLE / Consentimento</span>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={whatsappForm.consentTemplateName}
+                  onChange={e => setWhatsappForm({ ...whatsappForm, consentTemplateName: e.target.value })}
+                  placeholder="consent_link"
+                />
+              </label>
+              <div className="form-group form-full" style={{ display: 'flex', alignItems: 'center', margin: '0.5rem 0' }}>
+                <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={whatsappForm.active}
+                    onChange={e => setWhatsappForm({ ...whatsappForm, active: e.target.checked })}
+                  />
+                  <span>Habilitar envio automático de lembretes</span>
+                </label>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingWhatsapp(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={savingWhatsapp}>
+                  <Icon name="check" /> {savingWhatsapp ? 'Salvando...' : 'Salvar configurações'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

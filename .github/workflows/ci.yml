@@ -7,6 +7,11 @@ on:
       - master
   pull_request:
 
+# Cancela execuções do mesmo PR para economizar minutos de CI
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -127,3 +132,35 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+        env:
+          VITE_API_URL: https://api.estetisafe.com.br
+
+      - name: Verificar tamanho do bundle
+        run: |
+          echo "📦 Tamanho dos assets de build:"
+          du -sh dist/assets/* 2>/dev/null | sort -rh | head -15 || echo "Nenhum asset gerado"
+
+  # ----------------------------------------------------------
+  # Job: Validação do Dockerfile (build sem push)
+  # ----------------------------------------------------------
+  docker-build:
+    name: Docker — Build de imagem
+    runs-on: ubuntu-latest
+    if: github.base_ref == 'main' || github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build da imagem Docker (sem push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: estetisafe-backend:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          target: runner

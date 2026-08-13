@@ -1,4 +1,11 @@
-﻿function normalizePaymentData(data, parseDateTime, now = () => new Date()) {
+const {
+  parseId,
+  parseDateTime,
+  paymentSchema,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
+
+function normalizePaymentData(data, parseDateTime, now = () => new Date()) {
   const normalized = {}
 
   if ('appointmentId' in data) normalized.appointmentId = data.appointmentId
@@ -35,28 +42,7 @@ async function applyPaidPaymentSideEffects({ tx, appointment, appointmentId, rec
 function registerPaymentRoutes({
   app,
   prisma,
-  authMiddleware,
-  handle,
-  parseId,
-  parseDateTime,
-  paymentSchema,
 }) {
-  const requiredDeps = {
-    app,
-    prisma,
-    authMiddleware,
-    handle,
-    parseId,
-    parseDateTime,
-    paymentSchema,
-  }
-
-  for (const [key, value] of Object.entries(requiredDeps)) {
-    if (!value) {
-      throw new Error(`registerPaymentRoutes requer ${key}`)
-    }
-  }
-
   app.post('/payments', authMiddleware, handle(async (req, res) => {
     const data = paymentSchema.parse(req.body)
     const paymentData = normalizePaymentData(data, parseDateTime)

@@ -1,4 +1,22 @@
 const { z } = require('zod')
+const {
+  parseId,
+  parseDateOnly,
+  ensureClinicAggregate,
+  getBillingSnapshot,
+  mapBillingStatusToClinicStatus,
+  createAuditLogFromRequest,
+  serializeAuditLog,
+  addDays,
+  SUPPORT_ADMIN_NAME,
+  SUPPORT_ADMIN_EMAIL,
+  hasSupportBillingControl,
+} = require('./lib/helpers')
+const {
+  authMiddleware,
+  requireSupportBillingControl,
+  handle,
+} = require('./lib/middlewares')
 
 const billingConfigSchema = z.object({
   amount: z.number().min(0).nullable().optional(),
@@ -162,59 +180,35 @@ function buildClinicBillAuditMetadata(record, overrides = {}) {
   }
 }
 
-function registerBillingRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  requireSupportBillingControl,
-  handle,
-  parseId,
-  parseDateOnly,
-  ensureClinicAggregate,
-  getBillingSnapshot,
-  mapBillingStatusToClinicStatus,
-  createAuditLogFromRequest,
-  serializeAuditLog,
-  addDays,
-  supportAdminName,
-  supportAdminEmail,
-  canManageSubscription,
-}) {
-  const requiredDeps = {
+function registerBillingRoutes(options) {
+  const {
     app,
     prisma,
-    authMiddleware,
-    requireSupportBillingControl,
-    handle,
-    parseId,
-    parseDateOnly,
-    ensureClinicAggregate,
-    getBillingSnapshot,
-    mapBillingStatusToClinicStatus,
-    createAuditLogFromRequest,
-    serializeAuditLog,
-    addDays,
-    supportAdminName,
-    supportAdminEmail,
-    canManageSubscription,
-  }
-
-  for (const [key, value] of Object.entries(requiredDeps)) {
-    if (!value) {
-      throw new Error(`registerBillingRoutes requer ${key}`)
-    }
-  }
-
+    authMiddleware = require('./lib/middlewares').authMiddleware,
+    requireSupportBillingControl = require('./lib/middlewares').requireSupportBillingControl,
+    handle = require('./lib/middlewares').handle,
+    parseId = require('./lib/helpers').parseId,
+    parseDateOnly = require('./lib/helpers').parseDateOnly,
+    ensureClinicAggregate = require('./lib/helpers').ensureClinicAggregate,
+    getBillingSnapshot = require('./lib/helpers').getBillingSnapshot,
+    mapBillingStatusToClinicStatus = require('./lib/helpers').mapBillingStatusToClinicStatus,
+    createAuditLogFromRequest = require('./lib/helpers').createAuditLogFromRequest,
+    serializeAuditLog = require('./lib/helpers').serializeAuditLog,
+    addDays = require('./lib/helpers').addDays,
+    SUPPORT_ADMIN_NAME = require('./lib/helpers').SUPPORT_ADMIN_NAME,
+    SUPPORT_ADMIN_EMAIL = require('./lib/helpers').SUPPORT_ADMIN_EMAIL,
+    hasSupportBillingControl = require('./lib/helpers').hasSupportBillingControl,
+  } = options
   app.get('/billing/summary', authMiddleware, handle(async (req, res) => {
     const billing = req.billing || getBillingSnapshot(req.currentUser)
 
     res.json({
       clinicId: req.currentUser?.ownedClinic?.id || null,
-      clinicName: req.currentUser?.clinicName || supportAdminName,
-      email: req.currentUser?.email || supportAdminEmail,
+      clinicName: req.currentUser?.clinicName || SUPPORT_ADMIN_NAME,
+      email: req.currentUser?.email || SUPPORT_ADMIN_EMAIL,
       billing,
       permissions: {
-        canManageSubscription: canManageSubscription(req),
+        canManageSubscription: hasSupportBillingControl(req),
       },
     })
   }))
@@ -299,7 +293,7 @@ function registerBillingRoutes({
       email: user.email,
       billing: getBillingSnapshot(user),
       permissions: {
-        canManageSubscription: canManageSubscription(req),
+        canManageSubscription: hasSupportBillingControl(req),
       },
     })
   }))
@@ -372,7 +366,7 @@ function registerBillingRoutes({
       email: user.email,
       billing: getBillingSnapshot(user),
       permissions: {
-        canManageSubscription: canManageSubscription(req),
+        canManageSubscription: hasSupportBillingControl(req),
       },
     })
   }))

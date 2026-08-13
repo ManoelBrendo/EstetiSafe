@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { getApiErrorMessage } from './api'
+import api, { getApiErrorMessage } from './api'
+import { formatDate, formatDateTime } from './dateUtils'
 import {
   downloadClientMedicalRecordPdf,
   generateClientImageConsentRecord,
-  getClientMedicalRecord,
-  getClientPayments,
-  getClientProtocols,
 } from './clientRecordsApi'
 import { ClientAvatar } from './ClientAvatar'
 import { Icon } from './Icon'
@@ -26,13 +24,14 @@ import {
 } from './anamnesis'
 import type {
   AestheticCondition,
-  AnamnesisRecordVersion,
   ClientRecord,
   ConsentRecordSummary,
-  MedicalRecordBundle,
-  PaymentsBundle,
-  ProtocolsBundle,
 } from './clinicalTypes'
+import { validateClinicalReadiness } from './clinicalValidation'
+import { useMedicalRecord } from './hooks/useMedicalRecord'
+import { FacialMarkingMap } from './components/FacialMarkingMap'
+import { BeforeAfterSlider } from './components/BeforeAfterSlider'
+import { MaskedField } from './components/MaskedField'
 
 interface ReadonlyFieldProps {
   label: string
@@ -67,33 +66,6 @@ interface DetailGroupProps {
   description?: string
   className?: string
   children: ReactNode
-}
-
-function formatDate(value: string | number | null | undefined) {
-  if (!value) return 'Não informado'
-
-  const normalizedValue = String(value).length <= 10
-    ? String(value).slice(0, 10) + 'T12:00:00.000Z'
-    : value
-  const parsedDate = new Date(normalizedValue)
-
-  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-  }).format(parsedDate)
-}
-
-function formatDateTime(value: string | number | null | undefined) {
-  if (!value) return 'Não informado'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(parsedDate)
 }
 
 function formatReadableStatus(status: string | null | undefined) {
@@ -248,51 +220,70 @@ function DetailGroup({ title, description, className = '', children }: DetailGro
 export default function ClienteProntuario() {
   const navigate = useNavigate()
   const { clientId } = useParams<{ clientId: string }>()
-  const [loading, setLoading] = useState(true)
-  const [client, setClient] = useState<ClientRecord | null>(null)
-  const [medicalRecord, setMedicalRecord] = useState<MedicalRecordBundle | null>(null)
-  const [protocolBundle, setProtocolBundle] = useState<ProtocolsBundle | null>(null)
-  const [paymentsBundle, setPaymentsBundle] = useState<PaymentsBundle | null>(null)
-  const [anamnesisHistory, setAnamnesisHistory] = useState<AnamnesisRecordVersion[]>([])
+
+  // Estado da UI (apenas o que pertence ao componente orquestrador)
+  const [compareModalOpen, setCompareModalOpen] = useState(false)
   const [generatingImageConsent, setGeneratingImageConsent] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState<number>(100)
+  
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState<any>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PIX' | 'BANK_TRANSFER'>('PIX')
+  const [savingPayment, setSavingPayment] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  function openRegisterPayment(appointment: any) {
+    setSelectedAppointmentForPayment(appointment)
+    setPaymentMethod('PIX')
+    setPaymentModalOpen(true)
+  }
 
-    if (!clientId) {
-      setLoading(false)
-      navigate('/clientes', { replace: true })
-      return
-    }
-
+  async function handleConfirmPayment() {
+    if (!selectedAppointmentForPayment) return
+    setSavingPayment(true)
     try {
-      const [medicalRecordData, protocolData, paymentsData] = await Promise.all([
-        getClientMedicalRecord(clientId),
-        getClientProtocols(clientId),
-        getClientPayments(clientId),
-      ])
-
-      setMedicalRecord(medicalRecordData)
-      setClient(medicalRecordData.client)
-      setAnamnesisHistory(medicalRecordData.anamnesisHistory)
-      setProtocolBundle(protocolData)
-      setPaymentsBundle(paymentsData)
-    } catch (error) {
-      toast.error(getApiErrorMessage(error, 'Não foi possível abrir o prontuário deste cliente'))
-      navigate('/clientes', { replace: true })
+      await api.post('/api/v2/payments', {
+        appointmentId: selectedAppointmentForPayment.id,
+        amount: Number(selectedAppointmentForPayment.price || 0),
+        method: paymentMethod,
+        status: 'PAID'
+      })
+      toast.success('Pagamento registrado com sucesso! O prontuário foi protegido.')
+      setPaymentModalOpen(false)
+      setSelectedAppointmentForPayment(null)
+      queries.payments.refetch()
+      queries.medicalRecord.refetch()
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Erro ao registrar pagamento.'))
     } finally {
-      setLoading(false)
+      setSavingPayment(false)
     }
-  }, [clientId, navigate])
+  }
 
-  useEffect(() => {
-    load()
-  }, [load])
+  const {
+    isLoading,
+    error,
+    client,
+    medicalRecord,
+    anamnesisHistory,
+    protocolBundle,
+    paymentsBundle,
+    facialPoints,
+    latestAnamnesis,
+    allHistoricalPhotos,
+    queries,
+  } = useMedicalRecord(clientId)
 
-  const latestAnamnesis = useMemo<AnamnesisRecordVersion | null>(
-    () => (anamnesisHistory[0] ? normalizeAnamnesisRecord(anamnesisHistory[0], client || {}) : null),
-    [anamnesisHistory, client]
-  )
+  // Redirecionar se não há clientId ou se houve erro fatal
+  if (!clientId) {
+    navigate('/clientes', { replace: true })
+    return null
+  }
+
+  if (error && !isLoading) {
+    toast.error(getApiErrorMessage(error, 'Não foi possível abrir o prontuário deste cliente'))
+    navigate('/clientes', { replace: true })
+    return null
+  }
 
   const consentRecords = client?.consentRecords || []
   const imageConsentRecord = consentRecords.find(isImageConsentRecord)
@@ -310,6 +301,17 @@ export default function ClienteProntuario() {
   const appointmentCount = medicalRecord?.appointments?.length || client?.appointments?.length || 0
   const isLocked = Boolean(medicalRecord?.accessState?.isLocked ?? client?.isLocked)
   const lockedAt = medicalRecord?.accessState?.lockedAt || client?.lockedAt || null
+
+  const activeClinicalAlerts: string[] = []
+  if (latestAnamnesis) {
+    if (latestAnamnesis.contraindications?.pregnancy) activeClinicalAlerts.push('Gravidez ativa')
+    if (latestAnamnesis.healthHistory?.medications?.anticoagulants) activeClinicalAlerts.push('Uso de anticoagulantes')
+    if (latestAnamnesis.healthHistory?.allergies?.medicationAllergy) activeClinicalAlerts.push('Alergia a medicamentos')
+    if (latestAnamnesis.healthHistory?.allergies?.cosmeticsAllergy) activeClinicalAlerts.push('Alergia a cosméticos')
+    if (latestAnamnesis.healthHistory?.allergies?.anestheticsAllergy) activeClinicalAlerts.push('Alergia a anestésicos')
+  }
+
+
   const imageConsentStatusLabel = formatConsentStatus(imageConsentRecord?.status)
   const imageConsentButtonLabel = imageConsentRecord?.id
     ? imageConsentRecord.status === 'SIGNED'
@@ -340,6 +342,22 @@ export default function ClienteProntuario() {
   const photoSecurityMessage = photoSecurity?.message || (photoSecurityNeedsAttention
     ? 'Revise o consentimento antes de usar ou divulgar imagens deste prontuário.'
     : 'Sem alerta adicional de segurança para este prontuário.')
+
+  const clinicalStatus = useMemo(() => {
+    if (!client) return null
+    const latestSvcName = client.latestAppointment?.service?.name || 'Procedimento Geral'
+    const isCritical = client.latestAppointment?.service?.name 
+      ? ['Toxina Botulínica', 'Peeling Químico', 'Preenchimento', 'Preenchimento Labial', 'Bioestimuladores de Colágeno', 'Fios de Sustentação'].includes(client.latestAppointment.service.name) 
+      : false
+    
+    const clientToValidate = {
+      ...client,
+      latestAnamnesis: latestAnamnesis,
+      isLocked
+    } as ClientRecord
+
+    return validateClinicalReadiness(clientToValidate, { name: latestSvcName, isCritical })
+  }, [client, latestAnamnesis, isLocked])
 
   async function handleDownloadPdf() {
     if (!client?.id) return
@@ -397,7 +415,7 @@ export default function ClienteProntuario() {
     { id: 'atendimentos', label: 'Atendimentos' },
   ]
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="page">
         <div className="loading-page">
@@ -411,12 +429,37 @@ export default function ClienteProntuario() {
   if (!client) return null
 
   return (
-    <div className="page prontuario-page">
+    <div className="page prontuario-page" style={{ fontSize: `${zoomLevel}%` }}>
       <div className="page-header">
         <div>
-          <button type="button" className="btn btn-ghost consent-back" onClick={() => navigate('/clientes')}>
-            <Icon name="back" /> Voltar para clientes
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+            <button type="button" className="btn btn-ghost consent-back" onClick={() => navigate('/clientes')}>
+              <Icon name="back" /> Voltar para clientes
+            </button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(182, 137, 77, 0.06)', padding: '4px 10px', borderRadius: '20px', border: '1px solid rgba(182, 137, 77, 0.12)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--gold-deep)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Texto:</span>
+              <button 
+                type="button" 
+                className="btn btn-ghost btn-sm" 
+                onClick={() => setZoomLevel(prev => Math.max(80, prev - 10))}
+                title="Diminuir fonte"
+                style={{ padding: '2px 6px', height: 'auto', minHeight: '0', fontSize: '12px', color: 'var(--ink)' }}
+              >
+                A-
+              </button>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--ink)', minWidth: '35px', textAlign: 'center' }}>{zoomLevel}%</span>
+              <button 
+                type="button" 
+                className="btn btn-ghost btn-sm" 
+                onClick={() => setZoomLevel(prev => Math.min(150, prev + 10))}
+                title="Aumentar fonte"
+                style={{ padding: '2px 6px', height: 'auto', minHeight: '0', fontSize: '12px', color: 'var(--ink)' }}
+              >
+                A+
+              </button>
+            </div>
+          </div>
           <h1 className="page-title">{client.name}</h1>
           <p className="page-subtitle">
             Resumo clínico, anamnese, assinatura e histórico organizados para uma leitura mais leve e uma tomada de decisão mais rápida.
@@ -440,6 +483,71 @@ export default function ClienteProntuario() {
           </button>
         </div>
       </div>
+
+      {activeClinicalAlerts.length > 0 && (
+        <section
+          className="card"
+          style={{
+            borderLeft: '4px solid var(--danger)',
+            background: 'rgba(239, 68, 68, 0.04)',
+            padding: '16px 20px',
+            marginBottom: '20px',
+            boxShadow: '0 4px 12px rgba(239, 68, 68, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            borderRadius: '8px'
+          }}
+        >
+          <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', width: '38px', height: '38px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="shield" size={20} />
+          </div>
+          <div>
+            <strong style={{ color: 'var(--ink)', fontSize: '14px', display: 'block', marginBottom: '4px' }}>
+              🚨 CONTRAINDICAÇÃO / RISCO CLÍNICO ATIVO
+            </strong>
+            <p className="section-copy" style={{ fontSize: '13px', margin: '0 0 10px 0', color: 'var(--ink-light)' }}>
+              Este paciente possui condições que exigem cautela ou contraindicam certos procedimentos. Revise as restrições antes de aplicar tratamentos:
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {activeClinicalAlerts.map(alert => (
+                <span key={alert} className="badge badge-red" style={{ fontWeight: '700', textTransform: 'uppercase', fontSize: '10px' }}>
+                  {alert}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {clinicalStatus && clinicalStatus.severity !== 'success' ? (
+        <section
+          className={`card prontuario-lock-banner ${clinicalStatus.severity === 'error' ? 'pulseGlowCritical' : 'pulseGlowWarning'}`}
+          aria-live="polite"
+          style={{
+            borderLeft: `4px solid var(--${clinicalStatus.severity === 'error' ? 'danger' : 'warning'})`,
+            padding: '16px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            background: clinicalStatus.severity === 'error' ? 'rgba(239, 68, 68, 0.03)' : 'rgba(245, 158, 11, 0.03)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Icon name={clinicalStatus.severity === 'error' ? 'x' : 'shield'} size={18} style={{ color: `var(--${clinicalStatus.severity === 'error' ? 'danger' : 'warning'})` }} />
+            <strong style={{ fontSize: '1rem', color: 'var(--ink)' }}>{clinicalStatus.message}</strong>
+          </div>
+          {clinicalStatus.details && clinicalStatus.details.length > 0 && (
+            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.85rem', color: 'var(--ink-soft)' }}>
+              {clinicalStatus.details.map((detail, idx) => (
+                <li key={idx}>{detail}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {isLocked ? (
         <section className="card prontuario-lock-banner" aria-live="polite">
@@ -537,9 +645,9 @@ export default function ClienteProntuario() {
       <div className="overview-grid">
         <SectionCard id="cadastro" className="prontuario-overview-card" title="Cadastro do cliente" description="Leitura rápida dos dados principais do prontuário.">
           <div className="prontuario-grid">
-            <ReadonlyField label="Telefone" value={client.phone} />
+            <MaskedField label="Telefone" maskedValue={client.phone} clientId={String(client.id)} fieldType="phone" />
             <ReadonlyField label="E-mail" value={client.email} />
-            <ReadonlyField label="CPF" value={client.cpf} />
+            <MaskedField label="CPF" maskedValue={client.cpf} clientId={String(client.id)} fieldType="cpf" />
             <ReadonlyField label="Nascimento" value={client.birthDate ? formatDate(client.birthDate) : ''} />
             <ReadonlyField label="Profissão" value={client.profession} />
             <ReadonlyField label="Endereço" value={client.addressFull} />
@@ -596,13 +704,13 @@ export default function ClienteProntuario() {
               >
                 <div className="prontuario-grid">
                   <ReadonlyField label="Nome completo" value={latestAnamnesis.identification.fullName} />
-                  <ReadonlyField label="CPF" value={latestAnamnesis.identification.cpf} />
+                  <MaskedField label="CPF" maskedValue={latestAnamnesis.identification.cpf} clientId={String(client.id)} fieldType="cpf" />
                   <ReadonlyField label="Data de nascimento" value={latestAnamnesis.identification.birthDate ? formatDate(latestAnamnesis.identification.birthDate) : ''} />
                   <ReadonlyField label="Idade" value={latestAnamnesis.identification.age} />
                   <ReadonlyField label="Sexo" value={formatOptionLabel(ANAMNESIS_SEX_OPTIONS, latestAnamnesis.identification.sex)} />
                   <ReadonlyField label="Estado civil" value={formatOptionLabel(ANAMNESIS_MARITAL_STATUS_OPTIONS, latestAnamnesis.identification.maritalStatus)} />
                   <ReadonlyField label="Profissão" value={latestAnamnesis.identification.profession} />
-                  <ReadonlyField label="Telefone" value={latestAnamnesis.identification.phone} />
+                  <MaskedField label="Telefone" maskedValue={latestAnamnesis.identification.phone} clientId={String(client.id)} fieldType="phone" />
                   <ReadonlyField label="E-mail" value={latestAnamnesis.identification.email} />
                   <ReadonlyField label="Endereço completo" value={latestAnamnesis.identification.addressFull} />
                 </div>
@@ -949,13 +1057,25 @@ export default function ClienteProntuario() {
                     >
                       <div className="anamnese-history-list prontuario-inline-list">
                         {unpaidAppointments.map(appointment => (
-                          <div className="anamnese-history-item" key={appointment.id}>
-                            <strong>{appointment.service?.name || 'Serviço não informado'}</strong>
-                            <span>{formatDateTime(appointment.startAt)}</span>
-                            <small>
-                              {appointment.professional?.name || 'Profissional não informado'}
-                              {appointment.price ? ' • ' + formatCurrency(appointment.price) : ''}
-                            </small>
+                          <div className="anamnese-history-item" key={appointment.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ flex: 1 }}>
+                              <strong>{appointment.service?.name || 'Serviço não informado'}</strong>
+                              <span>{formatDateTime(appointment.startAt)}</span>
+                              <small>
+                                {appointment.professional?.name || 'Profissional não informado'}
+                                {appointment.price ? ' • ' + formatCurrency(appointment.price) : ''}
+                              </small>
+                            </div>
+                            {!isLocked && (
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-xs"
+                                style={{ borderColor: 'var(--gold-deep)', color: 'var(--gold-deep)', padding: '4px 10px', fontSize: '11px', fontWeight: '700' }}
+                                onClick={() => openRegisterPayment(appointment)}
+                              >
+                                <Icon name="dollar" size={11} /> Dar Baixa
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -999,7 +1119,19 @@ export default function ClienteProntuario() {
                     <span className="eyebrow">Segurança jurídica de imagem</span>
                     <strong>Termo formal de uso de imagem</strong>
                     <p>{imageConsentHelper}</p>
-                    {imageConsentRecord?.signedAt ? <small>Assinado em {formatDateTime(imageConsentRecord.signedAt)}</small> : null}
+                    {imageConsentRecord?.signedAt ? (
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <small>Assinado em {formatDateTime(imageConsentRecord.signedAt)}</small>
+                        {imageConsentRecord?.signatureHash ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(218, 165, 32, 0.05)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(218, 165, 32, 0.15)', width: 'fit-content' }}>
+                            <Icon name="shield" size={12} style={{ color: 'var(--gold)' }} />
+                            <code style={{ fontSize: '0.72rem', color: 'var(--gold)', fontFamily: 'monospace' }}>
+                              SHA-256: {String(imageConsentRecord.signatureHash).slice(0, 16)}...{String(imageConsentRecord.signatureHash).slice(-8)}
+                            </code>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="image-consent-actions">
@@ -1014,16 +1146,32 @@ export default function ClienteProntuario() {
                 </div>
 
                 {!photoCount ? null : (
-                  <div className="anamnese-photo-grid">
-                    {latestAnamnesis.photoRecord.photos.map(photo => (
-                      <div className="anamnese-photo-card" key={photo.id}>
-                        <div className="anamnese-photo-wrap">
-                          <img src={photo.dataUrl} alt={photo.caption || 'Registro do prontuário'} className="anamnese-photo" />
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => {
+                          setCompareModalOpen(true)
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Icon name="eye" size={14} />
+                        Comparar Fotos Antes/Depois
+                      </button>
+                    </div>
+
+                    <div className="anamnese-photo-grid">
+                      {latestAnamnesis.photoRecord.photos.map(photo => (
+                        <div className="anamnese-photo-card" key={photo.id}>
+                          <div className="anamnese-photo-wrap">
+                            <img src={photo.dataUrl} alt={photo.caption || 'Registro do prontuário'} className="anamnese-photo" loading="lazy" />
+                          </div>
+                          <div className="text-sm text-muted">{photo.caption || 'Sem legenda clínica'}</div>
                         </div>
-                        <div className="text-sm text-muted">{photo.caption || 'Sem legenda clínica'}</div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  </>
                 )}
 
                 <div className="anamnesis-signature-grid">
@@ -1052,6 +1200,26 @@ export default function ClienteProntuario() {
                     </div>
                   </div>
                 </div>
+              </CollapsibleSectionCard>
+
+              <CollapsibleSectionCard
+                id="mapa-facial-injetaveis"
+                title="Mapa de Marcação Facial (Procedimentos Injetáveis)"
+                description="Diagrama facial interativo para controle de Toxina Botulínica e Preenchedores."
+                defaultOpen
+                summaryItems={[
+                  buildSummaryItem('Pontos marcados', String(facialPoints.length)),
+                  buildSummaryItem('Total Toxina', String(facialPoints.filter(p => p.type === 'botox').reduce((sum, p) => sum + p.amount, 0)) + ' U'),
+                  buildSummaryItem('Total Preenchedor', String(facialPoints.filter(p => p.type === 'filler').reduce((sum, p) => sum + p.amount, 0)) + ' ml'),
+                ]}
+              >
+                {client?.id ? (
+                  <FacialMarkingMap
+                    clientId={String(client.id)}
+                    initialPoints={facialPoints}
+                    isLocked={isLocked}
+                  />
+                ) : null}
               </CollapsibleSectionCard>
             </>
           )}
@@ -1116,6 +1284,82 @@ export default function ClienteProntuario() {
           </section>
         </aside>
       </div>
+
+      {/* Compare Modal */}
+      {compareModalOpen && (
+        <BeforeAfterSlider
+          photos={allHistoricalPhotos}
+          onClose={() => setCompareModalOpen(false)}
+        />
+      )}
+
+      {/* Registrar Pagamento Modal */}
+      {paymentModalOpen && selectedAppointmentForPayment && (
+        <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setPaymentModalOpen(false)}>
+          <div className="modal" style={{ maxWidth: '420px', padding: '24px' }}>
+            <h2 className="modal-title" style={{ fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Icon name="dollar" style={{ color: 'var(--gold-deep)' }} /> Registrar Recebimento
+            </h2>
+            <p className="modal-copy" style={{ fontSize: '0.85rem', color: 'var(--ink-soft)', marginTop: '8px', marginBottom: '20px' }}>
+              Ao confirmar a baixa financeira deste procedimento, o prontuário deste cliente será protegido automaticamente.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label">Procedimento</label>
+              <input
+                type="text"
+                className="form-control"
+                disabled
+                value={selectedAppointmentForPayment.service?.name || 'Procedimento Geral'}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label">Valor a Receber</label>
+              <input
+                type="text"
+                className="form-control"
+                disabled
+                value={formatCurrency(selectedAppointmentForPayment.price)}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label className="form-label">Método de Pagamento</label>
+              <select
+                className="form-select"
+                value={paymentMethod}
+                onChange={e => setPaymentMethod(e.target.value as any)}
+              >
+                <option value="PIX">PIX</option>
+                <option value="CREDIT_CARD">Cartão de Crédito</option>
+                <option value="DEBIT_CARD">Cartão de Débito</option>
+                <option value="CASH">Dinheiro</option>
+                <option value="BANK_TRANSFER">Transferência Bancária</option>
+              </select>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={savingPayment}
+                onClick={() => setPaymentModalOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={savingPayment}
+                onClick={handleConfirmPayment}
+              >
+                {savingPayment ? <span className="spinner" /> : 'Confirmar Baixa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

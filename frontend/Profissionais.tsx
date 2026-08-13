@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -50,6 +50,8 @@ interface ProfessionalFormState {
   paymentModel: string
   salaryAmount: string
   commissionRate: string
+  payrollBonusAmount: string
+  payrollDiscountAmount: string
   paymentDay: string
   payrollNotes: string
 }
@@ -91,6 +93,8 @@ function createEmptyForm(): ProfessionalFormState {
     paymentModel: '',
     salaryAmount: '',
     commissionRate: '',
+    payrollBonusAmount: '',
+    payrollDiscountAmount: '',
     paymentDay: '',
     payrollNotes: '',
   }
@@ -147,7 +151,7 @@ function ProfessionalAvatar({ professional, size = 'default' }: ProfessionalAvat
   if (professional.photoDataUrl) {
     return (
       <div className={className}>
-        <img src={professional.photoDataUrl} alt={`Foto de ${professional.name}`} className="professional-avatar-image" />
+        <img src={professional.photoDataUrl} alt={`Foto de ${professional.name}`} className="professional-avatar-image" loading="lazy" />
       </div>
     )
   }
@@ -196,6 +200,10 @@ function ProfessionalCard({ professional, onEdit, onDelete, onOpen }: Profession
         <div className="team-meta-item">
           <span>Base fixa</span>
           <strong>{formatCurrency(professional.salaryAmount)}</strong>
+        </div>
+        <div className="team-meta-item">
+          <span>Repasse atual</span>
+          <strong>{formatCurrency(professional.payroll?.projectedPayout)}</strong>
         </div>
       </div>
 
@@ -256,6 +264,15 @@ export default function Profissionais() {
     () => new Set(professionals.map(professional => professional.specialty).filter(Boolean)).size,
     [professionals]
   )
+  const payrollTotals = useMemo(() => professionals.reduce(
+    (totals, professional) => ({
+      paidRevenue: totals.paidRevenue + Number(professional.payroll?.paidRevenue || 0),
+      projectedPayout: totals.projectedPayout + Number(professional.payroll?.projectedPayout || 0),
+      commissionAmount: totals.commissionAmount + Number(professional.payroll?.commissionAmount || 0),
+      completedAppointments: totals.completedAppointments + Number(professional.payroll?.completedAppointments || 0),
+    }),
+    { paidRevenue: 0, projectedPayout: 0, commissionAmount: 0, completedAppointments: 0 }
+  ), [professionals])
 
   const filteredProfessionals = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -308,6 +325,8 @@ export default function Profissionais() {
       paymentModel: professional.paymentModel || '',
       salaryAmount: professional.salaryAmount != null ? String(professional.salaryAmount) : '',
       commissionRate: professional.commissionRate != null ? String(professional.commissionRate) : '',
+      payrollBonusAmount: professional.payrollBonusAmount != null ? String(professional.payrollBonusAmount) : '',
+      payrollDiscountAmount: professional.payrollDiscountAmount != null ? String(professional.payrollDiscountAmount) : '',
       paymentDay: professional.paymentDay != null ? String(professional.paymentDay) : '',
       payrollNotes: professional.payrollNotes || '',
     })
@@ -365,6 +384,8 @@ export default function Profissionais() {
       paymentModel: form.paymentModel || undefined,
       salaryAmount: form.salaryAmount ? Number(form.salaryAmount) : null,
       commissionRate: form.commissionRate ? Number(form.commissionRate) : null,
+      payrollBonusAmount: form.payrollBonusAmount ? Number(form.payrollBonusAmount) : null,
+      payrollDiscountAmount: form.payrollDiscountAmount ? Number(form.payrollDiscountAmount) : null,
       paymentDay: form.paymentDay ? Number(form.paymentDay) : null,
       payrollNotes: form.payrollNotes,
     }
@@ -402,11 +423,11 @@ export default function Profissionais() {
   }
 
   return (
-    <div className="page">
+    <div className="page professionals-page ux-compact-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Profissionais</h1>
-          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento reunidas em uma apresentação elegante e funcional.</p>
+          <p className="page-subtitle">Equipe, agenda semanal e folha de pagamento.</p>
         </div>
 
         <button type="button" className="btn btn-primary" onClick={openCreate}>
@@ -436,6 +457,35 @@ export default function Profissionais() {
           <div className="stat-sub">Cobertura técnica distribuida na clínica.</div>
         </div>
       </div>
+
+      <section className="card section-card payroll-overview-card">
+        <div className="section-head section-head-inline">
+          <div>
+            <h2 className="section-title">Fechamento mensal da equipe</h2>
+            <p className="section-copy">Resumo calculado a partir dos atendimentos pagos e concluídos da competência atual.</p>
+          </div>
+          <span className="badge badge-gold">Folha operacional</span>
+        </div>
+
+        <div className="payroll-overview-grid">
+          <div className="payroll-overview-metric">
+            <span>Receita paga</span>
+            <strong>{formatCurrency(payrollTotals.paidRevenue)}</strong>
+          </div>
+          <div className="payroll-overview-metric">
+            <span>Comissões</span>
+            <strong>{formatCurrency(payrollTotals.commissionAmount)}</strong>
+          </div>
+          <div className="payroll-overview-metric">
+            <span>Repasse projetado</span>
+            <strong>{formatCurrency(payrollTotals.projectedPayout)}</strong>
+          </div>
+          <div className="payroll-overview-metric">
+            <span>Atendimentos concluídos</span>
+            <strong>{payrollTotals.completedAppointments}</strong>
+          </div>
+        </div>
+      </section>
 
       <div className="card card-sm toolbar-card professionals-toolbar-card">
         <div className="search-bar">
@@ -634,6 +684,16 @@ export default function Profissionais() {
                   <div className="form-group">
                     <label className="form-label">Comissão (%)</label>
                     <input className="form-input" type="number" min="0" max="100" step="0.01" value={form.commissionRate} onChange={setField('commissionRate')} placeholder="0" />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Bônus do fechamento</label>
+                    <input className="form-input" type="number" min="0" step="0.01" value={form.payrollBonusAmount} onChange={setField('payrollBonusAmount')} placeholder="0,00" />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Desconto do fechamento</label>
+                    <input className="form-input" type="number" min="0" step="0.01" value={form.payrollDiscountAmount} onChange={setField('payrollDiscountAmount')} placeholder="0,00" />
                   </div>
 
                   <div className="form-group">

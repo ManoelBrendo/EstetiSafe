@@ -1,5 +1,7 @@
 import axios, { AxiosHeaders, type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import type { ApiErrorPayload, AuthUser, SupportSession } from './types'
+import toast from 'react-hot-toast'
+import { queueOfflineRequest, syncOfflineRequests } from './offlineSync'
 
 const TOKEN_KEY = 'lappui_token'
 const USER_KEY = 'lappui_user'
@@ -120,10 +122,19 @@ function normalizeConfiguredBaseUrl(url?: string): string {
   if (!url) return ''
   if (typeof window === 'undefined') return url
 
-  if (window.location.hostname === '10.0.2.2') {
+  const currentHost = window.location.hostname
+  if (currentHost === '10.0.2.2') {
     return url
       .replace('://localhost', '://10.0.2.2')
       .replace('://127.0.0.1', '://10.0.2.2')
+  }
+
+  if (currentHost === '127.0.0.1') {
+    return url.replace('://localhost', '://127.0.0.1')
+  }
+
+  if (currentHost === 'localhost') {
+    return url.replace('://127.0.0.1', '://localhost')
   }
 
   return url
@@ -131,19 +142,39 @@ function normalizeConfiguredBaseUrl(url?: string): string {
 
 function inferBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return 'http://localhost:3000'
+    return 'http://127.0.0.1:3000'
   }
 
-  const host = window.location.hostname === '127.0.0.1'
-    ? 'localhost'
-    : window.location.hostname || 'localhost'
-
+  const host = window.location.hostname || '127.0.0.1'
   return `${window.location.protocol}//${host}:3000`
+}
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() || null
+  }
+  return null
+}
+
+let isRefreshing = false
+let refreshSubscribers: ((token: string) => void)[] = []
+
+function onRefreshed(token: string) {
+  refreshSubscribers.forEach(cb => cb(token))
+  refreshSubscribers = []
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb)
 }
 
 const api: AxiosInstance = axios.create({
   baseURL: normalizeConfiguredBaseUrl(import.meta.env.VITE_API_URL) || inferBaseUrl(),
   timeout: 15000,
+  withCredentials: true,
 })
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -154,12 +185,23 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.Authorization = `Bearer ${token}`
   }
 
+  const writeMethods = ['post', 'put', 'delete', 'patch']
+  if (writeMethods.includes(config.method?.toLowerCase() || '')) {
+    const xsrfToken = getCookie('XSRF-TOKEN')
+    if (xsrfToken) {
+      config.headers = config.headers ?? new AxiosHeaders()
+      config.headers['X-XSRF-TOKEN'] = xsrfToken
+    }
+  }
+
   return config
 })
 
 api.interceptors.response.use(
   response => response,
   error => {
+    const originalRequest = error.config
+
     if (typeof window !== 'undefined' && error.response?.status === 401) {
       const supportSession = authStorage.getSupportSession()
       const isAuthRoute = window.location.pathname === '/login' || window.location.pathname === '/register'
@@ -175,10 +217,50 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      authStorage.clear()
-      authStorage.clearSupportSession()
+      if (!isAuthRoute && originalRequest && !originalRequest._retry) {
+        if (isRefreshing) {
+          return new Promise(resolve => {
+            addRefreshSubscriber((token: string) => {
+              originalRequest.headers = originalRequest.headers ?? new AxiosHeaders()
+              originalRequest.headers.Authorization = `Bearer ${token}`
+              resolve(api(originalRequest))
+            })
+          })
+        }
 
-      if (!isAuthRoute) {
+        originalRequest._retry = true
+        isRefreshing = true
+
+        return new Promise((resolve, reject) => {
+          api.post('/auth/refresh')
+            .then(res => {
+              const { token } = res.data
+              const user = authStorage.getUser()
+              if (token && user) {
+                authStorage.setSession(token, user)
+                onRefreshed(token)
+                originalRequest.headers = originalRequest.headers ?? new AxiosHeaders()
+                originalRequest.headers.Authorization = `Bearer ${token}`
+                resolve(api(originalRequest))
+              } else {
+                throw new Error('Falha ao obter novo token')
+              }
+            })
+            .catch(refreshError => {
+              authStorage.clear()
+              authStorage.clearSupportSession()
+              window.location.replace('/login')
+              reject(refreshError)
+            })
+            .finally(() => {
+              isRefreshing = false
+            })
+        })
+      }
+
+      if (!isAuthRoute && originalRequest?._retry) {
+        authStorage.clear()
+        authStorage.clearSupportSession()
         window.location.replace('/login')
       }
     }
@@ -186,12 +268,81 @@ api.interceptors.response.use(
     if (typeof window !== 'undefined' && error.response?.status === 402) {
       const isBillingRoute = window.location.pathname === '/assinatura' || window.location.pathname === '/pagamentos'
       if (!isBillingRoute) {
-        window.location.replace('/assinatura')
+        window.location.replace('/pagamentos')
+      }
+    }
+
+    const config = error.config
+    const isNetworkError = error.message === 'Network Error' || !error.response
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
+
+    if (config && (isNetworkError || isOffline)) {
+      const isAnamnesisSave = config.method?.toUpperCase() === 'PUT' && /\/api\/v\d+\/medical-records\/by-client\/[^/]+\/anamnesis/.test(config.url || '')
+      const isConsentSign = config.method?.toUpperCase() === 'POST' && /\/consent-records\/[^/]+\/sign/.test(config.url || '')
+      const isFacialPointsSave = config.method?.toUpperCase() === 'PUT' && /\/api\/v\d+\/clients\/[^/]+\/facial-points/.test(config.url || '')
+      const isClientEdit = config.method?.toUpperCase() === 'PATCH' && /\/api\/v\d+\/clients\/[^/]+$/.test(config.url || '')
+      const isImageUseConsentGenerate = config.method?.toUpperCase() === 'POST' && /\/clients\/[^/]+\/consent-records\/generate-image-use/.test(config.url || '')
+
+      if (isAnamnesisSave || isConsentSign || isFacialPointsSave || isClientEdit || isImageUseConsentGenerate) {
+        let parsedData = null
+        try {
+          parsedData = typeof config.data === 'string' ? JSON.parse(config.data) : config.data
+        } catch {
+          parsedData = config.data
+        }
+
+        toast.success('Salvo localmente (offline). O prontuário será sincronizado quando a conexão retornar.', {
+          duration: 5000,
+          id: 'offline-toast'
+        })
+
+        void queueOfflineRequest({
+          url: config.url || '',
+          method: (config.method?.toUpperCase() as any) || 'PUT',
+          data: parsedData,
+          headers: config.headers ? { ...config.headers } : {}
+        })
+
+        let mockResponseData: any = {
+          ok: true,
+          message: 'Salvo localmente (offline)',
+          accessState: { readOnly: false, allowedActions: {} },
+          security: { auditTrail: {}, photoConsent: {} },
+          client: {}
+        }
+
+        if (isFacialPointsSave) {
+          mockResponseData = parsedData || []
+        } else if (isClientEdit) {
+          mockResponseData = {
+            id: Number(config.url?.split('/').pop()) || 0,
+            ...parsedData
+          }
+        }
+
+        return Promise.resolve({
+          status: 200,
+          data: mockResponseData,
+          headers: {},
+          config,
+        })
       }
     }
 
     return Promise.reject(error)
   }
 )
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    void syncOfflineRequests(api)
+  })
+
+  if (navigator.onLine) {
+    setTimeout(() => {
+      void syncOfflineRequests(api)
+    }, 1000)
+  }
+}
 
 export default api

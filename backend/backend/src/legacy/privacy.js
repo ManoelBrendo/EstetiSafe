@@ -1,4 +1,10 @@
-﻿const { z } = require('zod')
+const { z } = require('zod')
+const {
+  createAuditLogFromRequest,
+  getRequestClinicId,
+  httpError,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
 
 const privacyEventActions = [
   'LGPD_EXPORT_REQUESTED',
@@ -82,6 +88,7 @@ function normalizeCount(value) {
   return Number.isFinite(numberValue) && numberValue > 0 ? numberValue : 0
 }
 
+// Check for missing model errors safely
 function isExpectedMissingModelError(error) {
   return (
     error?.code === 'P2021' ||
@@ -247,16 +254,7 @@ async function getClinicPrivacySnapshot({ prisma, userId, clinicId, now = new Da
 function registerPrivacyRoutes({
   app,
   prisma,
-  authMiddleware,
-  handle,
-  createAuditLogFromRequest,
-  getRequestClinicId,
-  httpError,
 }) {
-  if (!app || !prisma || !authMiddleware || !handle) {
-    throw new Error('registerPrivacyRoutes requires app, prisma, authMiddleware and handle')
-  }
-
   app.get('/clinic/privacy/summary', authMiddleware, handle(async (req, res) => {
     const clinicId = getRequestClinicId(req)
     const snapshot = await getClinicPrivacySnapshot({
@@ -356,4 +354,3 @@ module.exports = {
   privacySecurityControls,
   registerPrivacyRoutes,
 }
-

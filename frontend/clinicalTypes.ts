@@ -328,6 +328,7 @@ export interface ConsentRecordSummary {
   createdAt?: string | null
   signedAt?: string | null
   professionalName?: string | null
+  signatureHash?: string | null
   [key: string]: unknown
 }
 

@@ -1,6 +1,21 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { format } from 'date-fns'
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  addMonths,
+  subMonths,
+  addWeeks,
+  subWeeks,
+} from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import type { ClientRecord, Identifier, ServiceReference } from './clinicalTypes'
@@ -193,6 +208,9 @@ export default function Agendamentos() {
   const [payForm, setPayForm] = useState<PaymentFormState>({ method: 'PIX', amount: '' })
   const [filter, setFilter] = useState<AppointmentFilterState>({ from: '', to: '', status: '', professionalId: '' })
 
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day-professionals' | 'list'>('month')
+  const [currentDate, setCurrentDate] = useState<Date>(new Date())
+
   const scheduledCount = useMemo(
     () => appointments.filter(appointment => ['SCHEDULED', 'CONFIRMED', 'IN_PROGRESS'].includes(appointment.status)).length,
     [appointments]
@@ -203,13 +221,68 @@ export default function Agendamentos() {
     [appointments]
   )
 
+  function handlePrev() {
+    if (viewMode === 'month') {
+      setCurrentDate(curr => subMonths(curr, 1))
+    } else if (viewMode === 'week') {
+      setCurrentDate(curr => subWeeks(curr, 1))
+    } else {
+      setCurrentDate(curr => {
+        const prev = new Date(curr)
+        prev.setDate(prev.getDate() - 1)
+        return prev
+      })
+    }
+  }
+
+  function handleNext() {
+    if (viewMode === 'month') {
+      setCurrentDate(curr => addMonths(curr, 1))
+    } else if (viewMode === 'week') {
+      setCurrentDate(curr => addWeeks(curr, 1))
+    } else {
+      setCurrentDate(curr => {
+        const next = new Date(curr)
+        next.setDate(next.getDate() + 1)
+        return next
+      })
+    }
+  }
+
+  function handleToday() {
+    setCurrentDate(new Date())
+  }
+
   const load = useCallback(async () => {
     setLoading(true)
 
     try {
       const params: Record<string, string | number | undefined> = {}
-      if (filter.from) params.from = dateFilterStart(filter.from)
-      if (filter.to) params.to = dateFilterEnd(filter.to)
+      
+      let fromDate = filter.from
+      let toDate = filter.to
+
+      if (!fromDate && !toDate) {
+        if (viewMode === 'month') {
+          const startMonth = startOfMonth(currentDate)
+          const endMonth = endOfMonth(currentDate)
+          const startGrid = startOfWeek(startMonth)
+          const endGrid = endOfWeek(endMonth)
+          fromDate = format(startGrid, 'yyyy-MM-dd')
+          toDate = format(endGrid, 'yyyy-MM-dd')
+        } else if (viewMode === 'week') {
+          const startW = startOfWeek(currentDate)
+          const endW = endOfWeek(currentDate)
+          fromDate = format(startW, 'yyyy-MM-dd')
+          toDate = format(endW, 'yyyy-MM-dd')
+        } else if (viewMode === 'day-professionals') {
+          fromDate = format(currentDate, 'yyyy-MM-dd')
+          toDate = format(currentDate, 'yyyy-MM-dd')
+        }
+      }
+
+      if (fromDate) params.from = dateFilterStart(fromDate)
+      if (toDate) params.to = dateFilterEnd(toDate)
       if (filter.status) params.status = filter.status
       if (filter.professionalId) params.professionalId = Number(filter.professionalId)
 
@@ -220,7 +293,7 @@ export default function Agendamentos() {
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [filter, viewMode, currentDate])
 
   useEffect(() => {
     load()
@@ -399,6 +472,214 @@ export default function Agendamentos() {
     }
   }
 
+  function renderMonthView() {
+    const startMonth = startOfMonth(currentDate)
+    const endMonth = endOfMonth(currentDate)
+    const startGrid = startOfWeek(startMonth)
+    const endGrid = endOfWeek(endMonth)
+    const days = eachDayOfInterval({ start: startGrid, end: endGrid })
+
+    const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
+    return (
+      <div className="calendar-container">
+        <div className="calendar-weekday-grid">
+          {weekDays.map(wd => (
+            <div key={wd} className="calendar-weekday-label">{wd}</div>
+          ))}
+        </div>
+        <div className="calendar-month-grid">
+          {days.map(day => {
+            const isCurrentMonth = isSameMonth(day, currentDate)
+            const isDayToday = isToday(day)
+            const dayAppointments = appointments.filter(a => isSameDay(new Date(a.startAt), day))
+
+            return (
+              <div
+                key={day.toISOString()}
+                className={`calendar-day-cell ${!isCurrentMonth ? 'is-other-month' : ''} ${isDayToday ? 'is-today' : ''}`}
+                onClick={() => {
+                  const inputVal = toInputDateTime(day.toISOString())
+                  setForm({
+                    ...emptyForm,
+                    startAt: inputVal,
+                    endAt: addMinutesToInputDateTime(inputVal, 60),
+                  })
+                  setSelected(null)
+                  setModal('create')
+                }}
+              >
+                <div className="calendar-day-number">{day.getDate()}</div>
+                <div className="calendar-day-appointments" onClick={e => e.stopPropagation()}>
+                  {dayAppointments.slice(0, 4).map(a => {
+                    const [, label] = STATUS_MAP[a.status] || ['badge-muted', a.status]
+                    return (
+                      <div
+                        key={a.id}
+                        className={`calendar-appointment-pill ${a.status}`}
+                        title={`${format(new Date(a.startAt), 'HH:mm')} - ${a.client?.name || 'Cliente'} (${label})`}
+                        onClick={() => openEdit(a)}
+                      >
+                        <strong>{format(new Date(a.startAt), 'HH:mm')}</strong> {a.client?.name || 'Cliente'}
+                      </div>
+                    )
+                  })}
+                  {dayAppointments.length > 4 && (
+                    <div className="calendar-more-badge">
+                      + {dayAppointments.length - 4} mais
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  function renderWeekView() {
+    const startW = startOfWeek(currentDate)
+    const endW = endOfWeek(currentDate)
+    const weekDays = eachDayOfInterval({ start: startW, end: endW })
+
+    return (
+      <div className="calendar-week-grid">
+        {weekDays.map(day => {
+          const isDayToday = isToday(day)
+          const dayAppointments = appointments.filter(a => isSameDay(new Date(a.startAt), day))
+
+          return (
+            <div
+              key={day.toISOString()}
+              className={`calendar-week-col ${isDayToday ? 'is-today' : ''}`}
+              onClick={() => {
+                const inputVal = toInputDateTime(day.toISOString())
+                setForm({
+                  ...emptyForm,
+                  startAt: inputVal,
+                  endAt: addMinutesToInputDateTime(inputVal, 60),
+                })
+                setSelected(null)
+                setModal('create')
+              }}
+            >
+              <div className="calendar-week-col-header">
+                <div className="calendar-week-day-name">
+                  {format(day, 'EEE', { locale: ptBR })}
+                </div>
+                <div className="calendar-week-day-date">
+                  {day.getDate()}
+                </div>
+              </div>
+
+              <div className="calendar-week-appointments" onClick={e => e.stopPropagation()}>
+                {dayAppointments.length === 0 ? (
+                  <div className="calendar-week-empty">Sem agenda</div>
+                ) : (
+                  dayAppointments.map(a => {
+                    const [, label] = STATUS_MAP[a.status] || ['badge-muted', a.status]
+                    return (
+                      <div
+                        key={a.id}
+                        className={`calendar-week-appointment-card ${a.status}`}
+                        onClick={() => openEdit(a)}
+                      >
+                        <span className="time">
+                          {format(new Date(a.startAt), 'HH:mm')} - {format(new Date(a.endAt), 'HH:mm')}
+                        </span>
+                        <strong className="client-name">{a.client?.name}</strong>
+                        <span className="service-name">{a.service?.name}</span>
+                        <span className="status-label">{label}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function renderDayProfessionalsView() {
+    const dayAppointments = appointments.filter(a => isSameDay(new Date(a.startAt), currentDate))
+
+    const columns = [
+      ...professionals.map(p => ({ id: p.id, name: p.name, specialty: p.specialty })),
+      { id: 'unassigned', name: 'Sem profissional', specialty: 'Não definido' }
+    ]
+
+    return (
+      <div className="calendar-week-grid" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(200px, 1fr))`, overflowX: 'auto', gap: '16px' }}>
+        {columns.map(col => {
+          const colAppointments = dayAppointments.filter(a => {
+            if (col.id === 'unassigned') {
+              return !a.professionalId
+            }
+            return a.professionalId === col.id
+          })
+
+          return (
+            <div
+              key={String(col.id)}
+              className="calendar-week-col"
+              style={{ minHeight: '450px', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px' }}
+              onClick={() => {
+                const inputVal = toInputDateTime(currentDate.toISOString())
+                setForm({
+                  ...emptyForm,
+                  professionalId: col.id === 'unassigned' ? '' : String(col.id),
+                  startAt: inputVal,
+                  endAt: addMinutesToInputDateTime(inputVal, 60),
+                })
+                setSelected(null)
+                setModal('create')
+              }}
+            >
+              <div className="calendar-week-col-header" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '8px', marginBottom: '12px' }}>
+                <div className="calendar-week-day-name" style={{ fontSize: '0.95rem', fontWeight: 'bold', color: col.id === 'unassigned' ? 'var(--ink-soft)' : 'var(--gold)' }}>
+                  {col.name}
+                </div>
+                <div className="calendar-week-day-date" style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--ink-soft)', textTransform: 'uppercase', marginTop: '2px' }}>
+                  {col.specialty}
+                </div>
+              </div>
+
+              <div className="calendar-week-appointments" onClick={e => e.stopPropagation()}>
+                {colAppointments.length === 0 ? (
+                  <div className="calendar-week-empty" style={{ padding: '24px 8px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--ink-soft)', border: '1px dashed rgba(255, 255, 255, 0.04)', borderRadius: '8px' }}>
+                    Sem agenda
+                  </div>
+                ) : (
+                  colAppointments.map(a => {
+                    const [, label] = STATUS_MAP[a.status] || ['badge-muted', a.status]
+                    return (
+                      <div
+                        key={a.id}
+                        className={`calendar-week-appointment-card ${a.status}`}
+                        onClick={() => openEdit(a)}
+                        style={{ cursor: 'pointer', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '4px', padding: '10px', borderRadius: '8px' }}
+                      >
+                        <span className="time" style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                          {format(new Date(a.startAt), 'HH:mm')} - {format(new Date(a.endAt), 'HH:mm')}
+                        </span>
+                        <strong className="client-name" style={{ fontSize: '0.85rem' }}>{a.client?.name}</strong>
+                        <span className="service-name" style={{ fontSize: '0.75rem' }}>{a.service?.name}</span>
+                        <span className="status-label" style={{ fontSize: '0.7rem' }}>{label}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -427,6 +708,56 @@ export default function Agendamentos() {
           <div className="stat-label">Pagos</div>
           <div className="stat-value">{paidCount}</div>
           <div className="stat-sub">Atendimentos ja liquidados.</div>
+        </div>
+      </div>
+
+      <div className="calendar-controls-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button type="button" className="btn btn-outline btn-sm" onClick={handlePrev} title="Anterior">
+            <Icon name="back" />
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={handleToday}>
+            Hoje
+          </button>
+          <button type="button" className="btn btn-outline btn-sm" onClick={handleNext} title="Próximo">
+            <Icon name="chevron" />
+          </button>
+          <h2 style={{ margin: '0 0 0 8px', fontSize: '1.25rem', fontWeight: 600, textTransform: 'capitalize' }}>
+            {viewMode === 'day-professionals'
+              ? format(currentDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+              : format(currentDate, 'MMMM yyyy', { locale: ptBR })}
+          </h2>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg-soft)', borderRadius: 8 }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'month' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('month')}
+          >
+            Mês
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'week' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('week')}
+          >
+            Semana
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'day-professionals' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('day-professionals')}
+          >
+            Equipe
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'list' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setViewMode('list')}
+          >
+            Lista
+          </button>
         </div>
       </div>
 
@@ -475,26 +806,34 @@ export default function Agendamentos() {
           <div className="loading-page">
             <span className="spinner" />
           </div>
-        ) : appointments.length === 0 ? (
-          <div className="empty">
-            <div className="empty-icon">
-              <Icon name="calendar" size={24} />
+        ) : viewMode === 'list' ? (
+          appointments.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">
+                <Icon name="calendar" size={24} />
+              </div>
+              <h3>Nenhum agendamento encontrado</h3>
+              <p>Use os filtros ou crie um novo atendimento para preencher a agenda.</p>
             </div>
-            <h3>Nenhum agendamento encontrado</h3>
-            <p>Use os filtros ou crie um novo atendimento para preencher a agenda.</p>
-          </div>
+          ) : (
+            <div className="appointment-card-list">
+              {appointments.map(appointment => (
+                <AppointmentCard
+                  key={appointment.id}
+                  appointment={appointment}
+                  onEdit={openEdit}
+                  onPay={openPay}
+                  onCancel={handleCancel}
+                />
+              ))}
+            </div>
+          )
+        ) : viewMode === 'month' ? (
+          renderMonthView()
+        ) : viewMode === 'week' ? (
+          renderWeekView()
         ) : (
-          <div className="appointment-card-list">
-            {appointments.map(appointment => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
-                onEdit={openEdit}
-                onPay={openPay}
-                onCancel={handleCancel}
-              />
-            ))}
-          </div>
+          renderDayProfessionalsView()
         )}
       </div>
 
@@ -506,47 +845,84 @@ export default function Agendamentos() {
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label">Cliente *</label>
-                <select className="form-select" value={form.clientId} onChange={setField('clientId')}>
-                  <option value="">Selecione</option>
-                  {clients.map(client => (
-                    <option key={client.id} value={String(client.id)}>{client.name}</option>
-                  ))}
-                </select>
+                <div className="input-with-icon">
+                  <Icon name="person" size={16} />
+                  <select className="form-select" value={form.clientId} onChange={setField('clientId')}>
+                    <option value="">Selecione</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={String(client.id)}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {(() => {
+                  const selectedClient = clients.find(c => String(c.id) === String(form.clientId))
+                  const alerts: string[] = []
+                  if (selectedClient?.latestAnamnesis) {
+                    if (selectedClient.latestAnamnesis.contraindications?.pregnancy) alerts.push('Gravidez ativa')
+                    if (selectedClient.latestAnamnesis.healthHistory?.medications?.anticoagulants) alerts.push('Uso de anticoagulantes')
+                    if (selectedClient.latestAnamnesis.healthHistory?.allergies?.medicationAllergy) alerts.push('Alergia a medicamentos')
+                    if (selectedClient.latestAnamnesis.healthHistory?.allergies?.cosmeticsAllergy) alerts.push('Alergia a cosméticos')
+                    if (selectedClient.latestAnamnesis.healthHistory?.allergies?.anestheticsAllergy) alerts.push('Alergia a anestésicos')
+                  }
+                  if (alerts.length === 0) return null
+                  return (
+                    <div style={{ marginTop: '6px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '4px', padding: '4px 8px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Icon name="shield" size={12} /> Alerta Clínico: {alerts.join(', ')}
+                      </span>
+                    </div>
+                  )
+                })()}
               </div>
 
               <div className="form-group">
                 <label className="form-label">Serviço *</label>
-                <select className="form-select" value={form.serviceId} onChange={handleServiceChange}>
-                  <option value="">Selecione</option>
-                  {services.map(service => (
-                    <option key={service.id} value={String(service.id)}>{service.name}</option>
-                  ))}
-                </select>
+                <div className="input-with-icon">
+                  <Icon name="procedure" size={16} />
+                  <select className="form-select" value={form.serviceId} onChange={handleServiceChange}>
+                    <option value="">Selecione</option>
+                    {services.map(service => (
+                      <option key={service.id} value={String(service.id)}>{service.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Profissional *</label>
-                <select className="form-select" value={form.professionalId} onChange={setField('professionalId')}>
-                  <option value="">Selecione</option>
-                  {professionals.map(professional => (
-                    <option key={professional.id} value={String(professional.id)}>{professional.name}</option>
-                  ))}
-                </select>
+                <div className="input-with-icon">
+                  <Icon name="users" size={16} />
+                  <select className="form-select" value={form.professionalId} onChange={setField('professionalId')}>
+                    <option value="">Selecione</option>
+                    {professionals.map(professional => (
+                      <option key={professional.id} value={String(professional.id)}>{professional.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Valor (R$)</label>
-                <input className="form-input" type="number" step="0.01" min="0" value={form.price} onChange={setField('price')} />
+                <div className="input-with-icon">
+                  <Icon name="dollar" size={16} />
+                  <input className="form-input" type="number" step="0.01" min="0" value={form.price} onChange={setField('price')} />
+                </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Inicio *</label>
-                <input className="form-input" type="datetime-local" value={form.startAt} onChange={handleStartChange} />
+                <div className="input-with-icon">
+                  <Icon name="calendar" size={16} />
+                  <input className="form-input" type="datetime-local" value={form.startAt} onChange={handleStartChange} />
+                </div>
               </div>
 
               <div className="form-group">
                 <label className="form-label">Fim *</label>
-                <input className="form-input" type="datetime-local" value={form.endAt} onChange={setField('endAt')} />
+                <div className="input-with-icon">
+                  <Icon name="clock" size={16} />
+                  <input className="form-input" type="datetime-local" value={form.endAt} onChange={setField('endAt')} />
+                </div>
               </div>
 
               {modal === 'edit' ? (

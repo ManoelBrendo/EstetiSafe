@@ -24,7 +24,7 @@ export function ClientAvatar({ name, photoDataUrl, size = 'md', className = '' }
   if (photoDataUrl) {
     return (
       <div className={classes} aria-label={label}>
-        <img src={photoDataUrl} alt={label} className="client-avatar-image" />
+        <img src={photoDataUrl} alt={label} className="client-avatar-image" loading="lazy" />
       </div>
     )
   }

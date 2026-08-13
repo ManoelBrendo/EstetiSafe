@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import toast from 'react-hot-toast'
 import api, { downloadApiFile, getApiErrorMessage } from './api'
@@ -127,6 +127,24 @@ export default function Serviços() {
   const [loadingPopId, setLoadingPopId] = useState<Identifier | null>(null)
   const [downloadingPopPdf, setDownloadingPopPdf] = useState(false)
   const [selected, setSelected] = useState<ServiceRecord | null>(null)
+  const serviceMetrics = useMemo(() => {
+    const activeServices = services.filter(service => service.active !== false)
+    const popReady = services.filter(service => service.servicePop).length
+    const averageDuration = services.length
+      ? Math.round(services.reduce((total, service) => total + Number(service.duration || 0), 0) / services.length)
+      : 0
+    const averagePrice = services.length
+      ? services.reduce((total, service) => total + Number(service.price || 0), 0) / services.length
+      : 0
+
+    return {
+      total: services.length,
+      active: activeServices.length,
+      popReady,
+      averageDuration,
+      averagePrice,
+    }
+  }, [services])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -284,7 +302,7 @@ export default function Serviços() {
   }
 
   return (
-    <div className="page">
+    <div className="page services-page ux-compact-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Serviços</h1>
@@ -296,7 +314,30 @@ export default function Serviços() {
         </button>
       </div>
 
-      <div className="card section-card">
+      <div className="agenda-summary-strip services-summary-strip" aria-label="Resumo operacional dos servicos">
+        <div className="agenda-summary-item">
+          <span>Total</span>
+          <strong>{serviceMetrics.total}</strong>
+        </div>
+        <div className="agenda-summary-item">
+          <span>Ativos</span>
+          <strong>{serviceMetrics.active}</strong>
+        </div>
+        <div className={['agenda-summary-item', serviceMetrics.popReady < serviceMetrics.total ? 'is-alert' : ''].join(' ')}>
+          <span>POP</span>
+          <strong>{serviceMetrics.popReady}/{serviceMetrics.total}</strong>
+        </div>
+        <div className="agenda-summary-item">
+          <span>Duração média</span>
+          <strong>{serviceMetrics.averageDuration || 0} min</strong>
+        </div>
+        <div className="agenda-summary-item">
+          <span>Ticket médio</span>
+          <strong>{formatPrice(serviceMetrics.averagePrice)}</strong>
+        </div>
+      </div>
+
+      <div className="card section-card services-list-card">
         {loading ? (
           <div className="loading-page">
             <span className="spinner" />
@@ -304,7 +345,7 @@ export default function Serviços() {
         ) : services.length === 0 ? (
           <div className="empty">
             <div className="empty-icon">
-              <Icon name="scissors" size={24} />
+              <Icon name="procedure" size={24} />
             </div>
             <h3>Nenhum serviço cadastrado</h3>
             <p>Cadastre os tratamentos disponíveis para facilitar a montagem da agenda.</p>

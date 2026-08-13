@@ -20,7 +20,7 @@ testDatabaseUrl.searchParams.set('schema', schemaName)
 process.env.DATABASE_URL = testDatabaseUrl.toString()
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-test-secret'
 process.env.SUPPORT_ADMIN_EMAIL = 'support.integration@lappui.local'
-process.env.SUPPORT_ADMIN_PASSWORD = 'A!@246813579246'
+process.env.SUPPORT_ADMIN_PASSWORD = 'Aa!@246813579246'
 process.env.SUPPORT_ADMIN_NAME = 'Central de suporte teste'
 process.env.SUPPORT_CONTACT_EMAIL = 'support.integration@lappui.local'
 process.env.SUPPORT_CONTACT_PHONE = '5511999999999'
@@ -28,7 +28,7 @@ process.env.SUPPORT_CONTACT_PHONE = '5511999999999'
 const prismaCliPath = require.resolve('prisma/build/index.js')
 execFileSync(
   process.execPath,
-  [prismaCliPath, 'db', 'push', '--schema', path.join(backendRoot, 'schema.prisma'), '--skip-generate'],
+  [prismaCliPath, 'db', 'push', '--schema', path.join(backendRoot, 'prisma', 'schema.prisma'), '--skip-generate'],
   {
     cwd: backendRoot,
     env: { ...process.env, DATABASE_URL: testDatabaseUrl.toString() },
@@ -119,7 +119,7 @@ test('clinic registration creates aggregate records and register audit log', asy
   const registerResponse = await request('POST', '/auth/register', {
     body: {
       email: 'clinica.integration@lappui.local',
-      password: 'A!@246813579246',
+      password: 'Aa!@246813579246',
       clinicName: 'Clinica Integracao',
     },
   })
@@ -179,7 +179,7 @@ test('clinic login rejects unknown email and wrong password', async () => {
   const unknownEmailResponse = await request('POST', '/auth/login', {
     body: {
       email: 'desconhecido@lappui.local',
-      password: 'A!@246813579246',
+      password: 'Aa!@246813579246',
     },
   })
 
@@ -188,7 +188,7 @@ test('clinic login rejects unknown email and wrong password', async () => {
   const wrongPasswordResponse = await request('POST', '/auth/login', {
     body: {
       email: 'clinica.integration@lappui.local',
-      password: 'A!@246813579247',
+      password: 'Aa!@246813579247',
     },
   })
 
@@ -199,7 +199,7 @@ test('support can authenticate, list clinics, and assume a clinic session', asyn
   const supportLoginResponse = await request('POST', '/auth/login', {
     body: {
       email: 'support.integration@lappui.local',
-      password: 'A!@246813579246',
+      password: 'Aa!@246813579246',
     },
   })
 
@@ -283,7 +283,7 @@ test('assumed support can configure billing, mark payment, and consult audit log
     token: assumedClinicToken,
     body: {
       amount: 349.9,
-      nextDueAt: '2026-06-17',
+      nextDueAt: '2026-07-21',
     },
   })
 
@@ -695,5 +695,98 @@ test('paid payment locks the prontuario and blocks sensitive edits while keeping
   assert.match(pdfResponse.contentType, /application\/pdf/i)
   assert.ok(pdfResponse.data.length > 100)
   assert.equal(pdfResponse.data.subarray(0, 4).toString('ascii'), '%PDF')
+})
+
+test('Stripe billing integration flow generates intent and processes checkout webhook successfully', async () => {
+  const prevProvider = process.env.BILLING_GATEWAY_PROVIDER
+  const prevStripeKey = process.env.STRIPE_SECRET_KEY
+  const prevWebhookSecret = process.env.BILLING_WEBHOOK_SECRET
+
+  process.env.BILLING_GATEWAY_PROVIDER = 'STRIPE'
+  process.env.STRIPE_SECRET_KEY = 'sk_test_integration'
+  process.env.BILLING_WEBHOOK_SECRET = 'whsec_test_integration'
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url, options) => {
+    if (String(url).startsWith('https://api.stripe.com')) {
+      return {
+        ok: true,
+        text: async () => '',
+        json: async () => ({
+          id: 'cs_test_session_123',
+          url: 'https://checkout.stripe.com/pay/cs_test_session_123',
+        }),
+      }
+    }
+    return originalFetch(url, options)
+  }
+
+  try {
+    const intentResponse = await request('POST', '/billing/gateway/intents', {
+      token: clinicToken,
+      body: {
+        method: 'CREDIT_CARD',
+        amount: 199.90,
+        dueAt: '2026-07-01',
+      },
+    })
+
+    assert.equal(intentResponse.status, 201)
+    const intent = intentResponse.data.intent
+    assert.equal(intent.provider, 'STRIPE')
+    assert.equal(intent.providerPaymentId, 'cs_test_session_123')
+    assert.equal(intent.checkoutUrl, 'https://checkout.stripe.com/pay/cs_test_session_123')
+
+    const eventBody = {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_test_session_123',
+          amount_total: 19990,
+          metadata: {
+            reference: intent.reference,
+          },
+        },
+      },
+    }
+
+    const rawBodyText = JSON.stringify(eventBody)
+    const timestamp = Math.floor(Date.now() / 1000)
+    const signaturePayload = timestamp + '.' + rawBodyText
+
+    const crypto = require('crypto')
+    const computedSig = crypto
+      .createHmac('sha256', 'whsec_test_integration')
+      .update(signaturePayload)
+      .digest('hex')
+
+    const stripeHeader = 't=' + timestamp + ',v1=' + computedSig
+
+    const webhookRes = await fetch(baseUrl + '/webhooks/billing', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Stripe-Signature': stripeHeader,
+      },
+      body: rawBodyText,
+    })
+
+    assert.equal(webhookRes.status, 200)
+    const webhookData = await webhookRes.json()
+    assert.equal(webhookData.ok, true)
+    assert.equal(webhookData.intent.status, 'PAID')
+    assert.equal(webhookData.billing.effectiveStatus, 'ACTIVE')
+
+    const clinicSub = await prisma.clinicSubscription.findUnique({
+      where: { clinicId: clinicAggregateId },
+    })
+    assert.equal(clinicSub.status, 'ACTIVE')
+    assert.equal(clinicSub.reference, intent.reference)
+  } finally {
+    globalThis.fetch = originalFetch
+    process.env.BILLING_GATEWAY_PROVIDER = prevProvider
+    process.env.STRIPE_SECRET_KEY = prevStripeKey
+    process.env.BILLING_WEBHOOK_SECRET = prevWebhookSecret
+  }
 })
 

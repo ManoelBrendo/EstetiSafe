@@ -1,3 +1,15 @@
+const {
+  parseId,
+  serviceSchema,
+  normalizeServiceData,
+  sanitizeFileName,
+  sendPdfDocument,
+  renderServicePopPdf,
+  createAuditLogFromRequest,
+  getRequestClinicId,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
+
 function buildServicePop({ clinicName, serviceName, description, duration }) {
   const safeClinicName = (clinicName || '').trim() || 'Clínica não informada'
   const safeServiceName = (serviceName || '').trim() || 'Procedimento estético'
@@ -119,10 +131,6 @@ function getScopedServiceUserId(req) {
   return req.currentUser?.id || req.user?.id
 }
 
-function getScopedServiceClinicId(req) {
-  return req.currentUser?.ownedClinic?.id || req.currentUser?.clinicId || null
-}
-
 function buildServiceAuditMetadata(service, extra = {}) {
   return {
     name: service?.name || null,
@@ -144,38 +152,21 @@ async function getClinicName(prisma, userId) {
   return user.clinicName || "L'Appui"
 }
 
-function registerServiceRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  handle,
-  parseId,
-  serviceSchema,
-  normalizeServiceData,
-  sanitizeFileName,
-  sendPdfDocument,
-  renderServicePopPdf,
-  createAuditLogFromRequest = async () => null,
-  getRequestClinicId = getScopedServiceClinicId,
-}) {
-  const requiredDeps = {
+function registerServiceRoutes(options) {
+  const {
     app,
     prisma,
-    authMiddleware,
-    handle,
-    parseId,
-    serviceSchema,
-    normalizeServiceData,
-    sanitizeFileName,
-    sendPdfDocument,
-    renderServicePopPdf,
-  }
-
-  for (const [key, value] of Object.entries(requiredDeps)) {
-    if (!value) {
-      throw new Error(`registerServiceRoutes requer ${key}`)
-    }
-  }
+    authMiddleware = require('./lib/middlewares').authMiddleware,
+    handle = require('./lib/middlewares').handle,
+    parseId = require('./lib/helpers').parseId,
+    serviceSchema = require('./lib/helpers').serviceSchema,
+    normalizeServiceData = require('./lib/helpers').normalizeServiceData,
+    sanitizeFileName = require('./lib/helpers').sanitizeFileName,
+    sendPdfDocument = require('./lib/helpers').sendPdfDocument,
+    renderServicePopPdf = require('./lib/helpers').renderServicePopPdf,
+    createAuditLogFromRequest = require('./lib/helpers').createAuditLogFromRequest,
+    getRequestClinicId = require('./lib/helpers').getRequestClinicId,
+  } = options
 
   app.get('/services', authMiddleware, handle(async (req, res) => {
     const userId = getScopedServiceUserId(req)

@@ -1,4 +1,4 @@
-﻿export interface BillingSnapshot {
+export interface BillingSnapshot {
   status?: string | null
   effectiveStatus?: string | null
   blocked?: boolean
@@ -31,6 +31,7 @@ export interface AuthUser {
   email: string
   clinicName: string
   clinicLogoDataUrl?: string | null
+  clinicOperationalScopes?: string[] | null
   clinicId?: number | string | null
   clinicStatus?: string | null
   role?: string | null
@@ -58,4 +59,12 @@ export interface ApiValidationIssue {
 export interface ApiErrorPayload {
   error?: string
   issues?: ApiValidationIssue[]
+}
+
+export interface FacialPoint {
+  id: string
+  x: number
+  y: number
+  type: 'botox' | 'filler'
+  amount: number
 }

@@ -393,21 +393,135 @@ export default function Dashboard() {
 
       <div className="stats-grid stats-grid-adaptive">
         <div className="stat-card gold">
-          <div className="stat-label">Receita do mês</div>
-          <div className="stat-value">{fmtBRL(data?.month?.revenue)}</div>
-          <div className="stat-sub">Somente pagamentos confirmados.</div>
+          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="stat-label">Receita do mês</div>
+              <div className="stat-value">{fmtBRL(data?.month?.revenue)}</div>
+              <div className="stat-sub">Somente pagamentos confirmados.</div>
+            </div>
+            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg className="progress-ring" width="60" height="60">
+                <circle className="progress-ring__circle-bg" stroke="rgba(182, 137, 77, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
+                <circle
+                  className="progress-ring__circle"
+                  stroke="var(--gold)"
+                  strokeWidth="4"
+                  fill="transparent"
+                  r="22"
+                  cx="30"
+                  cy="30"
+                  style={{
+                    strokeDasharray: `${2 * Math.PI * 22}`,
+                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.revenue || 0) / 50000))}`,
+                    transition: 'stroke-dashoffset 0.8s ease-in-out',
+                  }}
+                />
+              </svg>
+              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
+                {Math.round(Math.min(100, ((data?.month?.revenue || 0) / 50000) * 100))}%
+              </span>
+            </div>
+          </div>
+          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
+            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="gold-gradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="var(--gold)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 20 Q 20 5, 40 18 T 80 8 T 100 12 L 100 25 L 0 25 Z" fill="url(#gold-gradient)" />
+              <path d="M 0 20 Q 20 5, 40 18 T 80 8 T 100 12" fill="none" stroke="var(--gold)" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
 
         <div className="stat-card green">
-          <div className="stat-label">Atendimentos</div>
-          <div className="stat-value">{data?.month?.totalAppointments ?? 0}</div>
-          <div className="stat-sub">Concluídos no mês vigente.</div>
+          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="stat-label">Atendimentos</div>
+              <div className="stat-value">{data?.month?.totalAppointments ?? 0}</div>
+              <div className="stat-sub">Concluídos no mês vigente.</div>
+            </div>
+            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg className="progress-ring" width="60" height="60">
+                <circle className="progress-ring__circle-bg" stroke="rgba(63, 124, 103, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
+                <circle
+                  className="progress-ring__circle"
+                  stroke="var(--success)"
+                  strokeWidth="4"
+                  fill="transparent"
+                  r="22"
+                  cx="30"
+                  cy="30"
+                  style={{
+                    strokeDasharray: `${2 * Math.PI * 22}`,
+                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.totalAppointments || 0) / 100))}`,
+                    transition: 'stroke-dashoffset 0.8s ease-in-out',
+                  }}
+                />
+              </svg>
+              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
+                {Math.round(Math.min(100, ((data?.month?.totalAppointments || 0) / 100) * 100))}%
+              </span>
+            </div>
+          </div>
+          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
+            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="green-gradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--success)" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="var(--success)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 15 Q 15 22, 35 10 T 70 18 T 100 5 L 100 25 L 0 25 Z" fill="url(#green-gradient)" />
+              <path d="M 0 15 Q 15 22, 35 10 T 70 18 T 100 5" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
 
         <div className="stat-card rose">
-          <div className="stat-label">Clientes</div>
-          <div className="stat-value">{data?.month?.totalClients ?? 0}</div>
-          <div className="stat-sub">Base ativa e organizada.</div>
+          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="stat-label">Clientes</div>
+              <div className="stat-value">{data?.month?.totalClients ?? 0}</div>
+              <div className="stat-sub">Base ativa e organizada.</div>
+            </div>
+            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg className="progress-ring" width="60" height="60">
+                <circle className="progress-ring__circle-bg" stroke="rgba(172, 118, 109, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
+                <circle
+                  className="progress-ring__circle"
+                  stroke="var(--rose)"
+                  strokeWidth="4"
+                  fill="transparent"
+                  r="22"
+                  cx="30"
+                  cy="30"
+                  style={{
+                    strokeDasharray: `${2 * Math.PI * 22}`,
+                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.totalClients || 0) / 200))}`,
+                    transition: 'stroke-dashoffset 0.8s ease-in-out',
+                  }}
+                />
+              </svg>
+              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
+                {Math.round(Math.min(100, ((data?.month?.totalClients || 0) / 200) * 100))}%
+              </span>
+            </div>
+          </div>
+          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
+            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
+              <defs>
+                <linearGradient id="rose-gradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--rose)" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="var(--rose)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 22 Q 25 12, 50 18 T 85 5 T 100 10 L 100 25 L 0 25 Z" fill="url(#rose-gradient)" />
+              <path d="M 0 22 Q 25 12, 50 18 T 85 5 T 100 10" fill="none" stroke="var(--rose)" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
       </div>
 

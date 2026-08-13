@@ -3,6 +3,7 @@ import type { BillingSnapshot } from './types'
 
 export type DocumentCategory = 'LEGAL' | 'SANITARY' | 'CLIENTS' | 'WASTE'
 export type DocumentStatus = 'VALID' | 'EXPIRING' | 'EXPIRED' | 'WITHOUT_EXPIRY'
+export type ClinicOperationalScope = 'FACIAL' | 'INJECTABLES' | 'LASER' | 'BODY' | 'ADVANCED'
 
 export interface DocumentCategoryOption {
   value: DocumentCategory
@@ -45,12 +46,26 @@ export interface MissingDocumentRequirement {
   category: DocumentCategory
   categoryLabel: string
   requirement: string
+  sourceScopes?: string[]
+  sourceScopeLabels?: string[]
 }
 
 export interface DocumentWindowsSummary {
   next7Days: number
   next15Days: number
   next30Days: number
+}
+
+export interface DocumentsProfileSummary {
+  scopes: string[]
+  scopeLabels: string[]
+  selectedCount: number
+  requiredBaseCount: number
+  specializedRequirementCount: number
+  availableScopes?: Array<{
+    value: string
+    label: string
+  }>
 }
 
 export interface DocumentsSummaryResponse {
@@ -66,7 +81,86 @@ export interface DocumentsSummaryResponse {
   missingDocuments: MissingDocumentRequirement[]
   categories: DocumentCategoryCoverageItem[]
   windows: DocumentWindowsSummary
+  profile?: DocumentsProfileSummary
   lastUpdatedAt?: string | null
+}
+
+export type ProfessionalDocumentCategory = 'CONTRACT' | 'CERTIFICATION' | 'COUNCIL' | 'TRAINING' | 'PERMISSION'
+export type ProfessionalDocumentRequirementStatus = DocumentStatus | 'MISSING'
+
+export interface ProfessionalDocumentSummary {
+  id: Identifier
+  professionalId: Identifier
+  professionalName?: string | null
+  professionalSpecialty?: string | null
+  category: ProfessionalDocumentCategory | string
+  categoryLabel: string
+  documentType: string
+  title: string
+  notes?: string | null
+  expiresAt?: string | null
+  fileName: string
+  fileMimeType?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  status: DocumentStatus
+  statusLabel: string
+  daysUntilExpiry?: number | null
+}
+
+export interface ProfessionalDocumentFileResponse extends ProfessionalDocumentSummary {
+  fileDataUrl: string
+}
+
+export interface ProfessionalDocumentRequirement {
+  id: string
+  professionalId: Identifier
+  professionalName: string
+  professionalSpecialty?: string | null
+  category: ProfessionalDocumentCategory | string
+  categoryLabel: string
+  requirement: string
+  status?: ProfessionalDocumentRequirementStatus
+  statusLabel?: string
+  matchedDocumentId?: Identifier | null
+  matchedTitle?: string | null
+  daysUntilExpiry?: number | null
+}
+
+export interface ProfessionalDocumentCoverage {
+  professionalId: Identifier
+  professionalName: string
+  professionalSpecialty?: string | null
+  requiredCount: number
+  coveredCount: number
+  missingCount: number
+  expiringCount: number
+  expiredCount: number
+  criticalCount: number
+  score: number
+  missingRequirements: ProfessionalDocumentRequirement[]
+  documents?: ProfessionalDocumentSummary[]
+}
+
+export interface ProfessionalDocumentRequirementCatalogItem {
+  category: ProfessionalDocumentCategory | string
+  categoryLabel: string
+  requirement: string
+}
+
+export interface ProfessionalDocumentsDashboard {
+  activeProfessionals: number
+  totalDocuments: number
+  requiredCount: number
+  coveredCount: number
+  missingCount: number
+  expiring: number
+  expired: number
+  complianceScore: number
+  alerts: ProfessionalDocumentSummary[]
+  missingRequirements: ProfessionalDocumentRequirement[]
+  byProfessional: ProfessionalDocumentCoverage[]
+  requirementCatalog?: ProfessionalDocumentRequirementCatalogItem[]
 }
 
 export interface DashboardMonthSummary {
@@ -327,6 +421,46 @@ export interface AuditLogsResponse {
   filters?: Record<string, string | null>
 }
 
+export type AuditCorrectiveActionStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'DISMISSED'
+
+export interface AuditCorrectiveActionAttachment {
+  id: Identifier
+  actionId: Identifier
+  fileName: string
+  fileMimeType?: string | null
+  notes?: string | null
+  createdAt?: string | null
+}
+
+export interface AuditCorrectiveActionAttachmentFileResponse extends AuditCorrectiveActionAttachment {
+  fileDataUrl: string
+}
+
+export interface AuditCorrectiveAction {
+  id: Identifier
+  taskKey: string
+  domainId: string
+  domainTitle: string
+  title: string
+  owner: string
+  dueLabel?: string | null
+  dueAt?: string | null
+  evidence?: string | null
+  actionUrl?: string | null
+  riskLevel: 'CRITICAL' | 'WARNING' | 'OK' | string
+  status: AuditCorrectiveActionStatus
+  completedAt?: string | null
+  dismissedAt?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+  attachments?: AuditCorrectiveActionAttachment[]
+}
+
+export interface AuditCorrectiveActionsResponse {
+  total: number
+  items: AuditCorrectiveAction[]
+}
+
 export interface ClinicBillItem {
   id: Identifier
   title: string
@@ -435,9 +569,13 @@ export interface ProfessionalSummary {
   paymentModelLabel?: string | null
   salaryAmount?: number | null
   commissionRate?: number | null
+  payrollBonusAmount?: number | null
+  payrollDiscountAmount?: number | null
   paymentDay?: number | null
   payrollNotes?: string | null
   compensationSummary?: string | null
+  documentCoverage?: ProfessionalDocumentCoverage | null
+  payroll?: ProfessionalPayrollMetrics | null
   active?: boolean
   createdAt?: string | null
   updatedAt?: string | null
@@ -452,7 +590,12 @@ export interface ProfessionalMetrics {
 export interface ProfessionalPayrollMetrics {
   paidRevenue?: number | null
   commissionAmount?: number | null
+  fixedAmount?: number | null
+  bonusAmount?: number | null
+  discountAmount?: number | null
+  grossPayout?: number | null
   projectedPayout?: number | null
+  completedAppointments?: number
   paidAppointments?: number
   workedDays?: number
   lastPaidAt?: string | null
@@ -476,6 +619,8 @@ export interface ProfessionalDetail extends ProfessionalSummary {
   metrics?: ProfessionalMetrics | null
   payroll?: ProfessionalPayrollMetrics | null
   appointments?: ProfessionalRecentAppointment[]
+  documents?: ProfessionalDocumentSummary[]
+  documentsDashboard?: ProfessionalDocumentsDashboard | null
 }
 
 export interface ServicePopSummary {

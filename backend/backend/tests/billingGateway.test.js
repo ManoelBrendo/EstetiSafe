@@ -6,6 +6,8 @@ const {
   buildIntentPayload,
   createGatewayReference,
   getLatestGatewayIntent,
+  verifyStripeSignature,
+  createStripeCheckoutSession,
 } = require('../src/legacy/billingGateway')
 
 function withGatewayProvider(provider, callback) {
@@ -210,4 +212,81 @@ test('buildBillingGatewayReadiness marks live provider as ready when critical pi
   assert.equal(readiness.webhookConfigured, true)
   assert.equal(readiness.automaticBillingEnabled, true)
   assert.deepEqual(readiness.missing, [])
+})
+
+test('verifyStripeSignature returns true for valid signatures and false otherwise', () => {
+  const secret = 'whsec_test_secret'
+  const rawBody = Buffer.from('{"id":"evt_123"}', 'utf8')
+  const timestamp = Math.floor(Date.now() / 1000)
+  
+  const signaturePayload = timestamp + '.' + rawBody.toString('utf8')
+  const crypto = require('crypto')
+  const computed = crypto
+    .createHmac('sha256', secret)
+    .update(signaturePayload)
+    .digest('hex')
+
+  const validHeader = 't=' + timestamp + ',v1=' + computed
+  
+  assert.equal(verifyStripeSignature(rawBody, validHeader, secret), true)
+  assert.equal(verifyStripeSignature(rawBody, validHeader, 'wrong_secret'), false)
+  assert.equal(verifyStripeSignature(rawBody, 't=' + timestamp + ',v1=wrong_sig', secret), false)
+  assert.equal(verifyStripeSignature(null, validHeader, secret), false)
+})
+
+test('createStripeCheckoutSession rejects when key is missing', async () => {
+  await assert.rejects(
+    createStripeCheckoutSession({
+      amount: 100,
+      dueAt: new Date(),
+      reference: 'REF',
+      clinicId: 1,
+      env: {},
+    }),
+    /STRIPE_SECRET_KEY/
+  )
+})
+
+test('createStripeCheckoutSession performs a mock fetch call and returns session details when successful', async () => {
+  const originalFetch = globalThis.fetch
+  let fetchedUrl = null
+  let fetchedOptions = null
+
+  globalThis.fetch = async (url, options) => {
+    fetchedUrl = url
+    fetchedOptions = options
+    return {
+      ok: true,
+      text: async () => '',
+      json: async () => ({
+        id: 'cs_test_123',
+        url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+      }),
+    }
+  }
+
+  try {
+    const res = await createStripeCheckoutSession({
+      amount: 150.5,
+      dueAt: new Date('2026-06-10T00:00:00.000Z'),
+      reference: 'LAPPUI-7-TEST-REF',
+      clinicId: 7,
+      env: {
+        STRIPE_SECRET_KEY: 'sk_test_key',
+        FRONTEND_URL: 'http://localhost:5173',
+      },
+    })
+
+    assert.equal(fetchedUrl, 'https://api.stripe.com/v1/checkout/sessions')
+    assert.equal(fetchedOptions.method, 'POST')
+    assert.equal(fetchedOptions.headers.Authorization, 'Bearer sk_test_key')
+    assert.match(fetchedOptions.body, /metadata%5Breference%5D=LAPPUI-7-TEST-REF/)
+    assert.match(fetchedOptions.body, /line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=15050/)
+
+    assert.equal(res.providerPaymentId, 'cs_test_123')
+    assert.equal(res.checkoutUrl, 'https://checkout.stripe.com/c/pay/cs_test_123')
+    assert.equal(res.status, 'PENDING')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })

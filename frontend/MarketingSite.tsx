@@ -619,7 +619,7 @@ export default function MarketingSite() {
               })}
             </div>
 
-            <article className="leadv2-faq-answer">
+            <article key={activeFaq} className="leadv2-faq-answer animate-fade-in-up">
               <span className="leadv2-badge leadv2-badge-soft">Resposta em foco</span>
               <h3>{activeFaqCard.title}</h3>
               <p>{activeFaqCard.answer}</p>
@@ -642,22 +642,22 @@ export default function MarketingSite() {
 
           <form id="lead-form" className="leadv2-form-card" onSubmit={handleSubmit}>
             <div className="leadv2-form-grid">
-              <label className="marketing-form-field"><span>Nome da clínica</span><input className="form-input" value={form.clinicName} onChange={event => updateField('clinicName', event.target.value)} placeholder="Ex: Clínica Aurora" required /></label>
-              <label className="marketing-form-field"><span>Responsável</span><input className="form-input" value={form.contactName} onChange={event => updateField('contactName', event.target.value)} placeholder="Seu nome" required /></label>
-              <label className="marketing-form-field"><span>E-mail</span><input className="form-input" type="email" value={form.email} onChange={event => updateField('email', event.target.value)} placeholder="contato@clínica.com" required /></label>
-              <label className="marketing-form-field"><span>Telefone ou WhatsApp</span><input className="form-input" value={form.phone} onChange={event => updateField('phone', event.target.value)} placeholder="(11) 99999-0000" required /></label>
-              <label className="marketing-form-field"><span>Cidade</span><input className="form-input" value={form.city} onChange={event => updateField('city', event.target.value)} placeholder="São Paulo" /></label>
-              <label className="marketing-form-field"><span>Porte da equipe</span><select className="form-select" value={form.teamSize} onChange={event => updateField('teamSize', event.target.value)}>{teamSizeOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Selecione o porte da equipe'}</option>)}</select></label>
-              <label className="marketing-form-field leadv2-form-full"><span>Prioridade da clínica</span><select className="form-select" value={form.mainGoal} onChange={event => updateField('mainGoal', event.target.value)}>{goalOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Qual cenário você quer resolver primeiro'}</option>)}</select></label>
-              <label className="marketing-form-field leadv2-form-full"><span>Contexto atual</span><textarea className="form-textarea" rows={5} value={form.message} onChange={event => updateField('message', event.target.value)} placeholder="Ex: hoje usamos planilhas, temos dificuldade com documentação sanitária, prontuário e alertas de vencimento." /></label>
+              <label htmlFor="lead-clinic-name" className="marketing-form-field"><span>Nome da clínica</span><input id="lead-clinic-name" className="form-input" value={form.clinicName} onChange={event => updateField('clinicName', event.target.value)} placeholder="Ex: Clínica Aurora" required /></label>
+              <label htmlFor="lead-contact-name" className="marketing-form-field"><span>Responsável</span><input id="lead-contact-name" className="form-input" value={form.contactName} onChange={event => updateField('contactName', event.target.value)} placeholder="Seu nome" required /></label>
+              <label htmlFor="lead-email" className="marketing-form-field"><span>E-mail</span><input id="lead-email" className="form-input" type="email" value={form.email} onChange={event => updateField('email', event.target.value)} placeholder="contato@clínica.com" required /></label>
+              <label htmlFor="lead-phone" className="marketing-form-field"><span>Telefone ou WhatsApp</span><input id="lead-phone" className="form-input" value={form.phone} onChange={event => updateField('phone', event.target.value)} placeholder="(11) 99999-0000" required /></label>
+              <label htmlFor="lead-city" className="marketing-form-field"><span>Cidade</span><input id="lead-city" className="form-input" value={form.city} onChange={event => updateField('city', event.target.value)} placeholder="São Paulo" /></label>
+              <label htmlFor="lead-team-size" className="marketing-form-field"><span>Porte da equipe</span><select id="lead-team-size" className="form-select" value={form.teamSize} onChange={event => updateField('teamSize', event.target.value)}>{teamSizeOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Selecione o porte da equipe'}</option>)}</select></label>
+              <label htmlFor="lead-main-goal" className="marketing-form-field leadv2-form-full"><span>Prioridade da clínica</span><select id="lead-main-goal" className="form-select" value={form.mainGoal} onChange={event => updateField('mainGoal', event.target.value)}>{goalOptions.map(option => <option key={option || 'empty'} value={option}>{option || 'Qual cenário você quer resolver primeiro'}</option>)}</select></label>
+              <label htmlFor="lead-message" className="marketing-form-field leadv2-form-full"><span>Contexto atual</span><textarea id="lead-message" className="form-textarea" rows={5} value={form.message} onChange={event => updateField('message', event.target.value)} placeholder="Ex: hoje usamos planilhas, temos dificuldade com documentação sanitária, prontuário e alertas de vencimento." /></label>
             </div>
 
-            <label className="leadv2-consent-row">
-              <input type="checkbox" checked={form.requestedDemo} onChange={event => updateField('requestedDemo', event.target.checked)} />
+            <label htmlFor="lead-requested-demo" className="leadv2-consent-row">
+              <input id="lead-requested-demo" type="checkbox" checked={form.requestedDemo} onChange={event => updateField('requestedDemo', event.target.checked)} />
               <span>Quero receber uma apresentação guiada do sistema.</span>
             </label>
 
-            <button className="btn btn-gold btn-block" type="submit" disabled={loading}>{loading ? <span className="spinner" /> : 'Enviar diagnóstico'}</button>
+            <button id="lead-submit-btn" className="btn btn-gold btn-block" type="submit" disabled={loading}>{loading ? <span className="spinner" /> : 'Enviar diagnóstico'}</button>
             <p className="leadv2-form-note">Ao enviar, sua clínica entra na base comercial do L'Appui para contato consultivo.</p>
           </form>
         </section>

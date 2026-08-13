@@ -1,16 +1,5 @@
 const express = require('express')
-const { anamnesisUpsertSchema } = require('../schemas')
-const { asyncHandler, parsePositiveInt } = require('../lib/http')
-const { createAuditLog } = require('../lib/audit')
-const {
-  ensureClientOwnership,
-  buildMedicalRecord,
-  buildMedicalRecordSummary,
-  buildAccessState,
-  buildMedicalRecordAuditMetadata,
-  summarizeAnamnesis,
-  createAnamnesisVersion,
-} = require('../lib/medical-records')
+const { asyncHandler } = require('../lib/http')
 
 function createMedicalRecordsRouter(context) {
   const router = express.Router()
@@ -18,82 +7,33 @@ function createMedicalRecordsRouter(context) {
   router.use(context.auth.authMiddleware)
   router.use(context.auth.requireScopedClinicUser)
 
-  router.get('/by-client/:clientId', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
+  let medicalRecordsController
+  if (context.container) {
+    medicalRecordsController = context.container.resolve('medicalRecordsController')
+  } else {
+    const { Container } = require('../lib/container')
+    const { AuditService } = require('../lib/audit.service')
+    const { MedicalRecordsRepository } = require('./medical-records/medical-records.repository')
+    const { MedicalRecordsService } = require('./medical-records/medical-records.service')
+    const { MedicalRecordsController } = require('./medical-records/medical-records.controller')
 
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_MEDICAL_RECORD_VIEW',
-      entityType: 'Client',
-      entityId: client.id,
-      metadata: buildMedicalRecordAuditMetadata(client, `/api/v2/medical-records/by-client/${client.id}`),
-    })
+    const container = new Container()
+    container.registerInstance('prisma', context.prisma)
+    container.registerInstance('auth', context.auth)
 
-    res.json(buildMedicalRecord(client))
-  }))
+    container.registerFactory('auditService', (c) => new AuditService(c.resolve('prisma'), c.resolve('auth')))
+    container.registerFactory('medicalRecordsRepository', (c) => new MedicalRecordsRepository(c.resolve('prisma')))
+    container.registerFactory('medicalRecordsService', (c) => new MedicalRecordsService(c.resolve('medicalRecordsRepository'), c.resolve('auditService')))
+    container.registerFactory('medicalRecordsController', (c) => new MedicalRecordsController(c.resolve('medicalRecordsService')))
 
-  router.get('/by-client/:clientId/summary', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-    res.json(buildMedicalRecordSummary(client))
-  }))
+    medicalRecordsController = container.resolve('medicalRecordsController')
+  }
 
-  router.get('/by-client/:clientId/access-state', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-    res.json({
-      medicalRecordId: `legacy-client-${client.id}`,
-      ...buildAccessState(client),
-    })
-  }))
-
-  router.get('/by-client/:clientId/anamnesis', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_MEDICAL_RECORD_ANAMNESIS_HISTORY_VIEW',
-      entityType: 'Client',
-      entityId: client.id,
-      metadata: buildMedicalRecordAuditMetadata(client, `/api/v2/medical-records/by-client/${client.id}/anamnesis`, {
-        historyCount: client.anamneses?.length || 0,
-      }),
-    })
-
-    res.json({
-      clientId: client.id,
-      latest: summarizeAnamnesis(client.anamneses?.[0] || null),
-      history: (client.anamneses || []).map(summarizeAnamnesis),
-      accessState: buildAccessState(client),
-    })
-  }))
-
-  router.put('/by-client/:clientId/anamnesis', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.clientId, 'clientId')
-    const payload = anamnesisUpsertSchema.parse(req.body)
-    const updatedClient = await createAnamnesisVersion(context.prisma, req.currentUser.id, clientId, payload)
-    const latestAnamnesis = updatedClient.anamneses?.[0] || null
-    const latestPhotoRecord = latestAnamnesis?.answers?.photoRecord || {}
-
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_ANAMNESIS_VERSION_CREATE',
-      entityType: 'Anamnesis',
-      entityId: updatedClient.anamneses?.[0]?.id || null,
-      metadata: {
-        clientId: updatedClient.id,
-        path: `/api/v2/medical-records/by-client/${updatedClient.id}/anamnesis`,
-        photoConsent: {
-          clinicalUseAuthorized: Boolean(latestPhotoRecord.clinicalUseAuthorized || latestPhotoRecord.imageUseAuthorized),
-          marketingUseAuthorized: Boolean(latestPhotoRecord.marketingUseAuthorized || latestPhotoRecord.imageUseAuthorized),
-          consentAwarenessConfirmed: Boolean(latestPhotoRecord.consentAwarenessConfirmed),
-          photoCount: Array.isArray(latestPhotoRecord.photos) ? latestPhotoRecord.photos.length : 0,
-          consentVersion: latestPhotoRecord.consentVersion || null,
-        },
-      },
-    })
-
-    res.json(buildMedicalRecord(updatedClient))
-  }))
+  router.get('/by-client/:clientId', asyncHandler((req, res) => medicalRecordsController.getRecord(req, res)))
+  router.get('/by-client/:clientId/summary', asyncHandler((req, res) => medicalRecordsController.getSummary(req, res)))
+  router.get('/by-client/:clientId/access-state', asyncHandler((req, res) => medicalRecordsController.getAccessState(req, res)))
+  router.get('/by-client/:clientId/anamnesis', asyncHandler((req, res) => medicalRecordsController.getAnamnesis(req, res)))
+  router.put('/by-client/:clientId/anamnesis', asyncHandler((req, res) => medicalRecordsController.putAnamnesis(req, res)))
 
   return router
 }
@@ -101,3 +41,4 @@ function createMedicalRecordsRouter(context) {
 module.exports = {
   createMedicalRecordsRouter,
 }
+

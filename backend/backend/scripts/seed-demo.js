@@ -51,9 +51,46 @@ const clientsSeed = [
   },
 ]
 
+const weekdaySchedule = [
+  { day: 'MONDAY', enabled: true, start: '09:00', end: '18:00' },
+  { day: 'TUESDAY', enabled: true, start: '09:00', end: '18:00' },
+  { day: 'WEDNESDAY', enabled: true, start: '09:00', end: '18:00' },
+  { day: 'THURSDAY', enabled: true, start: '09:00', end: '18:00' },
+  { day: 'FRIDAY', enabled: true, start: '09:00', end: '17:00' },
+  { day: 'SATURDAY', enabled: false, start: '09:00', end: '13:00' },
+  { day: 'SUNDAY', enabled: false, start: '09:00', end: '13:00' },
+]
+
 const professionalsSeed = [
-  { name: 'Marina Leal', specialty: 'Biomedica esteta', phone: '(11) 97777-8801' },
-  { name: 'Ana Clara Rocha', specialty: 'Esteticista facial', phone: '(11) 97777-8802' },
+  {
+    name: 'Marina Leal',
+    specialty: 'Biomedica esteta',
+    phone: '(11) 97777-8801',
+    availability: weekdaySchedule,
+    contractType: 'PJ',
+    paymentModel: 'HYBRID',
+    salaryAmount: 2800,
+    commissionRate: 18,
+    paymentDay: 5,
+    payrollNotes: 'Demo: profissional completa para validar equipe, agenda semanal e folha de pagamento.',
+  },
+  {
+    name: 'Ana Clara Rocha',
+    specialty: 'Esteticista facial',
+    phone: '(11) 97777-8802',
+    availability: weekdaySchedule.map(slot => slot.day === 'SATURDAY' ? { ...slot, enabled: true } : slot),
+    contractType: 'CLT',
+    paymentModel: 'FIXED',
+    salaryAmount: 3600,
+    paymentDay: 7,
+    payrollNotes: 'Demo: equipe fixa com agenda ativa e pagamento mensal.',
+  },
+  {
+    name: 'Livia Torres',
+    specialty: 'Dermaticista convidada',
+    phone: '(11) 97777-8803',
+    notes: 'Demo: cadastro propositalmente incompleto para aparecer em Auditoria como atencao.',
+  },
 ]
 
 const servicesSeed = [
@@ -70,10 +107,17 @@ const servicesSeed = [
     price: 280,
   },
   {
-    name: 'Design de Sobrancelhas Luxe',
-    description: 'Desenho com acabamento delicado e consultoria de manutencao.',
-    duration: 45,
-    price: 120,
+    name: 'Microagulhamento Revitalizante',
+    description: 'Protocolo de estimulo controlado para textura, viÃ§o e uniformidade cutanea.',
+    duration: 60,
+    price: 260,
+  },
+  {
+    name: 'Bioestimulador Corporal Assistido',
+    description: 'Procedimento avancado em preparo para POP, com triagem e orientacoes obrigatorias.',
+    duration: 80,
+    price: 690,
+    demoWithoutPop: true,
   },
 ]
 
@@ -102,7 +146,7 @@ const appointmentSeed = [
   },
   {
     clientName: 'Helena Duarte',
-    serviceName: 'Design de Sobrancelhas Luxe',
+    serviceName: 'Microagulhamento Revitalizante',
     professionalName: 'Ana Clara Rocha',
     dayOffset: 1,
     hour: 9,
@@ -132,11 +176,269 @@ const appointmentSeed = [
   },
 ]
 
+const DEMO_FILE_DATA_URL = 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjEgMCBvYmoKPDwvVHlwZSAvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+CmVuZG9iagp0cmFpbGVyCjw8L1Jvb3QgMSAwIFI+PgpFT0Y='
+const DEMO_SIGNATURE_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAAAoCAQAAABWcDlRAAAAOUlEQVR42u3BAQ0AAADCIPunNsNwYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgH8GJQABz7m6xwAAAABJRU5ErkJggg=='
+
+const documentsSeed = [
+  {
+    category: 'LEGAL',
+    documentType: 'CNPJ',
+    title: 'CNPJ da clinica',
+    notes: 'Demo: documento administrativo sem vencimento.',
+    fileName: 'cnpj-lappui-demo.pdf',
+  },
+  {
+    category: 'LEGAL',
+    documentType: 'Alvara sanitario',
+    title: 'Alvara sanitario municipal',
+    notes: 'Demo: vencimento proximo para validar alerta de auditoria.',
+    expiresOffsetDays: 9,
+    fileName: 'alvara-sanitario-demo.pdf',
+  },
+  {
+    category: 'SANITARY',
+    documentType: 'Responsavel tecnico',
+    title: 'Responsavel tecnico - termo vigente',
+    notes: 'Demo: documento tecnico vigente.',
+    expiresOffsetDays: 55,
+    fileName: 'responsavel-tecnico-demo.pdf',
+  },
+  {
+    category: 'SANITARY',
+    documentType: 'Licenca da VISA',
+    title: 'Licenca da VISA vencida',
+    notes: 'Demo: documento vencido para prioridade critica.',
+    expiresOffsetDays: -18,
+    fileName: 'licenca-visa-vencida-demo.pdf',
+  },
+  {
+    category: 'CLIENTS',
+    documentType: 'Termo de consentimento padrao',
+    title: 'Termo de consentimento padrao',
+    notes: 'Demo: base documental para procedimentos esteticos.',
+    fileName: 'termo-consentimento-padrao-demo.pdf',
+  },
+  {
+    category: 'CLIENTS',
+    documentType: 'Modelo de anamnese',
+    title: 'Modelo de anamnese clinica',
+    notes: 'Demo: modelo base usado nos prontuarios.',
+    fileName: 'modelo-anamnese-demo.pdf',
+  },
+  {
+    category: 'WASTE',
+    documentType: 'PGRSS',
+    title: 'PGRSS vigente',
+    notes: 'Demo: plano de residuos em dia.',
+    expiresOffsetDays: 120,
+    fileName: 'pgrss-demo.pdf',
+  },
+]
+
+const professionalDocumentsSeed = [
+  {
+    professionalName: 'Marina Leal',
+    category: 'CONTRACT',
+    documentType: 'Contrato de prestacao de servicos',
+    title: 'Contrato PJ - Marina Leal',
+    notes: 'Demo: vinculo profissional em dia para auditoria da equipe.',
+    fileName: 'contrato-pj-marina-demo.pdf',
+  },
+  {
+    professionalName: 'Marina Leal',
+    category: 'CERTIFICATION',
+    documentType: 'Certificado de formacao estetica',
+    title: 'Certificado de formacao - Marina Leal',
+    notes: 'Demo: certificado vigente.',
+    expiresOffsetDays: 360,
+    fileName: 'certificado-formacao-marina-demo.pdf',
+  },
+  {
+    professionalName: 'Marina Leal',
+    category: 'COUNCIL',
+    documentType: 'Registro CRBM ativo',
+    title: 'Registro profissional CRBM - Marina Leal',
+    notes: 'Demo: registro profissional aplicavel.',
+    expiresOffsetDays: 220,
+    fileName: 'registro-crbm-marina-demo.pdf',
+  },
+  {
+    professionalName: 'Marina Leal',
+    category: 'TRAINING',
+    documentType: 'Treinamento interno de biosseguranca',
+    title: 'Treinamento biosseguranca - Marina Leal',
+    notes: 'Demo: treinamento proximo de reciclagem.',
+    expiresOffsetDays: 45,
+    fileName: 'treinamento-biosseguranca-marina-demo.pdf',
+  },
+  {
+    professionalName: 'Marina Leal',
+    category: 'PERMISSION',
+    documentType: 'Termo LGPD e acesso a dados',
+    title: 'Termo de confidencialidade LGPD - Marina Leal',
+    notes: 'Demo: permissao de acesso documentada.',
+    fileName: 'termo-lgpd-marina-demo.pdf',
+  },
+  {
+    professionalName: 'Ana Clara Rocha',
+    category: 'CONTRACT',
+    documentType: 'Contrato CLT e vinculo',
+    title: 'Contrato CLT - Ana Clara Rocha',
+    notes: 'Demo: vinculo profissional em dia.',
+    fileName: 'contrato-clt-ana-demo.pdf',
+  },
+  {
+    professionalName: 'Ana Clara Rocha',
+    category: 'CERTIFICATION',
+    documentType: 'Certificado de especializacao facial',
+    title: 'Certificado facial - Ana Clara Rocha',
+    notes: 'Demo: certificado vigente.',
+    expiresOffsetDays: 120,
+    fileName: 'certificado-facial-ana-demo.pdf',
+  },
+  {
+    professionalName: 'Ana Clara Rocha',
+    category: 'TRAINING',
+    documentType: 'Treinamento interno de biosseguranca',
+    title: 'Treinamento biosseguranca vencido - Ana Clara Rocha',
+    notes: 'Demo: reciclagem vencida para aparecer como prioridade na Auditoria.',
+    expiresOffsetDays: -12,
+    fileName: 'treinamento-vencido-ana-demo.pdf',
+  },
+  {
+    professionalName: 'Livia Torres',
+    category: 'PERMISSION',
+    documentType: 'Termo de confidencialidade LGPD e acesso a dados',
+    title: 'Termo LGPD provisorio - Livia Torres',
+    notes: 'Demo: profissional convidada com pendencias restantes propositalmente abertas.',
+    expiresOffsetDays: 8,
+    fileName: 'termo-lgpd-livia-demo.pdf',
+  },
+]
+
+const productsSeed = [
+  {
+    name: 'Acido hialuronico skinbooster',
+    category: 'Injetavel',
+    brand: 'Demo Pharma',
+    batch: 'AH-2404',
+    quantity: 2,
+    unit: 'seringa',
+    entryMode: 'EXISTING',
+    purchasedOffsetDays: -80,
+    expiresOffsetDays: -4,
+    notes: 'Demo: lote vencido para testar bloqueio operacional.',
+  },
+  {
+    name: 'Peeling mandelico 10%',
+    category: 'Cosmetico profissional',
+    brand: 'Derma Demo',
+    batch: 'PM-1026',
+    quantity: 4,
+    unit: 'frasco',
+    entryMode: 'NEW',
+    purchasedOffsetDays: -35,
+    expiresOffsetDays: 12,
+    notes: 'Demo: produto proximo do vencimento.',
+  },
+  {
+    name: 'Mascara calmante pos-procedimento',
+    category: 'Cosmetico profissional',
+    brand: 'LAppui Lab',
+    batch: 'MC-2211',
+    quantity: 8,
+    unit: 'unidade',
+    entryMode: 'NEW',
+    purchasedOffsetDays: -14,
+    expiresOffsetDays: 160,
+    notes: 'Demo: item em dia.',
+  },
+]
+
+const equipmentSeed = [
+  {
+    name: 'Autoclave Cristofoli 21L',
+    category: 'Esterilizacao',
+    brand: 'Cristofoli',
+    model: 'Vitale 21',
+    serialNumber: 'AUTO-DEMO-2104',
+    anvisaRegistration: 'ANVISA-DEMO-001',
+    entryMode: 'EXISTING',
+    acquiredOffsetDays: -620,
+    maintenanceOffsetDays: -10,
+    warrantyOffsetDays: 120,
+    notes: 'Demo: manutencao vencida para aparecer na Auditoria.',
+  },
+  {
+    name: 'LED facial fotobiomodulacao',
+    category: 'Tecnologia estetica',
+    brand: 'Light Demo',
+    model: 'LD Pro',
+    serialNumber: 'LED-DEMO-8821',
+    entryMode: 'EXISTING',
+    acquiredOffsetDays: -260,
+    maintenanceOffsetDays: 18,
+    warrantyOffsetDays: 240,
+    notes: 'Demo: manutencao proxima.',
+  },
+  {
+    name: 'Vapor de ozonio facial',
+    category: 'Apoio estetico',
+    brand: 'Clean Skin',
+    model: 'OZ-12',
+    serialNumber: 'OZ-DEMO-1299',
+    entryMode: 'NEW',
+    acquiredOffsetDays: -40,
+    maintenanceOffsetDays: 95,
+    warrantyOffsetDays: 320,
+    notes: 'Demo: equipamento em dia.',
+  },
+]
+
+const clinicBillsSeed = [
+  {
+    title: "Assinatura L'Appui - plano clinica",
+    category: 'SaaS',
+    amount: 349,
+    dueOffsetDays: 7,
+    notes: 'Demo: assinatura da clinica junto aos pagamentos.',
+  },
+  {
+    title: 'Coleta de residuos infectantes',
+    category: 'Operacional',
+    amount: 420,
+    dueOffsetDays: -3,
+    notes: 'Demo: conta vencida para validar Financeiro na Auditoria.',
+  },
+  {
+    title: 'Manutencao preventiva da autoclave',
+    category: 'Equipamentos',
+    amount: 680,
+    dueOffsetDays: 5,
+    notes: 'Demo: conta operacional proxima.',
+  },
+  {
+    title: 'Repasse profissional - mes anterior',
+    category: 'Folha de pagamento',
+    amount: 2860,
+    dueOffsetDays: -12,
+    paidOffsetDays: -8,
+    notes: 'Demo: conta paga para historico financeiro.',
+  },
+]
+
 function makeDate(dayOffset, hour, minute) {
   const date = new Date()
   date.setDate(date.getDate() + dayOffset)
   date.setHours(hour, minute, 0, 0)
   return date
+}
+
+function dateOnlyFromOffset(dayOffset) {
+  const date = new Date()
+  date.setDate(date.getDate() + dayOffset)
+  date.setHours(12, 0, 0, 0)
+  return date.toISOString().slice(0, 10)
 }
 
 function addMinutes(date, minutes) {
@@ -254,11 +556,262 @@ async function ensureSession() {
   }
 }
 
-async function ensureByName(path, token, payload) {
+async function ensureByName(path, token, payload, { updateExisting = false } = {}) {
   const list = await request(path, { token })
   const existing = list.find(item => item.name === payload.name)
-  if (existing) return existing
+  if (existing) {
+    if (!updateExisting) return existing
+    return request(`${path}/${existing.id}`, { method: 'PUT', token, body: payload })
+  }
   return request(path, { method: 'POST', token, body: payload })
+}
+
+async function ensureDocument(token, payload) {
+  const list = await request('/documents', { token })
+  const existing = list.find(item => item.title === payload.title || item.documentType === payload.documentType)
+  const body = {
+    ...payload,
+    expiresAt: typeof payload.expiresOffsetDays === 'number' ? dateOnlyFromOffset(payload.expiresOffsetDays) : undefined,
+    fileMimeType: payload.fileMimeType || 'application/pdf',
+    fileDataUrl: payload.fileDataUrl || DEMO_FILE_DATA_URL,
+  }
+  delete body.expiresOffsetDays
+
+  if (existing) {
+    return request(`/documents/${existing.id}`, { method: 'PUT', token, body })
+  }
+
+  return request('/documents', { method: 'POST', token, body })
+}
+
+async function ensureProfessionalDocument(token, professional, payload) {
+  const list = await request(`/professionals/${professional.id}/documents`, { token })
+  const existing = list.find(item => item.title === payload.title || item.documentType === payload.documentType)
+  const body = {
+    category: payload.category,
+    documentType: payload.documentType,
+    title: payload.title,
+    notes: payload.notes,
+    expiresAt: typeof payload.expiresOffsetDays === 'number' ? dateOnlyFromOffset(payload.expiresOffsetDays) : null,
+    fileName: payload.fileName,
+    fileMimeType: payload.fileMimeType || 'application/pdf',
+    fileDataUrl: payload.fileDataUrl || DEMO_FILE_DATA_URL,
+  }
+
+  if (existing) {
+    return request(`/professional-documents/${existing.id}`, { method: 'PUT', token, body })
+  }
+
+  return request(`/professionals/${professional.id}/documents`, { method: 'POST', token, body })
+}
+
+async function ensureInventoryItem(path, token, payload) {
+  const list = await request(path, { token })
+  const existing = list.find(item => item.name === payload.name)
+  const body = {
+    ...payload,
+    purchasedAt: typeof payload.purchasedOffsetDays === 'number' ? dateOnlyFromOffset(payload.purchasedOffsetDays) : undefined,
+    acquiredAt: typeof payload.acquiredOffsetDays === 'number' ? dateOnlyFromOffset(payload.acquiredOffsetDays) : undefined,
+    expiresAt: typeof payload.expiresOffsetDays === 'number' ? dateOnlyFromOffset(payload.expiresOffsetDays) : undefined,
+    maintenanceDueAt: typeof payload.maintenanceOffsetDays === 'number' ? dateOnlyFromOffset(payload.maintenanceOffsetDays) : undefined,
+    warrantyUntil: typeof payload.warrantyOffsetDays === 'number' ? dateOnlyFromOffset(payload.warrantyOffsetDays) : undefined,
+  }
+  delete body.purchasedOffsetDays
+  delete body.acquiredOffsetDays
+  delete body.expiresOffsetDays
+  delete body.maintenanceOffsetDays
+  delete body.warrantyOffsetDays
+
+  if (existing) {
+    return request(`${path}/${existing.id}`, { method: 'PUT', token, body })
+  }
+
+  return request(path, { method: 'POST', token, body })
+}
+
+async function ensureClinicBill(token, payload) {
+  const summary = await request('/billing/bills', { token })
+  const bills = Array.isArray(summary?.bills) ? summary.bills : []
+  const existing = bills.find(item => item.title === payload.title)
+  const body = {
+    ...payload,
+    dueAt: dateOnlyFromOffset(payload.dueOffsetDays),
+    paidAt: typeof payload.paidOffsetDays === 'number' ? dateOnlyFromOffset(payload.paidOffsetDays) : undefined,
+  }
+  delete body.dueOffsetDays
+  delete body.paidOffsetDays
+
+  if (existing) {
+    return request(`/billing/bills/${existing.id}`, { method: 'PUT', token, body })
+  }
+
+  return request('/billing/bills', { method: 'POST', token, body })
+}
+
+async function ensureConsentRecord({ token, userId, client, professional, type = 'default', signed = false }) {
+  const records = await prisma.consentRecord.findMany({
+    where: { userId, clientId: client.id },
+    orderBy: { createdAt: 'desc' },
+  })
+  const existing = records.find(record => {
+    const title = String(record.title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    const isImage = title.includes('uso de imagem') || title.includes('imagem')
+    return type === 'image' ? isImage : !isImage
+  })
+
+  if (existing && (!signed || existing.status === 'SIGNED')) {
+    return existing
+  }
+
+  let record = existing
+  if (!record) {
+    try {
+      record = await request(
+        type === 'image'
+          ? `/clients/${client.id}/consent-records/generate-image-use`
+          : `/clients/${client.id}/consent-records/generate-default`,
+        {
+          method: 'POST',
+          token,
+          body: type === 'image'
+            ? { clinicalUseAuthorized: true, marketingUseAuthorized: false }
+            : { versionLabel: 'demo-v1' },
+        }
+      )
+    } catch (error) {
+      if (error.status !== 423) throw error
+
+      record = await prisma.consentRecord.create({
+        data: {
+          userId,
+          clientId: client.id,
+          professionalId: professional?.id || null,
+          title: type === 'image' ? 'Termo de autorizacao de uso de imagem' : 'Termo de consentimento para procedimentos esteticos',
+          versionLabel: type === 'image' ? 'imagem-demo-v1' : 'demo-v1',
+          termText: type === 'image'
+            ? 'Demo: autorizacao de uso de imagem para acompanhamento clinico, prontuario e documentacao tecnica interna.'
+            : 'Demo: consentimento livre e esclarecido para procedimento estetico, cuidados, riscos esperados e registro em prontuario.',
+          status: signed ? 'SIGNED' : 'PENDING',
+          signerName: signed ? client.name : null,
+          signerDocument: signed ? (client.cpf || '000.000.000-00') : null,
+          professionalName: professional?.name || null,
+          signatureDataUrl: signed ? DEMO_SIGNATURE_DATA_URL : null,
+          signedAt: signed ? new Date() : null,
+          signedIp: signed ? '127.0.0.1' : null,
+          signedUserAgent: signed ? 'seed-demo' : null,
+        },
+      })
+    }
+  }
+
+  if (!signed || record.status === 'SIGNED') {
+    return record
+  }
+
+  const signaturePayload = {
+    signerName: client.name,
+    signerDocument: client.cpf || '000.000.000-00',
+    professionalId: professional?.id || null,
+    professionalName: professional?.name || 'Responsavel tecnico demo',
+    signatureDataUrl: DEMO_SIGNATURE_DATA_URL,
+    accepted: true,
+    status: 'SIGNED',
+  }
+
+  try {
+    return await request(`/consent-records/${record.id}/sign`, {
+      method: 'POST',
+      token,
+      body: signaturePayload,
+    })
+  } catch (error) {
+    if (error.status !== 423) throw error
+
+    return prisma.consentRecord.update({
+      where: { id: record.id },
+      data: {
+        status: 'SIGNED',
+        signerName: signaturePayload.signerName,
+        signerDocument: signaturePayload.signerDocument,
+        professionalId: signaturePayload.professionalId,
+        professionalName: signaturePayload.professionalName,
+        signatureDataUrl: signaturePayload.signatureDataUrl,
+        signedAt: new Date(),
+        signedIp: '127.0.0.1',
+        signedUserAgent: 'seed-demo',
+      },
+    })
+  }
+}
+
+async function ensureServicePopGap(userId, service) {
+  if (!service?.id) return
+
+  await prisma.servicePop.deleteMany({
+    where: { userId, serviceId: service.id },
+  })
+}
+
+async function cleanupLegacyDemoArtifacts(userId) {
+  const legacyServices = await prisma.service.findMany({
+    where: {
+      userId,
+      name: { in: ['Design de Sobrancelhas Luxe'] },
+    },
+  })
+
+  if (legacyServices.length) {
+    const replacementService = await prisma.service.findFirst({
+      where: {
+        userId,
+        name: 'Microagulhamento Revitalizante',
+      },
+    })
+
+    if (replacementService) {
+      await prisma.appointment.updateMany({
+        where: {
+          userId,
+          serviceId: { in: legacyServices.map(service => service.id) },
+        },
+        data: {
+          serviceId: replacementService.id,
+          price: replacementService.price,
+          notes: 'Seed demo atualizado: atendimento migrado para protocolo estético avançado.',
+        },
+      })
+    }
+
+    await prisma.service.updateMany({
+      where: {
+        id: { in: legacyServices.map(service => service.id) },
+      },
+      data: { active: false },
+    })
+  }
+
+  await prisma.productItem.updateMany({
+    where: {
+      userId,
+      name: { in: ['Serum Vitamina C 20%', 'Acido hialuronico sterile'] },
+    },
+    data: { active: false },
+  })
+
+  await prisma.equipmentItem.updateMany({
+    where: {
+      userId,
+      name: { in: ['Laser Lavieen', 'Autoclave Cristofoli'] },
+    },
+    data: { active: false },
+  })
+
+  await prisma.clinicDocument.deleteMany({
+    where: {
+      userId,
+      title: { in: ['Manual de biosseguranca - sala facial'] },
+    },
+  })
 }
 
 function hasStructuredAnamnesis(record) {
@@ -460,7 +1013,63 @@ function findAppointment(list, definition, related) {
   ))
 }
 
-async function ensureAppointment(token, definition, related) {
+function appointmentKey(definition, related) {
+  return [
+    related.client.id,
+    related.service.id,
+    related.professional.id,
+    makeDate(definition.dayOffset, definition.hour, definition.minute).toISOString(),
+  ].join(':')
+}
+
+async function cleanupStaleDemoAppointments(userId, definitions, lookup) {
+  const plannedKeys = new Set(definitions.map(definition => {
+    const related = {
+      client: lookup.clients[definition.clientName],
+      service: lookup.services[definition.serviceName],
+      professional: lookup.professionals[definition.professionalName],
+    }
+
+    return appointmentKey(definition, related)
+  }))
+
+  const existingDemoAppointments = await prisma.appointment.findMany({
+    where: {
+      userId,
+      notes: { startsWith: 'Seed demo' },
+    },
+    select: {
+      id: true,
+      clientId: true,
+      serviceId: true,
+      professionalId: true,
+      startAt: true,
+    },
+  })
+
+  const staleAppointmentIds = existingDemoAppointments
+    .filter(appointment => !plannedKeys.has([
+      appointment.clientId,
+      appointment.serviceId,
+      appointment.professionalId,
+      appointment.startAt.toISOString(),
+    ].join(':')))
+    .map(appointment => appointment.id)
+
+  if (!staleAppointmentIds.length) return
+
+  await prisma.payment.deleteMany({
+    where: { appointmentId: { in: staleAppointmentIds } },
+  })
+  await prisma.whatsappLog.deleteMany({
+    where: { appointmentId: { in: staleAppointmentIds } },
+  })
+  await prisma.appointment.deleteMany({
+    where: { id: { in: staleAppointmentIds } },
+  })
+}
+
+async function ensureAppointment(token, userId, definition, related) {
   const existingList = await request('/appointments', { token })
   const match = findAppointment(existingList, definition, related)
   const startAt = makeDate(definition.dayOffset, definition.hour, definition.minute)
@@ -470,20 +1079,35 @@ async function ensureAppointment(token, definition, related) {
     return match
   }
 
-  return request('/appointments', {
-    method: 'POST',
-    token,
-    body: {
-      clientId: related.client.id,
-      serviceId: related.service.id,
-      professionalId: related.professional.id,
-      startAt: startAt.toISOString(),
-      endAt: endAt.toISOString(),
-      notes: definition.notes,
-      price: Number(related.service.price),
-      status: definition.status,
-    },
-  })
+  const body = {
+    clientId: related.client.id,
+    serviceId: related.service.id,
+    professionalId: related.professional.id,
+    startAt: startAt.toISOString(),
+    endAt: endAt.toISOString(),
+    notes: definition.notes,
+    price: Number(related.service.price),
+    status: definition.status,
+  }
+
+  try {
+    return await request('/appointments', {
+      method: 'POST',
+      token,
+      body,
+    })
+  } catch (error) {
+    if (error.status !== 423) throw error
+
+    return prisma.appointment.create({
+      data: {
+        ...body,
+        userId,
+        startAt,
+        endAt,
+      },
+    })
+  }
 }
 
 async function ensurePayment(token, appointment, payment) {
@@ -505,6 +1129,8 @@ async function ensurePayment(token, appointment, payment) {
 async function main() {
   const session = await ensureSession()
   const token = session.token
+  const userId = session.user.id
+  await cleanupLegacyDemoArtifacts(userId)
 
   const clients = {}
   for (const client of clientsSeed) {
@@ -513,15 +1139,82 @@ async function main() {
 
   const professionals = {}
   for (const professional of professionalsSeed) {
-    professionals[professional.name] = await ensureByName('/professionals', token, professional)
+    professionals[professional.name] = await ensureByName('/professionals', token, professional, { updateExisting: true })
   }
 
   const services = {}
   for (const service of servicesSeed) {
-    services[service.name] = await ensureByName('/services', token, service)
+    const { demoWithoutPop, ...servicePayload } = service
+    services[service.name] = await ensureByName('/services', token, servicePayload, { updateExisting: true })
+    if (demoWithoutPop) {
+      await ensureServicePopGap(userId, services[service.name])
+    }
+  }
+  await cleanupLegacyDemoArtifacts(userId)
+  await cleanupStaleDemoAppointments(userId, appointmentSeed, { clients, services, professionals })
+
+  for (const client of clientsSeed.slice(0, 3)) {
+    await ensureAnamnesis(clients[client.name].id, token, client)
   }
 
-  await ensureAnamnesis(clientsSeed[0] ? clients[clientsSeed[0].name].id : null, token, clientsSeed[0])
+  await ensureConsentRecord({
+    token,
+    userId,
+    client: clients['Sofia Almeida'],
+    professional: professionals['Marina Leal'],
+    signed: true,
+  })
+  await ensureConsentRecord({
+    token,
+    userId,
+    client: clients['Sofia Almeida'],
+    professional: professionals['Marina Leal'],
+    type: 'image',
+    signed: true,
+  })
+  await ensureConsentRecord({
+    token,
+    userId,
+    client: clients['Camila Nogueira'],
+    professional: professionals['Ana Clara Rocha'],
+    signed: false,
+  })
+  await ensureConsentRecord({
+    token,
+    userId,
+    client: clients['Helena Duarte'],
+    professional: professionals['Ana Clara Rocha'],
+    type: 'image',
+    signed: false,
+  })
+
+  const seededDocuments = []
+  for (const document of documentsSeed) {
+    seededDocuments.push(await ensureDocument(token, document))
+  }
+
+  const seededProfessionalDocuments = []
+  for (const document of professionalDocumentsSeed) {
+    const professional = professionals[document.professionalName]
+    if (professional) {
+      seededProfessionalDocuments.push(await ensureProfessionalDocument(token, professional, document))
+    }
+  }
+
+  const seededProducts = []
+  for (const product of productsSeed) {
+    seededProducts.push(await ensureInventoryItem('/products', token, product))
+  }
+
+  const seededEquipment = []
+  for (const equipment of equipmentSeed) {
+    seededEquipment.push(await ensureInventoryItem('/equipment', token, equipment))
+  }
+
+  const seededBills = []
+  for (const bill of clinicBillsSeed) {
+    seededBills.push(await ensureClinicBill(token, bill))
+  }
 
   const seededAppointments = []
   for (const definition of appointmentSeed) {
@@ -531,7 +1224,7 @@ async function main() {
       professional: professionals[definition.professionalName],
     }
 
-    const appointment = await ensureAppointment(token, definition, related)
+    const appointment = await ensureAppointment(token, userId, definition, related)
     await ensurePayment(token, appointment, definition.payment)
     seededAppointments.push(appointment)
   }
@@ -549,6 +1242,11 @@ async function main() {
       clients: Object.keys(clients).length,
       professionals: Object.keys(professionals).length,
       services: Object.keys(services).length,
+      documents: seededDocuments.length,
+      professionalDocuments: seededProfessionalDocuments.length,
+      products: seededProducts.length,
+      equipment: seededEquipment.length,
+      bills: seededBills.length,
       appointments: seededAppointments.length,
     },
     dashboard,

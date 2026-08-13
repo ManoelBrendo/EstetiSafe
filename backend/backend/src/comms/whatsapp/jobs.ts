@@ -1,5 +1,21 @@
+import crypto from 'crypto'
 import { WhatsAppProvider } from './WhatsAppProvider'
 import type { LoggerLike, WhatsAppClinicConfig } from './types'
+
+const ENCRYPTION_ALGORITHM = 'aes-256-cbc'
+
+export function decryptToken(encryptedText: string, secret: string): string {
+  if (!encryptedText) return ''
+  const parts = encryptedText.split(':')
+  if (parts.length !== 2) return encryptedText // plain text fallback
+  const iv = Buffer.from(parts[0], 'hex')
+  const encrypted = parts[1]
+  const key = crypto.createHash('sha256').update(String(secret || 'default-secret-key')).digest()
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv)
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+  decrypted += decipher.final('utf8')
+  return decrypted
+}
 
 function formatAppointmentDateTime(date: Date) {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -15,7 +31,8 @@ export function createProviderFromConfig(
   config: WhatsAppClinicConfig,
   dependencies: { decryptAccessToken?: (value: string) => string; fetchImpl?: typeof fetch } = {},
 ) {
-  const decryptAccessToken = dependencies.decryptAccessToken || ((value: string) => value)
+  const secretKey = process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || process.env.WHATSAPP_APP_SECRET || 'default-secret-key'
+  const decryptAccessToken = dependencies.decryptAccessToken || ((value: string) => decryptToken(value, secretKey))
 
   return new WhatsAppProvider({
     accessToken: decryptAccessToken(config.accessTokenEncrypted),

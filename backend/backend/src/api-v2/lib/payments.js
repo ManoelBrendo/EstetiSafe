@@ -1,4 +1,4 @@
-﻿const { parseOptionalDate, httpError } = require('./http')
+const { parseOptionalDate, httpError } = require('./http')
 const { ensureClientOwnership, buildAccessState } = require('./medical-records')
 
 function normalizePaymentData(data) {
@@ -188,6 +188,27 @@ async function upsertAppointmentPayment(prisma, userId, payload) {
           lockedAt: appointment.client.lockedAt || payment.paidAt || new Date(),
         },
       })
+    } else {
+      const otherPaidPayment = await tx.payment.findFirst({
+        where: {
+          appointment: {
+            clientId: appointment.client.id,
+            userId,
+          },
+          status: 'PAID',
+        },
+      })
+
+      if (!otherPaidPayment) {
+        await tx.client.update({
+          where: { id: appointment.client.id },
+          data: {
+            isPaid: false,
+            isLocked: false,
+            lockedAt: null,
+          },
+        })
+      }
     }
 
     return tx.payment.findUniqueOrThrow({
@@ -244,6 +265,28 @@ async function updatePayment(prisma, userId, paymentId, payload) {
           lockedAt: current.appointment.client.lockedAt || updated.paidAt || new Date(),
         },
       })
+    } else {
+      const otherPaidPayment = await tx.payment.findFirst({
+        where: {
+          appointment: {
+            clientId: current.appointment.client.id,
+            userId,
+          },
+          status: 'PAID',
+          id: { not: paymentId },
+        },
+      })
+
+      if (!otherPaidPayment) {
+        await tx.client.update({
+          where: { id: current.appointment.client.id },
+          data: {
+            isPaid: false,
+            isLocked: false,
+            lockedAt: null,
+          },
+        })
+      }
     }
 
     return tx.payment.findUniqueOrThrow({

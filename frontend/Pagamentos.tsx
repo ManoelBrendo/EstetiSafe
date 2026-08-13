@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { useAuth } from './useAuth'
 import { Icon, type IconName } from './Icon'
+import { VerifyActionModal } from './components/VerifyActionModal'
+import { formatDate as uFormatDate, formatDateTime as uFormatDateTime } from './dateUtils'
 import { getClinicBranding } from './branding'
 import { isImpersonating } from './support'
 import type { Identifier } from './clinicalTypes'
@@ -224,25 +226,14 @@ function formatCurrency(value: number | string | null | undefined): string {
 
 function formatDate(value?: string | Date | null): string {
   if (!value) return 'Não definido'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) return 'Não definido'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-  }).format(parsedDate)
+  const formatted = uFormatDate(value)
+  return formatted === 'Não informado' ? 'Não definido' : formatted
 }
 
 function formatDateTime(value?: string | Date | null): string {
   if (!value) return 'Sem registro'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) return 'Sem registro'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(parsedDate)
+  const formatted = uFormatDateTime(value)
+  return formatted === 'Não informado' ? 'Sem registro' : formatted
 }
 
 function getBillingStatus(status?: string | null): BadgeMeta {
@@ -483,6 +474,7 @@ export default function Pagamentos() {
   const [selectedBill, setSelectedBill] = useState<ClinicBillItem | null>(null)
   const [billForm, setBillForm] = useState<BillFormState>(emptyBillForm)
   const [form, setForm] = useState<BillingConfigFormState>(emptyBillingConfigForm)
+  const [deleteTargetId, setDeleteTargetId] = useState<Identifier | null>(null)
   const { clinicName, brandLogo } = getClinicBranding(user)
 
   const load = useCallback(async (): Promise<void> => {
@@ -657,6 +649,37 @@ export default function Pagamentos() {
     }
   }
 
+  const handleSelectPlan = async (price: number, planName: string) => {
+    setForm(current => ({
+      ...current,
+      amount: String(price),
+      reference: planName,
+    }))
+
+    setCreatingGatewayIntent(true)
+    try {
+      const { data } = await api.post<BillingGatewayIntentResponse>('/billing/gateway/intents', {
+        method: 'PIX',
+        amount: price,
+      })
+
+      setGatewayStatus(current => ({
+        provider: current?.provider || data.intent.provider || 'MANUAL_READY',
+        mode: current?.mode || 'provider_agnostic',
+        configured: Boolean(current?.configured),
+        webhookConfigured: Boolean(current?.webhookConfigured),
+        latestIntent: data.intent,
+        message: `Checkout preparado para o ${planName}.`,
+      }))
+      await Promise.all([load(), refreshUser()])
+      toast.success(`${planName} selecionado! Cobrança de R$ ${price} preparada.`)
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível preparar o checkout do plano.'))
+    } finally {
+      setCreatingGatewayIntent(false)
+    }
+  }
+
   async function handleCreateGatewayIntent(): Promise<void> {
     const parsedAmount = form.amount ? Number(form.amount) : Number(billing.amount || 0)
 
@@ -684,6 +707,10 @@ export default function Pagamentos() {
       }))
       await Promise.all([load(), refreshUser()])
       toast.success('Cobrança da assinatura preparada')
+
+      if (data.intent.checkoutUrl) {
+        window.location.href = data.intent.checkoutUrl
+      }
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Não foi possível preparar a cobrança da assinatura'))
     } finally {
@@ -779,16 +806,21 @@ export default function Pagamentos() {
     }
   }
 
-  async function handleDeleteBill(billId: Identifier): Promise<void> {
-    if (!window.confirm('Deseja remover esta conta da clínica?')) return
+  async function handleConfirmDeleteBill() {
+    if (!deleteTargetId) return
 
     try {
-      await api.delete<{ ok: boolean }>(`/billing/bills/${billId}`)
+      await api.delete<{ ok: boolean }>(`/billing/bills/${deleteTargetId}`)
       toast.success('Conta removida com sucesso')
+      setDeleteTargetId(null)
       await load()
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Não foi possível remover esta conta'))
     }
+  }
+
+  function handleDeleteBill(billId: Identifier): void {
+    setDeleteTargetId(billId)
   }
 
   if (loading) {
@@ -901,6 +933,144 @@ export default function Pagamentos() {
           value={billing.amount != null ? formatCurrency(billing.amount) : 'A definir'}
           helper={`Status atual: ${statusMeta.label}.`}
         />
+      </section>
+
+      <section className="card section-card" style={{ marginBottom: '24px', padding: '24px' }}>
+        <div className="billing-alert-head" style={{ marginBottom: '24px' }}>
+          <div>
+            <span className="eyebrow">Planos de Assinatura</span>
+            <h2 className="section-title">Escolha o plano ideal para sua clínica</h2>
+            <p className="section-copy">Selecione o plano desejado. O sistema preparará automaticamente a cobrança de teste.</p>
+          </div>
+        </div>
+        
+        <div className="plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+          <div className="plan-card">
+            <div>
+              <h3>Plano Starter</h3>
+              <p>Ideal para esteticistas autônomas iniciando suas atividades.</p>
+              <div className="price">
+                R$ 199<span>/mês</span>
+              </div>
+              <ul>
+                <li>Até 100 clientes cadastrados</li>
+                <li>Prontuário e Ficha de Anamnese</li>
+                <li>Assinatura eletrônica de termos</li>
+                <li>Auditoria base de documentos</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: '16px', height: '40px' }}
+              onClick={() => void handleSelectPlan(199, 'Plano Starter')}
+              disabled={creatingGatewayIntent}
+            >
+              Escolher Starter
+            </button>
+          </div>
+
+          <div className="plan-card recommended">
+            <span style={{ position: 'absolute', top: '-12px', right: '24px', background: '#b6894d', color: '#ffffff', fontSize: '0.65rem', fontWeight: 800, padding: '4px 12px', borderRadius: '999px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Recomendado</span>
+            <div>
+              <h3>Plano Clinic</h3>
+              <p>Gestão avançada para clínicas em expansão e crescimento.</p>
+              <div className="price">
+                R$ 349<span>/mês</span>
+              </div>
+              <ul>
+                <li>Clientes e prontuários ilimitados</li>
+                <li>Agenda + Lembretes via WhatsApp</li>
+                <li>Rastreabilidade ANVISA e POPs</li>
+                <li>Planos de ação corretiva VISA/LGPD</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-gold"
+              style={{ width: '100%', marginTop: '16px', height: '40px' }}
+              onClick={() => void handleSelectPlan(349, 'Plano Clinic')}
+              disabled={creatingGatewayIntent}
+            >
+              Escolher Clinic
+            </button>
+          </div>
+
+          <div className="plan-card">
+            <div>
+              <h3>Plano Premium</h3>
+              <p>Gestão multi-profissional para redes e clínicas integradas.</p>
+              <div className="price">
+                R$ 599<span>/mês</span>
+              </div>
+              <ul>
+                <li>Todos os recursos do Clinic</li>
+                <li>Gestão de profissionais e comissões</li>
+                <li>Checkout automatizado Stripe</li>
+                <li>Suporte técnico prioritário 24/7</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: '16px', height: '40px' }}
+              onClick={() => void handleSelectPlan(599, 'Plano Premium')}
+              disabled={creatingGatewayIntent}
+            >
+              Escolher Premium
+            </button>
+          </div>
+
+          <div className="plan-card">
+            <div>
+              <h3>Plano Royal</h3>
+              <p>Ideal para redes, franquias e clínicas de alta performance.</p>
+              <div className="price">
+                R$ 999<span>/mês</span>
+              </div>
+              <ul>
+                <li>Multi-clínicas e filiais ilimitadas</li>
+                <li>Auditoria automatizada por IA</li>
+                <li>Gerente de contas e suporte dedicado</li>
+                <li>Customizações e POPs exclusivos</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: '16px', height: '40px' }}
+              onClick={() => void handleSelectPlan(999, 'Plano Royal')}
+              disabled={creatingGatewayIntent}
+            >
+              Escolher Royal
+            </button>
+          </div>
+
+          <div className="plan-card">
+            <div>
+              <h3>Plano Imperial</h3>
+              <p>Solução definitiva corporativa com White-Label e SLA customizado.</p>
+              <div className="price">
+                R$ 1.499<span>/mês</span>
+              </div>
+              <ul>
+                <li>Todos os recursos do Plano Royal</li>
+                <li>White-Label (Domínio e marca próprios)</li>
+                <li>Integração total via API customizada</li>
+                <li>Suporte corporativo e SLA de 1 hora</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: '16px', height: '40px' }}
+              onClick={() => void handleSelectPlan(1499, 'Plano Imperial')}
+              disabled={creatingGatewayIntent}
+            >
+              Escolher Imperial
+            </button>
+          </div>
+        </div>
       </section>
 
       <div className="billing-grid">
@@ -1025,6 +1195,16 @@ export default function Pagamentos() {
               <button type="button" className="btn btn-outline btn-sm" onClick={handleCreateGatewayIntent} disabled={creatingGatewayIntent}>
                 {creatingGatewayIntent ? <span className="spinner" /> : <><Icon name="dollar" /> Gerar cobrança</>}
               </button>
+              {latestGatewayIntent?.status === 'PENDING' && latestGatewayIntent?.checkoutUrl ? (
+                <a
+                  href={latestGatewayIntent.checkoutUrl}
+                  className="btn btn-primary btn-sm"
+                  target="_self"
+                  rel="noopener noreferrer"
+                >
+                  <Icon name="creditCard" /> Pagar com Stripe
+                </a>
+              ) : null}
               {canManageSubscription && latestGatewayIntent?.status === 'PENDING' ? (
                 <button type="button" className="btn btn-gold btn-sm" onClick={handleSimulateGatewayPayment} disabled={simulatingGatewayPayment}>
                   {simulatingGatewayPayment ? <span className="spinner" /> : <><Icon name="check" /> Simular recebimento</>}
@@ -1253,6 +1433,14 @@ export default function Pagamentos() {
           </div>
         </div>
       ) : null}
+
+      <VerifyActionModal
+        isOpen={deleteTargetId !== null}
+        title="Remover Registro Financeiro"
+        description="Esta ação é crítica e removerá permanentemente esta conta registrada do financeiro da clínica. Para confirmar, digite sua senha."
+        onConfirm={handleConfirmDeleteBill}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   )
 }

@@ -16,6 +16,7 @@ function createDocumentRouteHarness() {
     id: 77,
     email: 'clinica@example.com',
     ownedClinic: { id: 14 },
+    clinicOperationalScopes: ['LASER'],
   }
   const baseDocument = {
     id: 321,
@@ -184,6 +185,20 @@ test('buildDocumentDashboard computes coverage, missing requirements, and alerts
   assert.ok(dashboard.alerts.length >= 1)
 })
 
+test('buildDocumentDashboard adapts recommended documents to clinic operational profile', () => {
+  const baseDashboard = buildDocumentDashboard([])
+  const laserDashboard = buildDocumentDashboard([], { operationalScopes: ['LASER'] })
+
+  assert.equal(laserDashboard.profile.selectedCount, 1)
+  assert.ok(laserDashboard.profile.scopeLabels.includes('Laser e tecnologias'))
+  assert.ok(laserDashboard.recommendedRequiredCount > baseDashboard.recommendedRequiredCount)
+  assert.ok(laserDashboard.profile.specializedRequirementCount > 0)
+  assert.ok(laserDashboard.missingDocuments.some(item => (
+    item.requirement === 'Termo de consentimento para laser e fototerapia'
+    && item.sourceScopes.includes('LASER')
+  )))
+})
+
 test('normalizeDocumentData trims values and delegates date parsing', () => {
   const normalized = normalizeDocumentData({
     category: 'LEGAL',
@@ -214,6 +229,12 @@ test('document routes use current user scope and write audit trail', async t => 
   const listResponse = await harness.request('/documents')
   assert.equal(listResponse.status, 200)
   assert.equal(harness.calls.findManyWhere.at(-1).userId, 77)
+
+  const summaryResponse = await harness.request('/documents/summary')
+  assert.equal(summaryResponse.status, 200)
+  const summary = await summaryResponse.json()
+  assert.deepEqual(summary.profile.scopes, ['LASER'])
+  assert.ok(summary.profile.specializedRequirementCount > 0)
 
   const createResponse = await harness.request('/documents', {
     method: 'POST',

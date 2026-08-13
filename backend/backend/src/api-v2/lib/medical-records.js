@@ -1,4 +1,5 @@
 const { httpError, parseOptionalDate, sanitizeCpf, compactObject } = require('./http')
+const { maskCpf, maskPhone } = require('./dataMasking')
 
 const PHOTO_CONSENT_VERSION = 'photo-consent-v1'
 
@@ -34,7 +35,7 @@ function assertEditableClient(client) {
 
 async function ensureClientOwnership(prisma, userId, clientId) {
   const client = await prisma.client.findFirst({
-    where: { id: clientId, userId },
+    where: { id: clientId, userId, deletedAt: null },
     include: clientDetailInclude,
   })
 
@@ -271,8 +272,11 @@ function serializeClientListItem(client) {
   const consentRecords = Array.isArray(client.consentRecords) ? client.consentRecords : []
   const latestConsent = consentRecords.find(record => !isImageConsentRecord(record)) || consentRecords[0] || null
 
+  const base = serializeClientBase(client)
   return {
-    ...serializeClientBase(client),
+    ...base,
+    cpf: maskCpf(base.cpf),
+    phone: maskPhone(base.phone),
     latestAnamnesis: summarizeAnamnesis(latestAnamnesis),
     latestConsentRecord: summarizeConsentRecord(latestConsent),
     consentRecords: consentRecords.map(summarizeConsentRecord),
@@ -555,6 +559,7 @@ async function createAnamnesisVersion(prisma, userId, clientId, payload) {
 }
 
 module.exports = {
+  clientDetailInclude,
   getProntuarioLockMessage,
   assertEditableClient,
   ensureClientOwnership,
@@ -575,4 +580,7 @@ module.exports = {
   buildAccessState,
   normalizePhotoRecordConsent,
   createAnamnesisVersion,
+  extractClientPatchFromAnswers,
+  extractExplicitClientPatch,
 }
+

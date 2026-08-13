@@ -1,4 +1,4 @@
-﻿const express = require('express')
+const express = require('express')
 const { asyncHandler, pickPagination, buildPaginated, parseOptionalDate } = require('../lib/http')
 const { serializeAuditLog, buildAuditLogSummary } = require('../lib/audit-logs')
 
@@ -149,6 +149,16 @@ function createAuditLogsRouter(context) {
         to: to ? to.toISOString() : null,
       },
     })
+  }))
+
+  router.get('/verify', asyncHandler(async (req, res) => {
+    if (req.currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Apenas administradores podem verificar a integridade da cadeia de logs.' })
+    }
+
+    const { verifyAuditLogChain } = require('../lib/auditChaining')
+    const report = await verifyAuditLogChain(context.prisma)
+    res.json(report)
   }))
 
   return router

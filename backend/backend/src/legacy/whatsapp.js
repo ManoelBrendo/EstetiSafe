@@ -1,6 +1,31 @@
 const crypto = require('crypto')
+const { authMiddleware, handle } = require('./lib/middlewares')
 const DEFAULT_GRAPH_API_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION || 'v21.0'
 const DEFAULT_API_BASE_URL = 'https://graph.facebook.com'
+const ENCRYPTION_ALGORITHM = 'aes-256-cbc'
+
+function encryptToken(text, secret) {
+  if (!text) return ''
+  const key = crypto.createHash('sha256').update(String(secret || 'default-secret-key')).digest()
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, key, iv)
+  let encrypted = cipher.update(text, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+  return iv.toString('hex') + ':' + encrypted
+}
+
+function decryptToken(encryptedText, secret) {
+  if (!encryptedText) return ''
+  const parts = encryptedText.split(':')
+  if (parts.length !== 2) return encryptedText // return plain text fallback
+  const iv = Buffer.from(parts[0], 'hex')
+  const encrypted = parts[1]
+  const key = crypto.createHash('sha256').update(String(secret || 'default-secret-key')).digest()
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, key, iv)
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8')
+  decrypted += decipher.final('utf8')
+  return decrypted
+}
 
 class WhatsAppProviderError extends Error {
   constructor(message, details = {}) {
@@ -511,14 +536,10 @@ async function getWhatsAppOperationalSnapshot({ prisma, env = process.env, now =
 function registerWhatsAppRoutes({
   app,
   prisma,
-  handle,
-  authMiddleware,
   verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
   appSecret = process.env.WHATSAPP_APP_SECRET,
   logger = console,
 }) {
-  if (!app) throw new Error('registerWhatsAppRoutes requer app')
-  if (!prisma) throw new Error('registerWhatsAppRoutes requer prisma')
 
   app.get('/webhooks/whatsapp', async (req, res, next) => {
     try {
@@ -570,6 +591,104 @@ function registerWhatsAppRoutes({
     }
 
     app.get('/notifications/status', authMiddleware, handle ? handle(statusHandler) : statusHandler)
+
+    const getConfigHandler = async (req, res) => {
+      const config = await prisma.whatsappClinicConfig.findUnique({
+        where: { userId: req.user.id }
+      })
+      if (!config) {
+        return res.json({
+          phoneNumberId: '',
+          businessAccountId: '',
+          accessToken: '',
+          verifyToken: '',
+          defaultLanguage: 'pt_BR',
+          appointmentTemplateName: 'appointment_confirmation',
+          consentTemplateName: 'consent_link',
+          active: false
+        })
+      }
+      return res.json({
+        phoneNumberId: config.phoneNumberId || '',
+        businessAccountId: config.businessAccountId || '',
+        accessToken: config.accessTokenEncrypted ? '••••••••' : '',
+        verifyToken: config.verifyToken || '',
+        defaultLanguage: config.defaultLanguage || 'pt_BR',
+        appointmentTemplateName: config.appointmentTemplateName || 'appointment_confirmation',
+        consentTemplateName: config.consentTemplateName || 'consent_link',
+        active: config.active || false
+      })
+    }
+
+    app.get('/notifications/config', authMiddleware, handle ? handle(getConfigHandler) : getConfigHandler)
+
+    const putConfigHandler = async (req, res) => {
+      const {
+        phoneNumberId,
+        businessAccountId,
+        accessToken,
+        verifyToken,
+        defaultLanguage,
+        appointmentTemplateName,
+        consentTemplateName,
+        active
+      } = req.body
+
+      if (!phoneNumberId || !String(phoneNumberId).trim()) {
+        return res.status(400).json({ error: 'phoneNumberId é obrigatório' })
+      }
+      if (!verifyToken || !String(verifyToken).trim()) {
+        return res.status(400).json({ error: 'verifyToken é obrigatório' })
+      }
+
+      const existingConfig = await prisma.whatsappClinicConfig.findUnique({
+        where: { userId: req.user.id }
+      })
+
+      let finalAccessTokenEncrypted = existingConfig?.accessTokenEncrypted || ''
+      if (accessToken && accessToken !== '••••••••') {
+        const secretKey = process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || process.env.WHATSAPP_APP_SECRET || 'default-secret-key'
+        finalAccessTokenEncrypted = encryptToken(accessToken, secretKey)
+      }
+
+      const updatedConfig = await prisma.whatsappClinicConfig.upsert({
+        where: { userId: req.user.id },
+        create: {
+          userId: req.user.id,
+          phoneNumberId: String(phoneNumberId).trim(),
+          businessAccountId: businessAccountId ? String(businessAccountId).trim() : null,
+          accessTokenEncrypted: finalAccessTokenEncrypted,
+          verifyToken: String(verifyToken).trim(),
+          defaultLanguage: defaultLanguage || 'pt_BR',
+          appointmentTemplateName: appointmentTemplateName || 'appointment_confirmation',
+          consentTemplateName: consentTemplateName || 'consent_link',
+          active: Boolean(active)
+        },
+        update: {
+          phoneNumberId: String(phoneNumberId).trim(),
+          businessAccountId: businessAccountId ? String(businessAccountId).trim() : null,
+          accessTokenEncrypted: finalAccessTokenEncrypted,
+          verifyToken: String(verifyToken).trim(),
+          defaultLanguage: defaultLanguage || 'pt_BR',
+          appointmentTemplateName: appointmentTemplateName || 'appointment_confirmation',
+          consentTemplateName: consentTemplateName || 'consent_link',
+          active: Boolean(active)
+        }
+      })
+
+      return res.json({
+        phoneNumberId: updatedConfig.phoneNumberId,
+        businessAccountId: updatedConfig.businessAccountId,
+        accessToken: updatedConfig.accessTokenEncrypted ? '••••••••' : '',
+        verifyToken: updatedConfig.verifyToken,
+        defaultLanguage: updatedConfig.defaultLanguage,
+        appointmentTemplateName: updatedConfig.appointmentTemplateName,
+        consentTemplateName: updatedConfig.consentTemplateName,
+        active: updatedConfig.active
+      })
+    }
+
+    app.put('/notifications/config', authMiddleware, handle ? handle(putConfigHandler) : putConfigHandler)
   }
 }
 
@@ -584,7 +703,8 @@ function formatAppointmentDateTime(date) {
 }
 
 function createProviderFromConfig(config, dependencies = {}) {
-  const decryptAccessToken = dependencies.decryptAccessToken || (value => value)
+  const secretKey = process.env.WHATSAPP_TOKEN_ENCRYPTION_KEY || process.env.WHATSAPP_APP_SECRET || 'default-secret-key'
+  const decryptAccessToken = dependencies.decryptAccessToken || (value => decryptToken(value, secretKey))
   return new WhatsAppProvider({
     accessToken: decryptAccessToken(config.accessTokenEncrypted),
     phoneNumberId: config.phoneNumberId,
@@ -734,6 +854,8 @@ module.exports = {
   buildWhatsAppReadiness,
   createAppointmentConfirmationJob,
   createProviderFromConfig,
+  encryptToken,
+  decryptToken,
   extractWebhookEvents,
   findConfigForWebhook,
   getIncomingMessageText,

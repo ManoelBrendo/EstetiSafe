@@ -1,4 +1,12 @@
 const { z } = require('zod')
+const {
+  parseId,
+  parseDateOnly,
+  createAuditLogFromRequest,
+  clinicOperationalScopeCatalog,
+  getDocumentStatus,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
 
 const documentCategorySchema = z.enum(['LEGAL', 'SANITARY', 'CLIENTS', 'WASTE'])
 
@@ -27,52 +35,7 @@ const documentRequirementCatalog = {
   WASTE: ['PGRSS', 'Contrato da coletora', 'Comprovante de coleta', 'Manifesto de resíduos'],
 }
 
-function getDocumentStatus(expiresAt) {
-  if (!expiresAt) {
-    return {
-      status: 'WITHOUT_EXPIRY',
-      label: 'Sem vencimento',
-      daysUntilExpiry: null,
-    }
-  }
 
-  const now = new Date()
-  const expiresAtEndOfDay = new Date(expiresAt)
-
-  if (Number.isNaN(expiresAtEndOfDay.getTime())) {
-    return {
-      status: 'WITHOUT_EXPIRY',
-      label: 'Data inválida',
-      daysUntilExpiry: null,
-    }
-  }
-
-  expiresAtEndOfDay.setHours(23, 59, 59, 999)
-
-  const daysUntilExpiry = Math.ceil((expiresAtEndOfDay.getTime() - now.getTime()) / 86400000)
-
-  if (daysUntilExpiry < 0) {
-    return {
-      status: 'EXPIRED',
-      label: 'Vencido',
-      daysUntilExpiry,
-    }
-  }
-
-  if (daysUntilExpiry <= 30) {
-    return {
-      status: 'EXPIRING',
-      label: `Vence em ${daysUntilExpiry} dia(s)`,
-      daysUntilExpiry,
-    }
-  }
-
-  return {
-    status: 'VALID',
-    label: 'Em dia',
-    daysUntilExpiry,
-  }
-}
 
 function summarizeDocument(record) {
   if (!record) return null
@@ -105,6 +68,83 @@ function normalizeDocumentLookupValue(value) {
     .trim()
 }
 
+function normalizeOperationalScopes(scopes = []) {
+  if (!Array.isArray(scopes)) return []
+
+  return Array.from(new Set(
+    scopes
+      .map(scope => String(scope || '').trim().toUpperCase())
+      .filter(scope => clinicOperationalScopeCatalog[scope])
+  ))
+}
+
+function addRequirementToCatalog(catalog, category, requirement, sourceScope = null) {
+  if (!catalog[category]) return
+
+  const normalizedRequirement = normalizeDocumentLookupValue(requirement)
+  const existingRequirement = catalog[category].find(item => (
+    item.normalizedRequirement === normalizedRequirement
+  ))
+
+  if (existingRequirement) {
+    if (sourceScope && !existingRequirement.sourceScopes.includes(sourceScope)) {
+      existingRequirement.sourceScopes.push(sourceScope)
+    }
+    return
+  }
+
+  catalog[category].push({
+    requirement,
+    normalizedRequirement,
+    sourceScopes: sourceScope ? [sourceScope] : [],
+  })
+}
+
+function buildDocumentRequirementCatalog(scopes = []) {
+  const normalizedScopes = normalizeOperationalScopes(scopes)
+  const catalog = Object.fromEntries(Object.entries(documentRequirementCatalog).map(([category]) => [category, []]))
+
+  Object.entries(documentRequirementCatalog).forEach(([category, requirements]) => {
+    requirements.forEach(requirement => addRequirementToCatalog(catalog, category, requirement))
+  })
+
+  normalizedScopes.forEach(scope => {
+    const scopeConfig = clinicOperationalScopeCatalog[scope]
+    Object.entries(scopeConfig.requirements).forEach(([category, requirements]) => {
+      requirements.forEach(requirement => addRequirementToCatalog(catalog, category, requirement, scope))
+    })
+  })
+
+  return {
+    catalog,
+    scopes: normalizedScopes,
+  }
+}
+
+function getDocumentRequirementSourceLabels(sourceScopes = []) {
+  return normalizeOperationalScopes(sourceScopes)
+    .map(scope => clinicOperationalScopeCatalog[scope]?.label)
+    .filter(Boolean)
+}
+
+function buildDocumentProfileSummary(scopes = [], catalog) {
+  const normalizedScopes = normalizeOperationalScopes(scopes)
+  const requiredBaseCount = Object.values(documentRequirementCatalog).reduce((total, requirements) => total + requirements.length, 0)
+  const totalRequiredCount = Object.values(catalog).reduce((total, requirements) => total + requirements.length, 0)
+
+  return {
+    scopes: normalizedScopes,
+    scopeLabels: getDocumentRequirementSourceLabels(normalizedScopes),
+    selectedCount: normalizedScopes.length,
+    requiredBaseCount,
+    specializedRequirementCount: Math.max(0, totalRequiredCount - requiredBaseCount),
+    availableScopes: Object.entries(clinicOperationalScopeCatalog).map(([value, config]) => ({
+      value,
+      label: config.label,
+    })),
+  }
+}
+
 function getDocumentRequirementScore(status) {
   if (status === 'VALID' || status === 'WITHOUT_EXPIRY') return 1
   if (status === 'EXPIRING') return 0.5
@@ -132,7 +172,10 @@ function getDocumentRequirementLabel(status, matchedDocument) {
   return 'Em dia'
 }
 
-function buildDocumentDashboard(records = []) {
+function buildDocumentDashboard(records = [], options = {}) {
+  const { catalog: requirementCatalog, scopes: operationalScopes } = buildDocumentRequirementCatalog(
+    options.operationalScopes || options.clinicOperationalScopes || []
+  )
   const summarized = (Array.isArray(records) ? records : []).map(summarizeDocument).filter(Boolean)
   const alerts = summarized
     .filter(document => document.status === 'EXPIRING' || document.status === 'EXPIRED')
@@ -143,19 +186,22 @@ function buildDocumentDashboard(records = []) {
     })
     .slice(0, 5)
 
-  const categories = Object.entries(documentRequirementCatalog).map(([category, requirements]) => {
+  const categories = Object.entries(requirementCatalog).map(([category, requirements]) => {
     const categoryDocuments = summarized.filter(document => document.category === category)
-    const requirementStatuses = requirements.map(requirement => {
-      const matchedDocument = findMatchingDocumentForRequirement(requirement, categoryDocuments)
+    const requirementStatuses = requirements.map(requirementItem => {
+      const matchedDocument = findMatchingDocumentForRequirement(requirementItem.requirement, categoryDocuments)
       const status = matchedDocument?.status || 'MISSING'
+      const sourceScopeLabels = getDocumentRequirementSourceLabels(requirementItem.sourceScopes)
 
       return {
-        requirement,
+        requirement: requirementItem.requirement,
         status,
         statusLabel: getDocumentRequirementLabel(status, matchedDocument),
         matchedDocumentId: matchedDocument?.id || null,
         matchedTitle: matchedDocument?.title || null,
         daysUntilExpiry: matchedDocument?.daysUntilExpiry ?? null,
+        sourceScopes: requirementItem.sourceScopes,
+        sourceScopeLabels,
       }
     })
 
@@ -188,6 +234,8 @@ function buildDocumentDashboard(records = []) {
     category: category.category,
     categoryLabel: category.categoryLabel,
     requirement,
+    sourceScopes: category.requirementStatuses.find(item => item.requirement === requirement)?.sourceScopes || [],
+    sourceScopeLabels: category.requirementStatuses.find(item => item.requirement === requirement)?.sourceScopeLabels || [],
   })))
 
   const expiringIn7Days = summarized.filter(document => document.status === 'EXPIRING' && document.daysUntilExpiry !== null && document.daysUntilExpiry <= 7).length
@@ -225,6 +273,7 @@ function buildDocumentDashboard(records = []) {
       next15Days: expiringIn15Days,
       next30Days: expiringIn30Days,
     },
+    profile: buildDocumentProfileSummary(operationalScopes, requirementCatalog),
     lastUpdatedAt: lastUpdatedAt ? new Date(lastUpdatedAt).toISOString() : null,
   }
 }
@@ -284,18 +333,16 @@ async function ensureDocumentOwnership(prisma, userId, documentId) {
   })
 }
 
-function registerDocumentRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  handle,
-  parseId,
-  parseDateOnly,
-  createAuditLogFromRequest = async () => null,
-}) {
-  if (!app || !prisma || !authMiddleware || !handle || !parseId || !parseDateOnly) {
-    throw new Error('registerDocumentRoutes requer app, prisma, authMiddleware, handle, parseId e parseDateOnly')
-  }
+function registerDocumentRoutes(options) {
+  const {
+    app,
+    prisma,
+    authMiddleware = require('./lib/middlewares').authMiddleware,
+    handle = require('./lib/middlewares').handle,
+    parseId = require('./lib/helpers').parseId,
+    parseDateOnly = require('./lib/helpers').parseDateOnly,
+    createAuditLogFromRequest = require('./lib/helpers').createAuditLogFromRequest,
+  } = options
 
   app.get('/documents/summary', authMiddleware, handle(async (req, res) => {
     const userId = getScopedDocumentUserId(req)
@@ -315,7 +362,9 @@ function registerDocumentRoutes({
       },
     })
 
-    res.json(buildDocumentDashboard(records))
+    res.json(buildDocumentDashboard(records, {
+      operationalScopes: req.currentUser?.clinicOperationalScopes,
+    }))
   }))
 
   app.get('/documents', authMiddleware, handle(async (req, res) => {
@@ -430,8 +479,10 @@ module.exports = {
   buildDocumentDashboard,
   buildDocumentAuditMetadata,
   clinicDocumentSchema,
+  clinicOperationalScopeCatalog,
   documentCategorySchema,
   getDocumentStatus,
+  normalizeOperationalScopes,
   normalizeDocumentData,
   registerDocumentRoutes,
   summarizeDocument,

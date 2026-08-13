@@ -1,0 +1,26 @@
+{
+  "name": "lappui-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "start:local": "expo start --localhost --clear",
+    "start:lan": "expo start --lan --clear",
+    "start:android-emulator": "expo start --android --lan --clear",
+    "android": "expo start --android",
+    "check:deps": "expo install --check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~55.0.0",
+    "expo-document-picker": "~55.0.13",
+    "expo-secure-store": "~55.0.13",
+    "react": "19.2.0",
+    "react-native": "^0.83.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.3"
+  }
+}

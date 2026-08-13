@@ -9,6 +9,7 @@ import {
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { Icon } from './Icon'
+import { getProductStockLevel, getEquipmentMaintenanceAlert } from './inventoryControl'
 import type { Identifier } from './clinicalTypes'
 import type {
   EquipmentItemSummary,
@@ -81,6 +82,7 @@ interface EquipmentDetailsModalProps {
 interface ProductCardProps {
   item: ProductItemSummary
   onEdit: (item: ProductItemSummary) => void
+  onDiscard: (item: ProductItemSummary) => void
   onArchive: (id: Identifier) => void
 }
 
@@ -437,15 +439,33 @@ function EquipmentDetailsModal({ item, onClose, onEdit }: EquipmentDetailsModalP
   )
 }
 
-function ProductCard({ item, onEdit, onArchive }: ProductCardProps) {
+function ProductCard({ item, onEdit, onArchive, onDiscard }: ProductCardProps) {
   const meta = alertMeta[item.status] || alertMeta.VALID
+  const stockLevel = getProductStockLevel(item.quantity)
+  const conicGradientStyle = {
+    background: `conic-gradient(var(--gold-deep) ${stockLevel.percentage}%, var(--line) ${stockLevel.percentage}%)`
+  }
 
   return (
     <article className="inventory-card">
       <div className="inventory-card-head">
-        <div>
-          <h3 className="inventory-card-title">{item.name}</h3>
-          <p className="inventory-card-subtitle">{[item.brand, item.category, item.batch, entryModeLabels[item.entryMode]].filter(Boolean).join(' - ')}</p>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div className="stock-progress-ring" style={conicGradientStyle} title={`${stockLevel.label}: ${stockLevel.percentage}%`}>
+            <div className="stock-progress-ring-circle">
+              {item.quantity}
+            </div>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 className="inventory-card-title">{item.name}</h3>
+              {stockLevel.isCritical && (
+                <span className="badge" style={{ backgroundColor: 'rgba(139, 54, 42, 0.13)', color: '#8b362a', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '999px', fontWeight: 800 }}>
+                  Estoque Baixo
+                </span>
+              )}
+            </div>
+            <p className="inventory-card-subtitle">{[item.brand, item.category, item.batch, entryModeLabels[item.entryMode]].filter(Boolean).join(' - ')}</p>
+          </div>
         </div>
         <span className={meta.className}>{item.statusLabel || meta.label}</span>
       </div>
@@ -465,11 +485,14 @@ function ProductCard({ item, onEdit, onArchive }: ProductCardProps) {
         </div>
       </div>
 
-      {item.notes ? <div className="inventory-notes">{item.notes}</div> : null}
+      {item.notes ? <div className="inventory-notes" style={{ whiteSpace: 'pre-line' }}>{item.notes}</div> : null}
 
       <div className="inventory-card-actions">
         <button type="button" className="btn btn-outline btn-sm" onClick={() => onEdit(item)}>
           <Icon name="edit" /> Editar
+        </button>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => onDiscard(item)} style={{ borderColor: 'rgba(139, 54, 42, 0.4)', color: '#8b362a' }}>
+          <Icon name="x" /> Descarte
         </button>
         <button type="button" className="btn btn-ghost btn-sm danger-ghost" onClick={() => onArchive(item.id)}>
           <Icon name="trash" /> Arquivar
@@ -481,9 +504,15 @@ function ProductCard({ item, onEdit, onArchive }: ProductCardProps) {
 
 function EquipmentCard({ item, onView, onEdit, onArchive }: EquipmentCardProps) {
   const meta = alertMeta[item.status] || alertMeta.VALID
+  const maintenanceAlert = getEquipmentMaintenanceAlert(item.maintenanceDueAt ?? null)
+  const pulseClass = maintenanceAlert.severity === 'error' 
+    ? 'pulseGlowCritical' 
+    : maintenanceAlert.severity === 'warning' 
+      ? 'pulseGlowWarning' 
+      : ''
 
   return (
-    <article className="inventory-card">
+    <article className={`inventory-card ${pulseClass}`}>
       <div className="inventory-card-head">
         <div>
           <h3 className="inventory-card-title">{item.name}</h3>
@@ -519,6 +548,21 @@ function EquipmentCard({ item, onView, onEdit, onArchive }: EquipmentCardProps) 
         </div>
       ) : null}
 
+      {maintenanceAlert.severity !== 'none' && maintenanceAlert.severity !== 'success' ? (
+        <div className="inventory-notes" style={{
+          color: maintenanceAlert.severity === 'error' ? 'var(--danger)' : 'var(--gold-deep)',
+          background: maintenanceAlert.severity === 'error' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(145, 101, 49, 0.05)',
+          borderLeft: `3px solid ${maintenanceAlert.severity === 'error' ? 'var(--danger)' : 'var(--gold-deep)'}`,
+          padding: '8px 12px',
+          margin: '12px 0 0 0',
+          borderRadius: '4px',
+          fontWeight: 600,
+          fontSize: '0.8rem'
+        }}>
+          ⚠️ {maintenanceAlert.message}
+        </div>
+      ) : null}
+
       {item.notes ? <div className="inventory-notes">{item.notes}</div> : null}
 
       <div className="inventory-card-actions">
@@ -528,6 +572,16 @@ function EquipmentCard({ item, onView, onEdit, onArchive }: EquipmentCardProps) 
         <button type="button" className="btn btn-outline btn-sm" onClick={() => onEdit(item)}>
           <Icon name="edit" /> Editar
         </button>
+        {(maintenanceAlert.severity === 'error' || maintenanceAlert.severity === 'warning') ? (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{ borderColor: 'var(--gold-deep)', color: 'var(--gold-deep)' }}
+            onClick={() => toast.success(`Chamado de calibração técnica aberto para ${item.name}!`)}
+          >
+            <Icon name="refresh" /> Solicitar calibração
+          </button>
+        ) : null}
         <button type="button" className="btn btn-ghost btn-sm danger-ghost" onClick={() => onArchive(item.id)}>
           <Icon name="trash" /> Arquivar
         </button>
@@ -550,6 +604,11 @@ export default function ProdutosEquipamentos() {
   const [equipmentDetails, setEquipmentDetails] = useState<EquipmentItemSummary | null>(null)
   const [savingProduct, setSavingProduct] = useState(false)
   const [savingEquipment, setSavingEquipment] = useState(false)
+  const [discardProduct, setDiscardProduct] = useState<ProductItemSummary | null>(null)
+  const [discardQuantity, setDiscardQuantity] = useState(1)
+  const [discardReason, setDiscardReason] = useState('Validade vencida')
+  const [discardNotes, setDiscardNotes] = useState('')
+  const [savingDiscard, setSavingDiscard] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -574,6 +633,38 @@ export default function ProdutosEquipamentos() {
   useEffect(() => {
     void load()
   }, [load])
+
+  async function handleSaveDiscard() {
+    if (!discardProduct) return
+    if (discardQuantity <= 0 || discardQuantity > discardProduct.quantity) {
+      toast.error('Quantidade de descarte inválida.')
+      return
+    }
+
+    setSavingDiscard(true)
+    try {
+      const remainingQty = discardProduct.quantity - discardQuantity
+      const dateStr = new Date().toLocaleDateString('pt-BR')
+      const discardLine = `[${dateStr} - Descarte]: ${discardQuantity} ${discardProduct.unit || 'unidade(s)'} descartada(s). Motivo: ${discardReason}.${discardNotes ? ` Obs: ${discardNotes}` : ''}`
+      const newNotes = discardProduct.notes ? `${discardProduct.notes}\n${discardLine}` : discardLine
+
+      await api.put(`/products/${discardProduct.id}`, {
+        quantity: remainingQty,
+        notes: newNotes,
+      })
+
+      toast.success('Descarte registrado com sucesso!')
+      setDiscardProduct(null)
+      setDiscardQuantity(1)
+      setDiscardReason('Validade vencida')
+      setDiscardNotes('')
+      void load()
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Erro ao registrar descarte do produto.'))
+    } finally {
+      setSavingDiscard(false)
+    }
+  }
 
   function openCreateProduct() {
     setSelectedProduct(null)
@@ -870,7 +961,7 @@ export default function ProdutosEquipamentos() {
           ) : (
             <div className="inventory-card-list">
               {products.map(item => (
-                <ProductCard key={item.id} item={item} onEdit={openEditProduct} onArchive={removeProduct} />
+                <ProductCard key={item.id} item={item} onEdit={openEditProduct} onDiscard={setDiscardProduct} onArchive={removeProduct} />
               ))}
             </div>
           )}
@@ -941,6 +1032,76 @@ export default function ProdutosEquipamentos() {
             openEditEquipment(currentItem)
           }}
         />
+      ) : null}
+
+      {discardProduct ? (
+        <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setDiscardProduct(null)}>
+          <div className="modal">
+            <h2 className="modal-title">Registrar descarte de insumo</h2>
+            <p className="section-copy">
+              Identifique a quantidade e o motivo do descarte. Essa ação atualizará a quantidade no estoque e registrará a nota de descarte.
+            </p>
+
+            <div className="form-grid">
+              <div className="form-group form-full">
+                <label className="form-label">Produto</label>
+                <input className="form-input" value={discardProduct.name} disabled style={{ background: '#f5f5f5' }} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Quantidade disponível</label>
+                <input className="form-input" value={`${discardProduct.quantity} ${discardProduct.unit || 'unidades'}`} disabled style={{ background: '#f5f5f5' }} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Quantidade para descarte *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  min={1}
+                  max={discardProduct.quantity}
+                  value={discardQuantity}
+                  onChange={e => setDiscardQuantity(Math.max(1, Math.min(discardProduct.quantity, Number(e.target.value) || 1)))}
+                />
+              </div>
+
+              <div className="form-group form-full">
+                <label className="form-label">Motivo do descarte *</label>
+                <select
+                  className="form-input"
+                  value={discardReason}
+                  onChange={e => setDiscardReason(e.target.value)}
+                >
+                  <option value="Validade vencida">Validade vencida</option>
+                  <option value="Avaria ou Danificado">Avaria ou Danificado</option>
+                  <option value="Contaminação ou Risco">Contaminação ou Risco</option>
+                  <option value="Uso em demonstração/Treinamento">Uso em demonstração/Treinamento</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              <div className="form-group form-full">
+                <label className="form-label">Observações / Detalhes</label>
+                <textarea
+                  className="form-textarea"
+                  value={discardNotes}
+                  onChange={e => setDiscardNotes(e.target.value)}
+                  placeholder="Ex: lote molhado no transporte, produto aberto e não utilizado..."
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button type="button" className="btn btn-outline" onClick={() => setDiscardProduct(null)} disabled={savingDiscard}>
+                Cancelar
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => void handleSaveDiscard()} disabled={savingDiscard} style={{ backgroundColor: '#8b362a', borderColor: '#8b362a' }}>
+                {savingDiscard ? <span className="spinner" /> : 'Confirmar descarte'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

@@ -187,6 +187,10 @@ function createAuthToolkit(config) {
   }
 
   function signToken(payload) {
+    return jwt.sign(payload, config.jwtSecret, { expiresIn: '15m' })
+  }
+
+  function signRefreshToken(payload) {
     return jwt.sign(payload, config.jwtSecret, { expiresIn: '7d' })
   }
 
@@ -235,13 +239,16 @@ function createAuthToolkit(config) {
         throw httpError(401, 'Credenciais invalidas.')
       }
 
+      const tokenPayload = {
+        support: true,
+        role: 'SUPPORT',
+        email: config.supportAdminEmail,
+        supportName: config.supportAdminName,
+      }
+
       return {
-        token: signToken({
-          support: true,
-          role: 'SUPPORT',
-          email: config.supportAdminEmail,
-          supportName: config.supportAdminName,
-        }),
+        token: signToken(tokenPayload),
+        refreshToken: signRefreshToken(tokenPayload),
         user: serializeSupportUser(),
       }
     }
@@ -257,8 +264,10 @@ function createAuthToolkit(config) {
     }
 
     const user = await loadScopedUser(userRecord.id)
+    const tokenPayload = { id: user.id, email: user.email, role: user.role }
     return {
-      token: signToken({ id: user.id, email: user.email, role: user.role }),
+      token: signToken(tokenPayload),
+      refreshToken: signRefreshToken(tokenPayload),
       user: serializeUser(user, { config }),
     }
   }
@@ -366,6 +375,9 @@ function createAuthToolkit(config) {
     getSupportBillingSnapshot,
     getBillingSnapshot,
     getAuditActor,
+    signToken,
+    signRefreshToken,
+    verifyToken: token => jwt.verify(token, config.jwtSecret),
   }
 }
 

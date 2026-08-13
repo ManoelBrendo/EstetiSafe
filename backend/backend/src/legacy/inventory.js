@@ -1,4 +1,11 @@
 const { z } = require('zod')
+const {
+  parseId,
+  parseDateOnly,
+  createAuditLogFromRequest,
+  getRequestClinicId,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
 
 const inventoryEntryModeSchema = z.enum(['NEW', 'EXISTING'])
 
@@ -255,30 +262,16 @@ function buildEquipmentAuditMetadata(record, extra = {}) {
   }
 }
 
-function registerInventoryRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  handle,
-  parseId,
-  parseDateOnly,
-  createAuditLogFromRequest = async () => null,
-  getRequestClinicId = getScopedInventoryClinicId,
-}) {
-  const requiredDeps = {
+function registerInventoryRoutes(options) {
+  const {
     app,
     prisma,
-    authMiddleware,
-    handle,
-    parseId,
-    parseDateOnly,
-  }
-
-  for (const [key, value] of Object.entries(requiredDeps)) {
-    if (!value) {
-      throw new Error(`registerInventoryRoutes requer ${key}`)
-    }
-  }
+    authMiddleware = require('./lib/middlewares').authMiddleware,
+    handle = require('./lib/middlewares').handle,
+    parseId = require('./lib/helpers').parseId,
+    parseDateOnly = require('./lib/helpers').parseDateOnly,
+    createAuditLogFromRequest = require('./lib/helpers').createAuditLogFromRequest,
+  } = options
 
   app.get('/inventory/summary', authMiddleware, handle(async (req, res) => {
     const userId = getScopedInventoryUserId(req)

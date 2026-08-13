@@ -1,4 +1,4 @@
-﻿import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
@@ -198,15 +198,15 @@ export default function App() {
               fontFamily: 'Manrope, sans-serif',
               fontSize: 14,
               borderRadius: 18,
-              background: '#fffaf3',
-              color: '#2a1f17',
-              border: '1px solid rgba(145, 101, 49, 0.18)',
-              boxShadow: '0 18px 38px rgba(58, 39, 19, 0.12)',
+              background: 'var(--surface-strong)',
+              color: 'var(--ink)',
+              border: '1px solid var(--line)',
+              boxShadow: 'var(--shadow)',
             },
             success: {
               iconTheme: {
-                primary: '#3f7c67',
-                secondary: '#fffaf3',
+                primary: 'var(--success)',
+                secondary: 'var(--surface-strong)',
               },
             },
           }}

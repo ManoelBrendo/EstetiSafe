@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -6,7 +6,7 @@ import { useAuth } from './useAuth'
 import { Icon } from './Icon'
 import { getApiErrorMessage } from './api'
 import logoPath from './lappui-mark.svg'
-import { getPasswordPolicyStatus, passwordPolicyHint } from './passwordPolicy'
+import { getPasswordPolicyStatus, passwordPolicyHint, generateStrongPassword } from './passwordPolicy'
 
 interface RegisterFormState {
   email: string
@@ -76,8 +76,12 @@ export default function Register() {
     }
   }
 
+
   return (
     <main className="login-screen auth-register-screen">
+      <div className="login-bg-blob login-bg-blob-1" />
+      <div className="login-bg-blob login-bg-blob-2" />
+      <div className="login-bg-blob login-bg-blob-3" />
       <section className="login-card register-card">
         <div className="login-brand">
           <div className="login-logo-shell">
@@ -101,61 +105,97 @@ export default function Register() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="register-clinic-name">Nome da clínica</label>
-            <input
-              id="register-clinic-name"
-              className="form-input"
-              placeholder="Ex: Clínica Aurora"
-              value={form.clinicName}
-              onChange={updateField('clinicName')}
-              autoComplete="organization"
-              required
-            />
+            <div className="input-with-icon-wrapper">
+              <span className="input-icon-left">
+                <Icon name="clipboard" size={20} />
+              </span>
+              <input
+                id="register-clinic-name"
+                className="form-input has-icon-left"
+                placeholder="Ex: Clínica Aurora"
+                value={form.clinicName}
+                onChange={updateField('clinicName')}
+                autoComplete="organization"
+                required
+              />
+            </div>
           </div>
 
           <div className="form-group">
             <label className="form-label" htmlFor="register-email">E-mail oficial</label>
-            <input
-              id="register-email"
-              className="form-input"
-              type="email"
-              placeholder="contato@clínica.com"
-              value={form.email}
-              onChange={updateField('email')}
-              autoComplete="email"
-              inputMode="email"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-            />
+            <div className="input-with-icon-wrapper">
+              <span className="input-icon-left">
+                <Icon name="mail" size={20} />
+              </span>
+              <input
+                id="register-email"
+                className="form-input has-icon-left"
+                type="email"
+                placeholder="contato@clínica.com"
+                value={form.email}
+                onChange={updateField('email')}
+                autoComplete="email"
+                inputMode="email"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                required
+              />
+            </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="register-password">Senha</label>
-            <div className="auth-input-shell">
+            <div className="form-group-header">
+              <label className="form-label" htmlFor="register-password">Senha</label>
+              <button
+                type="button"
+                className="forgot-password-link suggest-password-btn"
+                onClick={() => {
+                  const suggested = generateStrongPassword()
+                  setForm(current => ({ ...current, password: suggested }))
+                  toast.success('Senha forte gerada!')
+                }}
+              >
+                Sugerir senha segura
+              </button>
+            </div>
+            <div className="input-with-icon-wrapper password-input-wrapper">
+              <span className="input-icon-left">
+                <Icon name="shield" size={20} />
+              </span>
               <input
                 id="register-password"
-                className="form-input"
+                className="form-input has-icon-left"
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Ex: A!@246813579246"
+                placeholder="Ex: Aa!24681357"
                 value={form.password}
                 onChange={updateField('password')}
                 autoComplete="new-password"
                 autoCorrect="off"
-                minLength={15}
+                minLength={8}
                 spellCheck={false}
                 required
               />
               <button
                 type="button"
-                className="auth-input-action"
+                className="password-toggle-btn"
                 onClick={() => setShowPassword(current => !current)}
                 aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
               >
-                <Icon name={showPassword ? 'eyeOff' : 'eye'} />
-                {showPassword ? 'Ocultar' : 'Mostrar'}
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size={20} />
               </button>
             </div>
+
+            {form.password && (
+              <div className="password-strength-container">
+                <div className="password-strength-bar-wrapper">
+                  <div className={`password-strength-bar strength-${passwordStatus.score}`} />
+                </div>
+                <span className={`password-strength-text strength-${passwordStatus.score}`}>
+                  Força da senha: {passwordStatus.score <= 2 ? 'Fraca' : passwordStatus.score <= 4 ? 'Média' : 'Forte!'}
+                </span>
+              </div>
+            )}
           </div>
 
           {formError ? (
@@ -165,20 +205,36 @@ export default function Register() {
           ) : null}
 
           <div className="register-password-panel" aria-live="polite">
-            <strong>Criterios da senha</strong>
-            <div className={`register-password-rule ${passwordStatus.lettersOk ? 'ok' : ''}`}>Pelo menos 1 letra</div>
-            <div className={`register-password-rule ${passwordStatus.specialOk ? 'ok' : ''}`}>Pelo menos 2 caracteres especiais</div>
-            <div className={`register-password-rule ${passwordStatus.digitsOk ? 'ok' : ''}`}>Pelo menos 12 numeros</div>
-            <div className={`register-password-rule ${passwordStatus.sequenceOk ? 'ok' : ''}`}>Sem sequencias como 1234, 4321 ou 1111</div>
+            <strong>Critérios da senha</strong>
+            <div className={`register-password-rule ${passwordStatus.hasUppercase ? 'ok' : ''}`}>
+              <span className="rule-bullet"></span>
+              Letra maiúscula
+            </div>
+            <div className={`register-password-rule ${passwordStatus.hasLowercase ? 'ok' : ''}`}>
+              <span className="rule-bullet"></span>
+              Letra minúscula
+            </div>
+            <div className={`register-password-rule ${passwordStatus.hasSpecial ? 'ok' : ''}`}>
+              <span className="rule-bullet"></span>
+              Caractere especial
+            </div>
+            <div className={`register-password-rule ${passwordStatus.has8Digits ? 'ok' : ''}`}>
+              <span className="rule-bullet"></span>
+              Pelo menos 8 números
+            </div>
+            <div className={`register-password-rule ${passwordStatus.sequenceOk ? 'ok' : ''}`}>
+              <span className="rule-bullet"></span>
+              Sem sequências de 4 letras/números
+            </div>
           </div>
 
           <p className="register-helper-text">{passwordPolicyHint}</p>
 
           <button className="btn btn-gold btn-block login-submit" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : 'Criar minha conta'}
+            {loading ? <><span className="spinner" /> Criando...</> : 'Criar minha conta'}
           </button>
 
-          <p className="login-register-row">Ja possui acesso <Link className="login-register-link" to="/login">Entrar</Link></p>
+          <p className="login-register-row">Já possui acesso? <Link className="login-register-link" to="/login">Entrar</Link></p>
         </form>
       </section>
     </main>

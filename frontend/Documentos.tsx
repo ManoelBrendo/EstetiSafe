@@ -3,12 +3,16 @@ import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { Icon } from './Icon'
+import { VerifyActionModal } from './components/VerifyActionModal'
+import { formatDate as uFormatDate, formatDateTime as uFormatDateTime } from './dateUtils'
 import { useAuth } from './useAuth'
 import { getClinicBranding } from './branding'
+import { createDocumentTemplateFile } from './documentTemplates'
 import type { Identifier } from './clinicalTypes'
 import type {
   ClinicDocumentFileResponse,
   ClinicDocumentSummary,
+  ClinicOperationalScope,
   DocumentCategory,
   DocumentCategoryCoverageItem,
   DocumentCategoryOption,
@@ -68,6 +72,18 @@ const categoryTypeSuggestions: Record<DocumentCategory, string[]> = {
   WASTE: ['PGRSS', 'Contrato da coletora', 'Comprovante de coleta', 'Manifesto de resíduos'],
 }
 
+const clinicOperationalScopeOptions: Array<{
+  value: ClinicOperationalScope
+  label: string
+  helper: string
+}> = [
+  { value: 'FACIAL', label: 'Estética facial', helper: 'Fichas, imagem e higienização.' },
+  { value: 'INJECTABLES', label: 'Injetáveis', helper: 'Termos específicos e intercorrências.' },
+  { value: 'LASER', label: 'Laser e tecnologias', helper: 'Equipamentos, treinamento e consentimento.' },
+  { value: 'BODY', label: 'Corporais', helper: 'Medidas, evolução e acessórios.' },
+  { value: 'ADVANCED', label: 'Protocolos avançados', helper: 'Riscos, eventos adversos e emergência.' },
+]
+
 const statusMeta: Record<DocumentStatus, { label: string; className: string; tone: string }> = {
   VALID: { label: 'Em dia', className: 'badge badge-green', tone: 'is-valid' },
   EXPIRING: { label: 'Vencendo', className: 'badge badge-gold', tone: 'is-expiring' },
@@ -88,25 +104,14 @@ const emptyForm: DocumentFormState = {
 
 function formatDate(value: string | number | null | undefined) {
   if (!value) return 'Sem vencimento'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-  }).format(parsedDate)
+  const formatted = uFormatDate(value)
+  return formatted === 'Não informado' ? 'Sem vencimento' : formatted
 }
 
 function formatDateTime(value: string | number | null | undefined) {
   if (!value) return 'Agora'
-
-  const parsedDate = new Date(value)
-  if (Number.isNaN(parsedDate.getTime())) return 'Data inválida'
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(parsedDate)
+  const formatted = uFormatDateTime(value)
+  return formatted === 'Não informado' ? 'Agora' : formatted
 }
 
 function pluralize(count: number, singular: string, plural: string) {
@@ -119,6 +124,24 @@ function normalizeSearchText(value: string | null | undefined) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
+}
+
+function normalizeOperationalScopes(scopes: unknown): ClinicOperationalScope[] {
+  if (!Array.isArray(scopes)) return []
+
+  const allowed = new Set(clinicOperationalScopeOptions.map(option => option.value))
+  return Array.from(new Set(
+    scopes
+      .map(scope => String(scope || '').trim().toUpperCase() as ClinicOperationalScope)
+      .filter(scope => allowed.has(scope))
+  ))
+}
+
+function getOperationalScopeLabels(scopes: unknown) {
+  const normalized = normalizeOperationalScopes(scopes)
+  return normalized
+    .map(scope => clinicOperationalScopeOptions.find(option => option.value === scope)?.label)
+    .filter(Boolean) as string[]
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -315,7 +338,7 @@ function DocumentsCategoryCard({ item, onSelectCategory, onCreateMissing }: Docu
 }
 
 export default function Documentos() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const documentsListRef = useRef<HTMLElement | null>(null)
   const missingListRef = useRef<HTMLElement | null>(null)
   const [documents, setDocuments] = useState<ClinicDocumentSummary[]>([])
@@ -327,12 +350,21 @@ export default function Documentos() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [loadingFileId, setLoadingFileId] = useState<Identifier | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<Identifier | null>(null)
   const [filter, setFilter] = useState<DocumentCategoryFilter>('ALL')
   const [riskFilter, setRiskFilter] = useState<DocumentRiskFilter>('ALL')
   const [search, setSearch] = useState('')
+  const [selectedOperationalScopes, setSelectedOperationalScopes] = useState<ClinicOperationalScope[]>(() => (
+    normalizeOperationalScopes(user?.clinicOperationalScopes)
+  ))
+  const [savingProfile, setSavingProfile] = useState(false)
   const { clinicName, brandLogo } = getClinicBranding(user)
   const hasActiveFilters = filter !== 'ALL' || riskFilter !== 'ALL' || Boolean(search.trim())
   const formCanSave = Boolean(form.title.trim() && form.documentType.trim() && (modal !== 'create' || form.fileDataUrl))
+
+  useEffect(() => {
+    setSelectedOperationalScopes(normalizeOperationalScopes(user?.clinicOperationalScopes))
+  }, [user?.clinicOperationalScopes])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -360,8 +392,14 @@ export default function Documentos() {
   }, [load])
 
   const currentSuggestions = useMemo(
-    () => categoryTypeSuggestions[form.category] || [],
-    [form.category]
+    () => {
+      const dynamicSuggestions = (summary?.missingDocuments || [])
+        .filter(item => item.category === form.category)
+        .map(item => item.requirement)
+
+      return Array.from(new Set([...(categoryTypeSuggestions[form.category] || []), ...dynamicSuggestions]))
+    },
+    [form.category, summary?.missingDocuments]
   )
 
   const filteredDocuments = useMemo(() => {
@@ -384,6 +422,18 @@ export default function Documentos() {
     () => getDocumentsStateSummary(summary),
     [summary]
   )
+  const persistedOperationalScopes = useMemo(
+    () => normalizeOperationalScopes(summary?.profile?.scopes?.length ? summary.profile.scopes : user?.clinicOperationalScopes),
+    [summary?.profile?.scopes, user?.clinicOperationalScopes]
+  )
+  const persistedOperationalScopeLabels = useMemo(
+    () => summary?.profile?.scopeLabels?.length ? summary.profile.scopeLabels : getOperationalScopeLabels(persistedOperationalScopes),
+    [persistedOperationalScopes, summary?.profile?.scopeLabels]
+  )
+  const activeProfileLabel = persistedOperationalScopeLabels.length
+    ? persistedOperationalScopeLabels.join(', ')
+    : 'Perfil base'
+  const profileChanged = selectedOperationalScopes.join('|') !== persistedOperationalScopes.join('|')
 
   const nextDocumentAction = useMemo(() => {
     const missing = summary?.missingCount ?? 0
@@ -419,6 +469,31 @@ export default function Documentos() {
     }
   }, [summary])
 
+  function toggleOperationalScope(scope: ClinicOperationalScope) {
+    setSelectedOperationalScopes(current => (
+      current.includes(scope)
+        ? current.filter(item => item !== scope)
+        : [...current, scope]
+    ))
+  }
+
+  async function handleSaveDocumentProfile() {
+    setSavingProfile(true)
+
+    try {
+      await api.put('/clinic/profile', {
+        clinicOperationalScopes: selectedOperationalScopes,
+      })
+      await refreshUser()
+      await load()
+      toast.success('Perfil documental atualizado')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Não foi possível atualizar o perfil documental'))
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   function openCreate() {
     setSelected(null)
     setForm(emptyForm)
@@ -434,6 +509,25 @@ export default function Documentos() {
       title: requirement,
     })
     setModal('create')
+  }
+
+  function downloadDocumentTemplate(category: DocumentCategory, requirement: string, sourceScopeLabels: string[] = []) {
+    if (!requirement.trim()) {
+      toast.error('Selecione um documento faltante para gerar o modelo.')
+      return
+    }
+
+    const categoryLabel = categoryOptions.find(option => option.value === category)?.label || category
+    const template = createDocumentTemplateFile({
+      requirement,
+      category,
+      categoryLabel,
+      clinicName,
+      sourceScopeLabels,
+    })
+
+    triggerDownload(template.fileName, template.fileDataUrl)
+    toast.success('Modelo base baixado. Preencha e anexe a versão final quando estiver pronta.')
   }
 
   function scrollToDocumentsList() {
@@ -570,20 +664,25 @@ export default function Documentos() {
     }
   }
 
-  async function handleDelete(documentId: Identifier) {
-    if (!window.confirm('Deseja remover este documento da base da clínica?')) return
+  async function handleConfirmDelete() {
+    if (!deleteTargetId) return
 
     try {
-      await api.delete(`/documents/${documentId}`)
+      await api.delete(`/documents/${deleteTargetId}`)
       toast.success('Documento removido')
+      setDeleteTargetId(null)
       await load()
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Não foi possível remover este documento'))
     }
   }
 
+  function handleDelete(documentId: Identifier) {
+    setDeleteTargetId(documentId)
+  }
+
   return (
-    <div className="page documents-page">
+    <div className="page documents-page ux-compact-page">
       <div className="page-header">
         <div>
           <h1 className="page-title">Documentos</h1>
@@ -614,7 +713,8 @@ export default function Documentos() {
               Estruture alvarás, licenças, resíduos, documentos internos e anexos críticos em uma única operação documental pensada para navegador e rotina administrativa.
             </p>
             <div className="documents-hero-meta">
-              <span className="badge badge-muted">{summary?.recommendedCoveredCount ?? 0}/{summary?.recommendedRequiredCount ?? 0} itens base cobertos</span>
+              <span className="badge badge-muted">{summary?.recommendedCoveredCount ?? 0}/{summary?.recommendedRequiredCount ?? 0} itens cobertos</span>
+              <span className="badge badge-muted">{activeProfileLabel}</span>
               <span className="badge badge-muted">{summary?.windows?.next30Days ?? 0} vencendo em até 30 dias</span>
               <span className="badge badge-muted">Última atualização {formatDateTime(summary?.lastUpdatedAt)}</span>
             </div>
@@ -667,6 +767,58 @@ export default function Documentos() {
           helper="Itens recomendados que ainda não aparecem no acervo."
           tone="default"
         />
+      </section>
+
+      <section className="documents-profile-card" aria-label="Perfil documental da clínica">
+        <div className="documents-profile-head">
+          <div>
+            <span className="eyebrow">Perfil documental</span>
+            <h2 className="section-title">Obrigatórios por rotina da clínica</h2>
+            <p className="section-copy">
+              Marque os tipos de procedimento que a clínica realiza para a auditoria sugerir documentos mais próximos da operação real.
+            </p>
+          </div>
+
+          <div className="documents-profile-summary">
+            <span className="badge badge-muted">{activeProfileLabel}</span>
+            <span className="badge badge-muted">{summary?.profile?.specializedRequirementCount ?? 0} item(ns) específicos</span>
+          </div>
+        </div>
+
+        <div className="documents-profile-options">
+          {clinicOperationalScopeOptions.map(option => {
+            const selectedScope = selectedOperationalScopes.includes(option.value)
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`documents-profile-option ${selectedScope ? 'is-selected' : ''}`}
+                aria-pressed={selectedScope}
+                onClick={() => toggleOperationalScope(option.value)}
+              >
+                <span className="documents-profile-check">
+                  <Icon name={selectedScope ? 'check' : 'plus'} size={16} />
+                </span>
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.helper}</small>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="documents-profile-actions">
+          <span className="text-muted">
+            {selectedOperationalScopes.length
+              ? `${selectedOperationalScopes.length} área(s) selecionada(s)`
+              : 'Usando apenas a base documental geral.'}
+          </span>
+          <button type="button" className="btn btn-outline btn-sm" onClick={handleSaveDocumentProfile} disabled={savingProfile || !profileChanged}>
+            {savingProfile ? <span className="spinner" /> : <><Icon name="check" /> Atualizar perfil</>}
+          </button>
+        </div>
       </section>
 
       <section className={`documents-state-banner ${documentsStateSummary.tone}`}>
@@ -850,12 +1002,23 @@ export default function Documentos() {
                       </div>
                       <div>
                         <strong>{item.requirement}</strong>
-                        <div className="text-sm text-muted">{item.categoryLabel}</div>
+                        <div className="text-sm text-muted">
+                          {item.sourceScopeLabels?.length ? `${item.categoryLabel} · ${item.sourceScopeLabels.join(', ')}` : item.categoryLabel}
+                        </div>
                       </div>
                     </div>
-                    <button type="button" className="btn btn-outline btn-sm" onClick={() => openRecommendedCreate(item.category, item.requirement)}>
-                      Adicionar
-                    </button>
+                    <div className="documents-missing-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => downloadDocumentTemplate(item.category, item.requirement, item.sourceScopeLabels || [])}
+                      >
+                        <Icon name="download" /> Modelo
+                      </button>
+                      <button type="button" className="btn btn-outline btn-sm" onClick={() => openRecommendedCreate(item.category, item.requirement)}>
+                        Adicionar
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -950,6 +1113,14 @@ export default function Documentos() {
           </div>
         </div>
       ) : null}
+
+      <VerifyActionModal
+        isOpen={deleteTargetId !== null}
+        title="Excluir Documento"
+        description="Esta ação é crítica e removerá permanentemente este documento sanitário/legal do acervo de sua clínica. Para confirmar, digite sua senha."
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   )
 }

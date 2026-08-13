@@ -1,0 +1,82 @@
+# ============================================================
+# EstetiSafe (L'Appui) — Docker Compose (Desenvolvimento Local)
+# ============================================================
+# Uso: docker compose up --build
+# Requisitos: Docker Desktop com arquivos .env configurados
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL 16 — Banco de dados principal
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: estetisafe-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lappui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lappui_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lappui_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lappui} -d ${POSTGRES_DB:-lappui_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------
+  # Backend Node.js (API Express + Prisma)
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: estetisafe-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lappui}:${POSTGRES_PASSWORD:-lappui_dev_password}@postgres:5432/${POSTGRES_DB:-lappui_dev}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_in_production}
+      PORT: 3000
+      FRONTEND_URL: http://localhost:5173
+    ports:
+      - "3000:3000"
+    volumes:
+      # Hot-reload: bind mount do código-fonte (exclui node_modules do container)
+      - ./backend/backend/src:/app/src:ro
+      - ./backend/backend/lib:/app/lib:ro
+      - ./backend/backend/server.js:/app/server.js:ro
+    command: >
+      sh -c "npx prisma migrate deploy && node server.js"
+
+  # ----------------------------------------------------------
+  # Frontend Vite (Dev server com HMR)
+  # ----------------------------------------------------------
+  frontend:
+    image: node:20-alpine
+    container_name: estetisafe-frontend
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # volume anônimo para isolar node_modules do host
+    command: >
+      sh -c "npm install --silent && npm run dev -- --host 0.0.0.0"
+
+volumes:
+  postgres_data:
+    name: estetisafe-postgres-data

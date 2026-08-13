@@ -15,6 +15,7 @@ model User {
   hashedPassword     String
   clinicName         String
   clinicLogoDataUrl  String?  @db.Text
+  clinicOperationalScopes String[] @default([])
   role               Role     @default(ADMIN)
   billingStatus      BillingStatus @default(TRIAL)
   billingAmount      Decimal? @db.Decimal(10, 2)
@@ -28,6 +29,8 @@ model User {
 
   ownedClinic    Clinic?
   auditLogs      AuditLog[] @relation("UserAuditLogs")
+  auditCorrectiveActions     AuditCorrectiveAction[]
+  auditCorrectiveAttachments AuditCorrectiveActionAttachment[]
   clients        Client[]
   appointments   Appointment[]
   services       Service[]
@@ -35,6 +38,7 @@ model User {
   consentRecords ConsentRecord[]
   servicePops    ServicePop[]
   documents      ClinicDocument[]
+  professionalDocuments ProfessionalDocument[]
   productItems   ProductItem[]
   equipmentItems EquipmentItem[]
   clinicBills    ClinicBill[]
@@ -103,6 +107,14 @@ enum ProfessionalPaymentModel {
   COMMISSION
   HYBRID
   DAILY
+}
+
+enum ProfessionalDocumentCategory {
+  CONTRACT
+  CERTIFICATION
+  COUNCIL
+  TRAINING
+  PERMISSION
 }
 
 // Leads and clients
@@ -185,6 +197,58 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+enum AuditCorrectiveActionStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  DISMISSED
+}
+
+model AuditCorrectiveAction {
+  id          Int                         @id @default(autoincrement())
+  userId      Int
+  taskKey     String
+  domainId    String
+  domainTitle String
+  title       String
+  owner       String
+  dueLabel    String?
+  dueAt       DateTime?
+  evidence    String?                     @db.Text
+  actionUrl   String?
+  riskLevel   String
+  status      AuditCorrectiveActionStatus @default(OPEN)
+  completedAt DateTime?
+  dismissedAt DateTime?
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+
+  user        User                              @relation(fields: [userId], references: [id])
+  attachments AuditCorrectiveActionAttachment[]
+
+  @@unique([userId, taskKey])
+  @@index([userId, status])
+  @@index([userId, domainId])
+  @@map("audit_corrective_actions")
+}
+
+model AuditCorrectiveActionAttachment {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  actionId     Int
+  fileName     String
+  fileMimeType String?
+  fileDataUrl  String   @db.Text
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  user   User                  @relation(fields: [userId], references: [id])
+  action AuditCorrectiveAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, actionId, createdAt])
+  @@map("audit_corrective_action_attachments")
+}
+
 model Client {
   id        Int      @id @default(autoincrement())
   userId    Int
@@ -204,14 +268,37 @@ model Client {
   lockedAt  DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
 
   user           User            @relation(fields: [userId], references: [id])
   appointments   Appointment[]
   anamneses      Anamnesis[]
   consentRecords ConsentRecord[]
   clinicalIntercurrences ClinicalIntercurrence[]
+  facialPoints   FacialPoint[]
 
+  @@index([userId])
+  @@index([email])
+  @@index([cpf])
+  @@index([phone])
   @@map("clients")
+}
+
+model FacialPoint {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  pointId   String
+  x         Float
+  y         Float
+  type      String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("facial_points")
 }
 
 // Professionals
@@ -228,6 +315,8 @@ model Professional {
   paymentModel    ProfessionalPaymentModel?
   salaryAmount    Decimal?                @db.Decimal(10, 2)
   commissionRate  Decimal?                @db.Decimal(5, 2)
+  payrollBonusAmount Decimal?             @db.Decimal(10, 2)
+  payrollDiscountAmount Decimal?          @db.Decimal(10, 2)
   paymentDay      Int?
   payrollNotes    String?
   active          Boolean                  @default(true)
@@ -238,8 +327,33 @@ model Professional {
   appointments   Appointment[]
   consentRecords ConsentRecord[]
   clinicalIntercurrences ClinicalIntercurrence[]
+  documents      ProfessionalDocument[]
 
+  @@index([userId])
   @@map("professionals")
+}
+
+model ProfessionalDocument {
+  id             Int                          @id @default(autoincrement())
+  userId         Int
+  professionalId Int
+  category       ProfessionalDocumentCategory
+  documentType   String
+  title          String
+  notes          String?
+  expiresAt      DateTime?
+  fileName       String
+  fileMimeType   String?
+  fileDataUrl    String                       @db.Text
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id])
+  professional Professional @relation(fields: [professionalId], references: [id])
+
+  @@index([userId, professionalId, category])
+  @@index([userId, expiresAt])
+  @@map("professional_documents")
 }
 
 model Service {
@@ -258,6 +372,7 @@ model Service {
   servicePop   ServicePop?
   clinicalIntercurrences ClinicalIntercurrence[]
 
+  @@index([userId])
   @@map("services")
 }
 
@@ -283,6 +398,9 @@ model Appointment {
   payment      Payment?
   whatsappLogs WhatsappLog[]
 
+  @@index([userId, startAt, endAt])
+  @@index([userId, professionalId, startAt])
+  @@index([clientId])
   @@map("appointments")
 }
 
@@ -336,6 +454,7 @@ model Anamnesis {
 
   client Client @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
   @@map("anamneses")
 }
 

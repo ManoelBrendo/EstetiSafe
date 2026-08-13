@@ -1,10 +1,12 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from './useAuth'
 import { getApiErrorMessage } from './api'
 import logoPath from './lappui-mark.svg'
+import { Icon } from './Icon'
+
 
 interface LoginFormState {
   email: string
@@ -35,6 +37,8 @@ export default function Login() {
   const [form, setForm] = useState<LoginFormState>({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [authError, setAuthError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
 
   function updateField(key: keyof LoginFormState) {
     return (event: ChangeEvent<HTMLInputElement>) => {
@@ -76,6 +80,9 @@ export default function Login() {
 
   return (
     <main className="login-screen">
+      <div className="login-bg-blob login-bg-blob-1" />
+      <div className="login-bg-blob login-bg-blob-2" />
+      <div className="login-bg-blob login-bg-blob-3" />
       <section className="login-card" aria-label="Acesso ao painel L'Appui">
         <div className="login-brand">
           <div className="login-logo-shell">
@@ -95,37 +102,67 @@ export default function Login() {
 
           <div className="form-group">
             <label className="form-label" htmlFor="login-email">E-mail</label>
-            <input
-              id="login-email"
-              className="form-input"
-              type="email"
-              placeholder="contato@clínica.com"
-              value={form.email}
-              onChange={updateField('email')}
-              autoComplete="email"
-              inputMode="email"
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              aria-invalid={Boolean(authError)}
-              autoFocus
-            />
+            <div className="input-with-icon-wrapper">
+              <span className="input-icon-left">
+                <Icon name="mail" size={20} />
+              </span>
+              <input
+                id="login-email"
+                className="form-input has-icon-left"
+                type="email"
+                placeholder="contato@clínica.com"
+                value={form.email}
+                onChange={updateField('email')}
+                autoComplete="email"
+                inputMode="email"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                aria-invalid={Boolean(authError)}
+                autoFocus
+              />
+            </div>
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor="login-password">Senha</label>
-            <input
-              id="login-password"
-              className="form-input"
-              type="password"
-              placeholder="Digite sua senha"
-              value={form.password}
-              onChange={updateField('password')}
-              autoComplete="current-password"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-invalid={Boolean(authError)}
-            />
+            <div className="form-group-header">
+              <label className="form-label" htmlFor="login-password">Senha</label>
+              <a
+                href="#forgot"
+                className="forgot-password-link"
+                onClick={(e) => {
+                  e.preventDefault()
+                  toast.success('Link de recuperação enviado (simulado)')
+                }}
+              >
+                Esqueceu a senha?
+              </a>
+            </div>
+            <div className="input-with-icon-wrapper password-input-wrapper">
+              <span className="input-icon-left">
+                <Icon name="shield" size={20} />
+              </span>
+              <input
+                id="login-password"
+                className="form-input has-icon-left"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Digite sua senha"
+                value={form.password}
+                onChange={updateField('password')}
+                autoComplete="current-password"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={Boolean(authError)}
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword(prev => !prev)}
+                aria-label={showPassword ? 'Esconder senha' : 'Mostrar senha'}
+              >
+                <Icon name={showPassword ? 'eyeOff' : 'eye'} size={20} />
+              </button>
+            </div>
           </div>
 
           {authError ? (
@@ -140,6 +177,10 @@ export default function Login() {
 
           <p className="login-register-row">
             Ainda não possui conta? <Link className="login-register-link" to="/register">Cadastrar</Link>
+          </p>
+
+          <p className="login-footer-copy">
+            © 2026 L'Appui. Tecnologia e Conformidade Segura.
           </p>
         </form>
       </section>

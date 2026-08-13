@@ -1,33 +1,5 @@
 const express = require('express')
-const { clientCreateSchema, clientUpdateSchema } = require('../schemas')
-const { asyncHandler, pickPagination, buildPaginated, parsePositiveInt, parseOptionalDate, sanitizeCpf, compactObject } = require('../lib/http')
-const { createAuditLog } = require('../lib/audit')
-const {
-  ensureClientOwnership,
-  assertEditableClient,
-  serializeClientListItem,
-  serializeClientDetail,
-  buildClientOverview,
-  buildClientTimeline,
-  buildMedicalRecord,
-  buildMedicalRecordAuditMetadata,
-} = require('../lib/medical-records')
-
-function normalizeClientPayload(payload) {
-  return compactObject({
-    name: payload.fullName?.trim() || payload.name?.trim() || undefined,
-    email: payload.email?.trim() || undefined,
-    phone: payload.phone?.trim() || undefined,
-    birthDate: parseOptionalDate(payload.birthDate, 'birthDate') || undefined,
-    cpf: sanitizeCpf(payload.cpf) || undefined,
-    photoDataUrl: payload.photoDataUrl === null ? null : payload.photoDataUrl?.trim() || undefined,
-    sex: payload.sex?.trim() || undefined,
-    maritalStatus: payload.maritalStatus?.trim() || undefined,
-    profession: payload.profession?.trim() || undefined,
-    addressFull: payload.addressFull?.trim() || undefined,
-    notes: payload.notes?.trim() || undefined,
-  })
-}
+const { asyncHandler } = require('../lib/http')
 
 function createClientsRouter(context) {
   const router = express.Router()
@@ -35,161 +7,39 @@ function createClientsRouter(context) {
   router.use(context.auth.authMiddleware)
   router.use(context.auth.requireScopedClinicUser)
 
-  router.get('/', asyncHandler(async (req, res) => {
-    const pagination = pickPagination(req.query)
-    const search = String(req.query.search || '').trim()
-    const where = {
-      userId: req.currentUser.id,
-      ...(search ? {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-          { phone: { contains: search } },
-          { cpf: { contains: search } },
-        ],
-      } : {}),
-    }
+  let clientsController
+  if (context.container) {
+    clientsController = context.container.resolve('clientsController')
+  } else {
+    const { Container } = require('../lib/container')
+    const { AuditService } = require('../lib/audit.service')
+    const { ClientsRepository } = require('./clients/clients.repository')
+    const { ClientsService } = require('./clients/clients.service')
+    const { ClientsController } = require('./clients/clients.controller')
 
-    const [items, total] = await Promise.all([
-      context.prisma.client.findMany({
-        where,
-        orderBy: { name: 'asc' },
-        skip: pagination.skip,
-        take: pagination.take,
-        include: {
-          anamneses: { orderBy: { filledAt: 'desc' }, take: 1 },
-          consentRecords: { orderBy: { createdAt: 'desc' }, take: 10 },
-          appointments: {
-            orderBy: { startAt: 'desc' },
-            take: 1,
-            include: {
-              service: true,
-              professional: true,
-              payment: true,
-            },
-          },
-          _count: {
-            select: {
-              appointments: true,
-              anamneses: true,
-              consentRecords: true,
-            },
-          },
-        },
-      }),
-      context.prisma.client.count({ where }),
-    ])
+    const container = new Container()
+    container.registerInstance('prisma', context.prisma)
+    container.registerInstance('auth', context.auth)
 
-    res.json(buildPaginated(items.map(serializeClientListItem), total, pagination))
-  }))
+    container.registerFactory('auditService', (c) => new AuditService(c.resolve('prisma'), c.resolve('auth')))
+    container.registerFactory('clientsRepository', (c) => new ClientsRepository(c.resolve('prisma')))
+    container.registerFactory('clientsService', (c) => new ClientsService(c.resolve('clientsRepository'), c.resolve('auditService')))
+    container.registerFactory('clientsController', (c) => new ClientsController(c.resolve('clientsService')))
 
-  router.post('/', asyncHandler(async (req, res) => {
-    const payload = clientCreateSchema.parse(req.body)
-    const created = await context.prisma.client.create({
-      data: {
-        ...normalizeClientPayload(payload),
-        userId: req.currentUser.id,
-      },
-      include: {
-        anamneses: true,
-        consentRecords: true,
-        appointments: {
-          include: { service: true, professional: true, payment: true },
-        },
-      },
-    })
+    clientsController = container.resolve('clientsController')
+  }
 
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_CLIENT_CREATE',
-      entityType: 'Client',
-      entityId: created.id,
-      metadata: { path: '/api/v2/clients', hasPhotoDataUrl: Boolean(created.photoDataUrl) },
-    })
+  router.get('/', asyncHandler((req, res) => clientsController.list(req, res)))
 
-    res.status(201).json(serializeClientDetail(created))
-  }))
-
-  router.get('/:id', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.id, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-    res.json(serializeClientDetail(client))
-  }))
-
-  router.patch('/:id', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.id, 'clientId')
-    const payload = clientUpdateSchema.parse(req.body)
-    const normalizedPayload = normalizeClientPayload(payload)
-    const currentClient = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-
-    if (currentClient.isLocked) {
-      await createAuditLog(context.prisma, req, context.auth, {
-        action: 'API_V2_CLIENT_LOCKED_UPDATE_BLOCKED',
-        entityType: 'Client',
-        entityId: currentClient.id,
-        metadata: buildMedicalRecordAuditMetadata(currentClient, `/api/v2/clients/${currentClient.id}`, {
-          attemptedFields: Object.keys(normalizedPayload),
-          blockedReason: 'medical_record_locked_after_payment',
-        }),
-      })
-
-      assertEditableClient(currentClient)
-    }
-
-    const updated = await context.prisma.client.update({
-      where: { id: clientId },
-      data: normalizedPayload,
-      include: {
-        anamneses: { orderBy: { filledAt: 'desc' } },
-        consentRecords: { orderBy: { createdAt: 'desc' }, include: { professional: true } },
-        appointments: {
-          orderBy: { startAt: 'desc' },
-          include: { service: true, professional: true, payment: true },
-        },
-      },
-    })
-
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_CLIENT_UPDATE',
-      entityType: 'Client',
-      entityId: updated.id,
-      metadata: {
-        path: `/api/v2/clients/${updated.id}`,
-        changedFields: Object.keys(normalizedPayload),
-        changedPhoto: Object.prototype.hasOwnProperty.call(normalizedPayload, 'photoDataUrl'),
-      },
-    })
-
-    res.json(serializeClientDetail(updated))
-  }))
-
-  router.get('/:id/overview', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.id, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-    res.json(buildClientOverview(client))
-  }))
-
-  router.get('/:id/timeline', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.id, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-    res.json({
-      clientId: client.id,
-      items: buildClientTimeline(client),
-    })
-  }))
-
-  router.get('/:id/medical-record', asyncHandler(async (req, res) => {
-    const clientId = parsePositiveInt(req.params.id, 'clientId')
-    const client = await ensureClientOwnership(context.prisma, req.currentUser.id, clientId)
-
-    await createAuditLog(context.prisma, req, context.auth, {
-      action: 'API_V2_CLIENT_MEDICAL_RECORD_VIEW',
-      entityType: 'Client',
-      entityId: client.id,
-      metadata: buildMedicalRecordAuditMetadata(client, `/api/v2/clients/${client.id}/medical-record`),
-    })
-
-    res.json(buildMedicalRecord(client))
-  }))
+  router.post('/', asyncHandler((req, res) => clientsController.create(req, res)))
+  router.get('/:id', asyncHandler((req, res) => clientsController.get(req, res)))
+  router.patch('/:id', asyncHandler((req, res) => clientsController.update(req, res)))
+  router.get('/:id/overview', asyncHandler((req, res) => clientsController.overview(req, res)))
+  router.get('/:id/timeline', asyncHandler((req, res) => clientsController.timeline(req, res)))
+  router.get('/:id/medical-record', asyncHandler((req, res) => clientsController.medicalRecord(req, res)))
+  router.get('/:id/facial-points', asyncHandler((req, res) => clientsController.getFacialPoints(req, res)))
+  router.put('/:id/facial-points', asyncHandler((req, res) => clientsController.updateFacialPoints(req, res)))
+  router.post('/:id/reveal', asyncHandler((req, res) => clientsController.reveal(req, res)))
 
   return router
 }
@@ -197,3 +47,4 @@ function createClientsRouter(context) {
 module.exports = {
   createClientsRouter,
 }
+

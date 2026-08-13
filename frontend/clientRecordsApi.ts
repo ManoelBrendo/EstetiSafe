@@ -1,4 +1,5 @@
 import api, { downloadApiFile } from './api'
+import type { FacialPoint } from './types'
 import type {
   AccessState,
   AnamnesisForm,
@@ -323,4 +324,14 @@ export async function downloadClientMedicalRecordPdf(clientId: string | number, 
     `/api/v2/pdf/medical-records/by-client/${clientId}`,
     `prontuario-${slugifyFilePart(clientName)}.pdf`
   )
+}
+
+export async function getClientFacialPoints(clientId: string | number): Promise<FacialPoint[]> {
+  const { data } = await api.get(`/api/v2/clients/${clientId}/facial-points`)
+  return data
+}
+
+export async function saveClientFacialPoints(clientId: string | number, points: FacialPoint[]): Promise<FacialPoint[]> {
+  const { data } = await api.put(`/api/v2/clients/${clientId}/facial-points`, points)
+  return data
 }

@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "L'Appui Mobile",
+    "slug": "lappui-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "lappui",
+    "userInterfaceStyle": "light",
+    "platforms": ["android", "ios"],
+    "android": {
+      "package": "com.lappui.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "com.lappui.mobile"
+    },
+    "extra": {
+      "apiUrl": "http://10.0.2.2:3000"
+    }
+  }
+}

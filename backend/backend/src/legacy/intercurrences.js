@@ -1,4 +1,12 @@
 const { z } = require('zod')
+const {
+  parseId,
+  httpError,
+  getAuditActorData,
+  createAuditLogFromRequest,
+  getRequestClinicId,
+} = require('./lib/helpers')
+const { authMiddleware, handle } = require('./lib/middlewares')
 
 const intercurrenceBaseSchema = z.object({
   clientId: z.coerce.number().int().positive().optional(),
@@ -196,20 +204,17 @@ function buildIntercurrenceWhere({ req, parseId, userId = getScopedIntercurrence
   return where
 }
 
-function registerIntercurrenceRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  handle,
-  parseId,
-  httpError,
-  getAuditActorData,
-  createAuditLogFromRequest,
-  getRequestClinicId,
-}) {
-  if (!app || !prisma || !authMiddleware || !handle || !parseId || !httpError) {
-    throw new Error('registerIntercurrenceRoutes requer app, prisma, authMiddleware, handle, parseId e httpError')
-  }
+function registerIntercurrenceRoutes(options) {
+  const {
+    app,
+    prisma,
+    authMiddleware = require('./lib/middlewares').authMiddleware,
+    handle = require('./lib/middlewares').handle,
+    parseId = require('./lib/helpers').parseId,
+    httpError = require('./lib/helpers').httpError,
+    getAuditActorData = require('./lib/helpers').getAuditActorData,
+    createAuditLogFromRequest = require('./lib/helpers').createAuditLogFromRequest,
+  } = options
 
   app.get('/intercurrences', authMiddleware, handle(async (req, res) => {
     const userId = getScopedIntercurrenceUserId(req)

@@ -6,6 +6,7 @@ import api, { getApiErrorMessage } from './api'
 import { createClientRecord, listClientRecords, updateClientRecord } from './clientRecordsApi'
 import { ClientAvatar } from './ClientAvatar'
 import { Icon } from './Icon'
+import { VerifyActionModal } from './components/VerifyActionModal'
 import type { ClientRecord, ConsentRecordSummary, Identifier } from './clinicalTypes'
 
 type ClientModalMode = 'create' | 'edit' | null
@@ -110,21 +111,51 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
-function readClientPhotoAsDataUrl(file: File) {
+function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Não foi possível processar a imagem selecionada.'))
+    image.src = dataUrl
+  })
+}
+
+async function readClientPhotoAsDataUrl(file: File): Promise<string> {
   if (!file.type.startsWith('image/')) {
-    return Promise.reject(new Error('Selecione um arquivo de imagem válido.'))
+    throw new Error('Selecione um arquivo de imagem válido.')
   }
 
-  if (file.size > CLIENT_PHOTO_MAX_BYTES) {
-    return Promise.reject(new Error('Use uma imagem de até 5 MB para manter o prontuário leve.'))
-  }
-
-  return new Promise<string>((resolve, reject) => {
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
     reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'))
     reader.readAsDataURL(file)
   })
+
+  try {
+    const image = await loadImage(rawDataUrl)
+    const maxDimension = 400
+    const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1)
+    const width = Math.max(1, Math.round(image.width * scale))
+    const height = Math.max(1, Math.round(image.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      return rawDataUrl
+    }
+
+    context.clearRect(0, 0, width, height)
+    context.drawImage(image, 0, 0, width, height)
+
+    return canvas.toDataURL('image/webp', 0.85)
+  } catch (err) {
+    console.warn('Falha ao comprimir imagem de avatar, enviando no formato original:', err)
+    return rawDataUrl
+  }
 }
 
 function ClientesOverviewMetric({ label, value, helper }: ClientesOverviewMetricProps) {
@@ -184,17 +215,39 @@ function ClientCard({ client, consentLoadingId, onOpenProntuário, onConsent, on
   const createdDate = client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yyyy') : 'Cadastro recente'
   const isLocked = Boolean(client.isLocked)
 
+  const hasClinicalAlerts = client.latestAnamnesis && (
+    client.latestAnamnesis.contraindications?.pregnancy ||
+    client.latestAnamnesis.healthHistory?.medications?.anticoagulants ||
+    client.latestAnamnesis.healthHistory?.allergies?.medicationAllergy ||
+    client.latestAnamnesis.healthHistory?.allergies?.cosmeticsAllergy ||
+    client.latestAnamnesis.healthHistory?.allergies?.anestheticsAllergy
+  )
+
   return (
-    <article className="client-list-item">
+    <article className="client-list-item client-list-item-compact">
       <div className="client-list-main">
         <div className="client-list-head">
           <div className="client-list-profile">
             <ClientAvatar name={client.name} photoDataUrl={client.photoDataUrl} size="lg" />
             <div className="client-list-head-main">
               <span className="eyebrow">Base clínica organizada</span>
-              <button type="button" className="client-name-link client-list-title" onClick={() => onOpenProntuário(client.id)}>
+              <button 
+                type="button" 
+                className="client-name-link client-list-title" 
+                onClick={() => onOpenProntuário(client.id)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
                 {client.name}
+                {hasClinicalAlerts && (
+                  <span title="Aviso Clínico Importante (Contraindicação / Risco)" style={{ color: 'var(--danger)', display: 'inline-flex', alignItems: 'center' }}>
+                    <Icon name="shield" size={14} />
+                  </span>
+                )}
               </button>
+              <div className="client-compact-contact">
+                <span>{client.phone || 'Telefone nao informado'}</span>
+                {client.email ? <span>{client.email}</span> : null}
+              </div>
               <p className="client-list-subtitle">
                 Acesso direto ao prontuário, consentimento e histórico clínico em uma leitura contínua.
               </p>
@@ -255,7 +308,7 @@ function ClientCard({ client, consentLoadingId, onOpenProntuário, onConsent, on
         ) : null}
       </div>
 
-      <div className="client-list-actions">
+      <div className="client-list-actions client-list-actions-compact">
         <button type="button" className="btn btn-gold btn-sm" onClick={() => onOpenProntuário(client.id)}>
           <Icon name="clipboard" /> Ver prontuário
         </button>
@@ -282,12 +335,14 @@ export default function Clientes() {
   const navigate = useNavigate()
   const [clients, setClients] = useState<ClientRecord[]>([])
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<ClientModalMode>(null)
   const [form, setForm] = useState<ClientFormState>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [selected, setSelected] = useState<ClientRecord | null>(null)
   const [consentLoadingId, setConsentLoadingId] = useState<Identifier | null>(null)
+  const [deleteTargetId, setDeleteTargetId] = useState<Identifier | null>(null)
   const hasSearch = Boolean(search.trim())
 
   const clientOverview = useMemo(() => {
@@ -304,12 +359,22 @@ export default function Clientes() {
     }
   }, [clients])
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [search])
+
   const load = useCallback(async () => {
     setLoading(true)
 
     try {
       const { items } = await listClientRecords({
-        search,
+        search: debouncedSearch,
       })
 
       setClients(items)
@@ -318,11 +383,19 @@ export default function Clientes() {
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [debouncedSearch])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('action') === 'new') {
+      openCreate()
+      navigate('/clientes', { replace: true })
+    }
+  }, [navigate])
 
   function openCreate() {
     setForm(emptyForm)
@@ -421,16 +494,21 @@ export default function Clientes() {
     }
   }
 
-  async function handleDelete(id: Identifier) {
-    if (!window.confirm('Deseja remover este cliente da base ativa?')) return
+  async function handleConfirmDelete() {
+    if (!deleteTargetId) return
 
     try {
-      await api.delete('/clients/' + id)
+      await api.delete('/clients/' + deleteTargetId)
       toast.success('Cliente removido')
+      setDeleteTargetId(null)
       await load()
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Não foi possível excluir o cliente'))
     }
+  }
+
+  function handleDelete(id: Identifier) {
+    setDeleteTargetId(id)
   }
 
   const setField = (key: keyof ClientFormState) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -468,13 +546,19 @@ export default function Clientes() {
         <div className="form-group">
           <label className="form-label">Buscar cliente</label>
           <div className="toolbar-card clientes-search-row">
-            <input
-              className="form-input"
-              type="search"
-              placeholder="Pesquise por nome, telefone ou e-mail"
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-            />
+            <div className="input-with-icon-wrapper" style={{ position: 'relative', flex: 1 }}>
+              <input
+                className="form-input"
+                type="search"
+                placeholder="Pesquise por nome, telefone ou e-mail"
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                style={{ paddingLeft: '38px', width: '100%' }}
+              />
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--gold-deep)', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                <Icon name="search" size={16} />
+              </span>
+            </div>
             {hasSearch ? (
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSearch('')}>
                 Limpar busca
@@ -513,9 +597,35 @@ export default function Clientes() {
       </section>
 
       {loading ? (
-        <div className="loading-page">
-          <span className="spinner" />
-          Carregando clientes...
+        <div className="client-list">
+          {[1, 2, 3].map(i => (
+            <article key={i} className="client-list-item client-list-item-compact skeleton-card" style={{ gap: '16px', minHeight: 'auto', padding: '24px' }}>
+              <div className="client-list-head" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+                <div className="client-list-profile" style={{ display: 'flex', gap: '16px', width: '100%', alignItems: 'center' }}>
+                  <div className="skeleton-circle skeleton-shimmer" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="skeleton-line title skeleton-shimmer" style={{ width: '40%', height: '18px' }} />
+                    <div className="skeleton-line subtitle skeleton-shimmer" style={{ width: '60%', height: '12px', margin: '6px 0' }} />
+                    <div className="skeleton-line paragraph skeleton-shimmer" style={{ width: '80%', height: '10px' }} />
+                  </div>
+                </div>
+              </div>
+              <div className="client-list-grid" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
+                <div className="client-list-column">
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '50%', height: '10px', marginBottom: '6px' }} />
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '80%', height: '12px' }} />
+                </div>
+                <div className="client-list-column">
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '50%', height: '10px', marginBottom: '6px' }} />
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '80%', height: '12px' }} />
+                </div>
+                <div className="client-list-column">
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '50%', height: '10px', marginBottom: '6px' }} />
+                  <div className="skeleton-line short skeleton-shimmer" style={{ width: '80%', height: '12px' }} />
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       ) : clients.length ? (
         <div className="client-list">
@@ -597,6 +707,14 @@ export default function Clientes() {
           ) : null}
         </Modal>
       ) : null}
+
+      <VerifyActionModal
+        isOpen={deleteTargetId !== null}
+        title="Excluir Cliente"
+        description="Esta ação é crítica e removerá permanentemente a ficha do cliente de sua base ativa. Para confirmar, digite sua senha."
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTargetId(null)}
+      />
     </div>
   )
 }

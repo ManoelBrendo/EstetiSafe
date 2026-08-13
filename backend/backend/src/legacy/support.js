@@ -1,147 +1,35 @@
 const { z } = require('zod')
-
-const supportAssumeSchema = z.object({ userId: z.coerce.number().int().positive() })
-
-function hasSupportCredentials({ supportAdminEmail, supportAdminPassword }) {
-  return Boolean(supportAdminEmail && supportAdminPassword)
-}
-
-function getSupportContact({
-  supportContactName,
-  supportContactEmail,
-  supportContactPhone,
-}) {
-  return {
-    name: supportContactName,
-    email: supportContactEmail,
-    phone: supportContactPhone,
-  }
-}
-
-function getSupportBillingSnapshot() {
-  return {
-    status: 'ACTIVE',
-    effectiveStatus: 'ACTIVE',
-    blocked: false,
-    amount: null,
-    reference: null,
-    notes: null,
-    graceEndsAt: null,
-    lastPaidAt: null,
-    nextDueAt: null,
-    blockAt: null,
-    daysRemaining: null,
-    message: 'Acesso técnico liberado para manutenção, diagnóstico e suporte.',
-  }
-}
-
-function buildSupportUser({
-  supportAdminEmail,
-  supportAdminName,
-}) {
-  return {
-    id: 0,
-    email: supportAdminEmail,
-    clinicName: supportAdminName,
-    clinicLogoDataUrl: null,
-    role: 'SUPPORT',
-    createdAt: new Date(0),
-  }
-}
-
-function isSupportPayload(payload, supportAdminEmail) {
-  return Boolean(payload?.support === true && payload?.role === 'SUPPORT' && payload?.email === supportAdminEmail)
-}
-
-function requireSupport(req, res, next) {
-  if (!req.user?.support) {
-    return res.status(403).json({ error: 'Acesso restrito ao suporte técnico.' })
-  }
-
-  next()
-}
-
-function createSupportLoginResponse({
-  email,
-  password,
-  supportAdminEmail,
-  supportAdminPassword,
-  supportAdminName,
-  safeEqualText,
-  signToken,
-  serializeSupportUser,
-}) {
-  if (!hasSupportCredentials({ supportAdminEmail, supportAdminPassword }) || email !== supportAdminEmail) {
-    return null
-  }
-
-  const passwordMatches = safeEqualText(password, supportAdminPassword)
-
-  if (!passwordMatches) {
-    return {
-      status: 401,
-      body: { error: 'Credenciais invalidas.' },
-    }
-  }
-
-  const token = signToken({
-    support: true,
-    role: 'SUPPORT',
-    email: supportAdminEmail,
-    supportName: supportAdminName,
-  })
-
-  return {
-    status: 200,
-    body: {
-      token,
-      user: serializeSupportUser(),
-    },
-  }
-}
-
-function registerSupportRoutes({
-  app,
-  prisma,
-  authMiddleware,
-  handle,
-  requireSupport,
+const {
+  buildSupportUser,
+  getSupportBillingSnapshot,
+  getSupportContact,
+  hasSupportCredentials,
+  isSupportPayload,
+  createSupportLoginResponse,
   ensureClinicAggregate,
   userAggregateInclude,
   mergeLegacyUserAggregate,
   serializeUser,
   createAuditLogFromRequest,
   signToken,
-  supportAdminEmail,
-  supportAdminName,
-  supportContactName,
-  supportContactEmail,
-  supportContactPhone,
+} = require('./lib/helpers')
+const {
+  authMiddleware,
+  handle,
+  requireSupport,
+} = require('./lib/middlewares')
+
+const supportAssumeSchema = z.object({ userId: z.coerce.number().int().positive() })
+
+function registerSupportRoutes({
+  app,
+  prisma,
+  supportAdminEmail = process.env.SUPPORT_ADMIN_EMAIL || '',
+  supportAdminName = process.env.SUPPORT_ADMIN_NAME || 'Central de suporte',
+  supportContactName = process.env.SUPPORT_CONTACT_NAME || "Suporte L'Appui",
+  supportContactEmail = process.env.SUPPORT_CONTACT_EMAIL || '',
+  supportContactPhone = process.env.SUPPORT_CONTACT_PHONE || '',
 }) {
-  const requiredDeps = {
-    app,
-    prisma,
-    authMiddleware,
-    handle,
-    requireSupport,
-    ensureClinicAggregate,
-    userAggregateInclude,
-    mergeLegacyUserAggregate,
-    serializeUser,
-    createAuditLogFromRequest,
-    signToken,
-    supportAdminEmail,
-    supportAdminName,
-    supportContactName,
-    supportContactEmail,
-  }
-
-  for (const [key, value] of Object.entries(requiredDeps)) {
-    if (!value) {
-      throw new Error(`registerSupportRoutes requer ${key}`)
-    }
-  }
-
   app.get('/public/support-contact', (req, res) => {
     res.json(getSupportContact({
       supportContactName,

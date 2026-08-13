@@ -63,3 +63,19 @@ export type BillingGatewayStatusSnapshot = {
   latestIntent: BillingGatewayIntent | null
   message: string
 }
+
+export type StripeCheckoutSessionInput = {
+  amount: number
+  dueAt: Date | string
+  reference: string
+  clinicId: number | string
+  env?: Record<string, string | undefined>
+}
+
+export type StripeCheckoutSessionOutput = {
+  providerPaymentId: string
+  checkoutUrl: string | null
+  pixCopyPaste: null
+  status: 'PENDING'
+  payload: unknown
+}

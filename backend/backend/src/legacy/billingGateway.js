@@ -1,5 +1,18 @@
 const crypto = require('crypto')
 const { z } = require('zod')
+const {
+  parseDateOnly,
+  addDays,
+  ensureClinicAggregate,
+  getBillingSnapshot,
+  createAuditLogFromRequest,
+  httpError,
+} = require('./lib/helpers')
+const {
+  authMiddleware,
+  requireSupportBillingControl,
+  handle,
+} = require('./lib/middlewares')
 
 const gatewayIntentStatuses = ['PENDING', 'PAID', 'FAILED', 'CANCELLED', 'EXPIRED']
 const gatewayPaymentMethods = ['PIX', 'CREDIT_CARD', 'BANK_TRANSFER']
@@ -40,7 +53,80 @@ function createGatewayReference(clinicId) {
 }
 
 function getGatewayProviderName(env = process.env) {
-  return env.BILLING_GATEWAY_PROVIDER || 'MANUAL_READY'
+  const provider = env.BILLING_GATEWAY_PROVIDER || 'MANUAL_READY'
+  return provider.toUpperCase()
+}
+
+function verifyStripeSignature(rawBody, signatureHeader, secret) {
+  if (!rawBody || !signatureHeader || !secret) return false
+
+  const parts = String(signatureHeader).split(',')
+  const tPart = parts.find(p => p.startsWith('t='))
+  const v1Part = parts.find(p => p.startsWith('v1='))
+
+  if (!tPart || !v1Part) return false
+
+  const t = tPart.substring(2)
+  const v1 = v1Part.substring(3)
+
+  const signaturePayload = t + '.' + rawBody.toString('utf8')
+  const computed = crypto
+    .createHmac('sha256', secret)
+    .update(signaturePayload)
+    .digest('hex')
+
+  try {
+    const computedBuf = Buffer.from(computed, 'hex')
+    const v1Buf = Buffer.from(v1, 'hex')
+    if (computedBuf.length !== v1Buf.length) return false
+    return crypto.timingSafeEqual(computedBuf, v1Buf)
+  } catch (error) {
+    return false
+  }
+}
+
+async function createStripeCheckoutSession({ amount, dueAt, reference, clinicId, env = process.env }) {
+  const stripeSecretKey = env.STRIPE_SECRET_KEY
+  if (!stripeSecretKey) {
+    throw new Error('STRIPE_SECRET_KEY nao configurada no ambiente')
+  }
+
+  const amountInCents = Math.round(amount * 100)
+  const frontendUrl = (env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim()
+
+  const params = new URLSearchParams()
+  params.append('success_url', frontendUrl + '/billing?success=true&reference=' + reference)
+  params.append('cancel_url', frontendUrl + '/billing?cancel=true&reference=' + reference)
+  params.append('mode', 'payment')
+  params.append('line_items[0][price_data][currency]', 'brl')
+  params.append('line_items[0][price_data][product_data][name]', 'Assinatura EstetiSafe')
+  params.append('line_items[0][price_data][unit_amount]', String(amountInCents))
+  params.append('line_items[0][quantity]', '1')
+  params.append('metadata[reference]', reference)
+  params.append('metadata[clinicId]', String(clinicId))
+
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + stripeSecretKey,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error('Erro na API do Stripe: ' + errorText)
+  }
+
+  const session = await response.json()
+  return {
+    providerPaymentId: session.id,
+    checkoutUrl: session.url,
+    pixCopyPaste: null,
+    status: 'PENDING',
+    payload: session,
+  }
 }
 
 function normalizeGatewayStatus(status, fallback = 'PENDING') {
@@ -373,13 +459,47 @@ async function createGatewayIntentForSubscription({
   if (!clinicId) throw new Error('Clínica da assinatura não informada')
 
   const billingReference = reference || createGatewayReference(clinicId)
-  const intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
+  const provider = getGatewayProviderName()
 
-  if (source === 'automatic') {
-    intent.message = 'Cobrança automática de assinatura gerada pelo LAppui. O pagamento será confirmado por webhook quando o provedor retornar sucesso.'
+  let intent
+  if (provider === 'STRIPE') {
+    try {
+      const stripeRes = await createStripeCheckoutSession({ amount, dueAt, reference: billingReference, clinicId })
+      intent = {
+        provider: 'STRIPE',
+        reference: billingReference,
+        clinicId,
+        amount: Number(amount.toFixed(2)),
+        currency: 'BRL',
+        status: 'PENDING',
+        paymentMethod: method,
+        dueAt: dueAt instanceof Date ? dueAt.toISOString() : new Date(dueAt).toISOString(),
+        expiresAt: new Date(new Date(dueAt).getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        checkoutUrl: stripeRes.checkoutUrl,
+        pixCopyPaste: null,
+        providerPaymentId: stripeRes.providerPaymentId,
+        message: 'Checkout do Stripe gerado com sucesso.',
+        source,
+      }
+    } catch (err) {
+      console.error('[Stripe] Failed to create checkout session, falling back to simulation:', err.message)
+      intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
+      intent.message = 'Falha ao conectar com Stripe: ' + err.message + '. Criado em modo de simulacao.'
+      intent.source = source
+    }
+  } else if (provider === 'ASAAS') {
+    intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
+    intent.provider = 'ASAAS'
+    intent.pixCopyPaste = method === 'PIX' ? '00020126580014br.gov.bcb.pix0136asaas_key_placeholder_for_' + billingReference : null
+    intent.message = 'Integracao Asaas ativa (Simulacao Sandbox).'
+    intent.source = source
+  } else {
+    intent = buildIntentPayload({ clinicId, amount, dueAt, method, reference: billingReference })
+    if (source === 'automatic') {
+      intent.message = 'Cobrança automática de assinatura gerada pelo LAppui. O pagamento será confirmado por webhook quando o provedor retornar sucesso.'
+    }
+    intent.source = source
   }
-
-  intent.source = source
 
   await updateSubscriptionReference({ prisma, user, clinicId, amount, dueAt, reference: billingReference })
 
@@ -537,33 +657,7 @@ async function resolveUserByGatewayReference({ prisma, reference }) {
 function registerBillingGatewayRoutes({
   app,
   prisma,
-  authMiddleware,
-  requireSupportBillingControl,
-  handle,
-  parseDateOnly,
-  addDays,
-  ensureClinicAggregate,
-  getBillingSnapshot,
-  createAuditLogFromRequest,
-  httpError,
 }) {
-  const deps = {
-    app,
-    prisma,
-    authMiddleware,
-    requireSupportBillingControl,
-    handle,
-    parseDateOnly,
-    addDays,
-    ensureClinicAggregate,
-    getBillingSnapshot,
-    createAuditLogFromRequest,
-    httpError,
-  }
-
-  for (const [key, value] of Object.entries(deps)) {
-    if (!value) throw new Error('registerBillingGatewayRoutes requer ' + key)
-  }
 
   app.get('/billing/gateway/status', authMiddleware, handle(async (req, res) => {
     const clinicId = req.currentUser?.ownedClinic?.id || null
@@ -698,6 +792,180 @@ function registerBillingGatewayRoutes({
   }))
 
   app.post('/webhooks/billing', handle(async (req, res) => {
+    const provider = getGatewayProviderName()
+
+    if (provider === 'STRIPE') {
+      const secret = process.env.BILLING_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET
+      if (!secret) {
+        return res.status(503).json({ error: 'Webhook Stripe nao configurado' })
+      }
+      const sig = req.headers['stripe-signature']
+      if (!verifyStripeSignature(req.rawBody, sig, secret)) {
+        return res.status(401).json({ error: 'Assinatura Stripe invalida' })
+      }
+
+      const event = req.body || {}
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data?.object || {}
+        const reference = session.metadata?.reference
+        if (!reference) {
+          return res.status(400).json({ error: 'Reference nao encontrada nos metadados' })
+        }
+
+        const resolved = await resolveUserByGatewayReference({ prisma, reference })
+        if (!resolved) throw httpError(404, 'Referenca de cobranca nao encontrada')
+
+        const paidAt = new Date()
+        const amount = session.amount_total ? session.amount_total / 100 : resolved.intentRecord?.amount
+
+        const updatedUser = await applyGatewayPayment({
+          prisma,
+          user: resolved.user,
+          clinicId: resolved.clinicId,
+          amount,
+          paidAt,
+          nextDueAt: null,
+          reference,
+          addDays,
+          ensureClinicAggregate,
+        })
+
+        const intentPayload = buildIntentPayload({
+          clinicId: resolved.clinicId,
+          amount,
+          dueAt: resolved.user.ownedClinic?.subscription?.nextDueAt || addDays(paidAt, 30),
+          method: 'CREDIT_CARD',
+          reference,
+        })
+        intentPayload.status = 'PAID'
+        intentPayload.paidAt = paidAt.toISOString()
+        intentPayload.providerPaymentId = session.id
+        intentPayload.provider = 'STRIPE'
+
+        const persistedIntent = await updateIntentRecord({
+          prisma,
+          reference,
+          clinicId: resolved.clinicId,
+          provider: 'STRIPE',
+          providerPaymentId: session.id,
+          status: 'PAID',
+          amount,
+          paidAt,
+          payload: intentPayload,
+          eventType: 'WEBHOOK_PAID',
+        })
+
+        await prisma.auditLog.create({
+          data: {
+            clinicId: resolved.clinicId,
+            actorEmail: 'stripe-webhook',
+            actorRole: 'GATEWAY',
+            action: 'BILLING_GATEWAY_PAYMENT_CONFIRMED',
+            entityType: 'ClinicSubscription',
+            entityId: reference,
+            metadata: {
+              intent: persistedIntent || intentPayload,
+              event,
+            },
+          },
+        })
+
+        return res.json({
+          ok: true,
+          intent: persistedIntent || intentPayload,
+          billing: getBillingSnapshot(updatedUser),
+        })
+      }
+
+      return res.json({ ok: true, message: 'Stripe event received' })
+    }
+
+    if (provider === 'ASAAS') {
+      const secret = process.env.BILLING_WEBHOOK_SECRET || process.env.ASAAS_WEBHOOK_TOKEN
+      if (!secret) {
+        return res.status(503).json({ error: 'Webhook Asaas nao configurado' })
+      }
+      const token = req.headers['asaas-access-token']
+      if (token !== secret) {
+        return res.status(401).json({ error: 'Token Asaas invalido' })
+      }
+
+      const event = req.body || {}
+      if (event.event === 'PAYMENT_RECEIVED' || event.event === 'PAYMENT_CONFIRMED') {
+        const payment = event.payment || {}
+        const reference = payment.externalReference
+        if (!reference) {
+          return res.status(400).json({ error: 'Reference nao encontrada' })
+        }
+
+        const resolved = await resolveUserByGatewayReference({ prisma, reference })
+        if (!resolved) throw httpError(404, 'Referenca de cobranca nao encontrada')
+
+        const paidAt = new Date()
+        const amount = payment.value
+
+        const updatedUser = await applyGatewayPayment({
+          prisma,
+          user: resolved.user,
+          clinicId: resolved.clinicId,
+          amount,
+          paidAt,
+          nextDueAt: null,
+          reference,
+          addDays,
+          ensureClinicAggregate,
+        })
+
+        const intentPayload = buildIntentPayload({
+          clinicId: resolved.clinicId,
+          amount,
+          dueAt: resolved.user.ownedClinic?.subscription?.nextDueAt || addDays(paidAt, 30),
+          method: payment.billingType === 'PIX' ? 'PIX' : 'CREDIT_CARD',
+          reference,
+        })
+        intentPayload.status = 'PAID'
+        intentPayload.paidAt = paidAt.toISOString()
+        intentPayload.providerPaymentId = payment.id
+        intentPayload.provider = 'ASAAS'
+
+        const persistedIntent = await updateIntentRecord({
+          prisma,
+          reference,
+          clinicId: resolved.clinicId,
+          provider: 'ASAAS',
+          providerPaymentId: payment.id,
+          status: 'PAID',
+          amount,
+          paidAt,
+          payload: intentPayload,
+          eventType: 'WEBHOOK_PAID',
+        })
+
+        await prisma.auditLog.create({
+          data: {
+            clinicId: resolved.clinicId,
+            actorEmail: 'asaas-webhook',
+            actorRole: 'GATEWAY',
+            action: 'BILLING_GATEWAY_PAYMENT_CONFIRMED',
+            entityType: 'ClinicSubscription',
+            entityId: reference,
+            metadata: {
+              intent: persistedIntent || intentPayload,
+              event,
+            },
+          },
+        })
+
+        return res.json({
+          ok: true,
+          intent: persistedIntent || intentPayload,
+          billing: getBillingSnapshot(updatedUser),
+        })
+      }
+
+      return res.json({ ok: true, message: 'Asaas event received' })
+    }
+
     const secret = process.env.BILLING_WEBHOOK_SECRET
     if (!secret) {
       return res.status(503).json({ error: 'Webhook financeiro ainda nao configurado no ambiente' })
@@ -795,4 +1063,6 @@ module.exports = {
   getLatestGatewayIntent,
   registerBillingGatewayRoutes,
   toNumber,
+  verifyStripeSignature,
+  createStripeCheckoutSession,
 }
