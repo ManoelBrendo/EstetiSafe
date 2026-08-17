@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api, { getApiErrorMessage } from './api'
 import { useAuth } from './useAuth'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { getClinicBranding, prepareClinicLogoDataUrl } from './branding'
 import type { DashboardResponse, DashboardUpcomingAppointment, InventoryAlert } from './operationsTypes'
 
@@ -24,6 +24,33 @@ interface AlertCardProps {
 
 interface UpcomingCardProps {
   appointment: DashboardUpcomingAppointment
+}
+
+interface EssentialMetricProps {
+  label: string
+  value: string | number
+  helper: string
+  tone?: 'neutral' | 'attention'
+}
+
+interface ModuleStatProps {
+  label: string
+  value: string | number
+  tone?: 'neutral' | 'attention'
+}
+
+interface DashboardDisclosureProps {
+  title: string
+  value: string | number
+  defaultOpen?: boolean
+  children: ReactNode
+}
+
+interface CommandLinkProps {
+  to: string
+  icon: IconName
+  label: string
+  emphasis?: 'primary' | 'attention' | 'quiet'
 }
 
 interface BrandSurfaceProps {
@@ -145,6 +172,53 @@ function UpcomingCard({ appointment }: UpcomingCardProps) {
         </div>
       </div>
     </article>
+  )
+}
+
+function EssentialMetric({ label, value, helper, tone = 'neutral' }: EssentialMetricProps) {
+  return (
+    <article className={`dashboard-essential-metric dashboard-essential-metric-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{helper}</small>
+    </article>
+  )
+}
+
+function ModuleStat({ label, value, tone = 'neutral' }: ModuleStatProps) {
+  return (
+    <div className={`dashboard-module-stat dashboard-module-stat-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
+function DashboardDisclosure({ title, value, defaultOpen = false, children }: DashboardDisclosureProps) {
+  return (
+    <details open={defaultOpen}>
+      <summary>
+        <span>{title}</span>
+        <strong>{value}</strong>
+      </summary>
+      <div className="dashboard-detail-body">
+        {children}
+      </div>
+    </details>
+  )
+}
+
+function CommandLink({ to, icon, label, emphasis = 'quiet' }: CommandLinkProps) {
+  const className = emphasis === 'primary'
+    ? 'btn btn-primary btn-sm'
+    : emphasis === 'attention'
+      ? 'btn btn-gold btn-sm'
+      : 'btn btn-outline btn-sm'
+
+  return (
+    <Link to={to} className={className}>
+      <Icon name={icon} /> {label}
+    </Link>
   )
 }
 
@@ -289,6 +363,7 @@ export default function Dashboard() {
   const clinicalInsights = data?.clinicalInsights
   const clinicalInsightItems = clinicalInsights?.insights || []
   const clinicalCriticalCount = clinicalInsights?.countsByPriority?.CRITICAL ?? 0
+  const pendingActionCount = criticalDocumentsCount + inventoryAlerts.length + clinicalCriticalCount
 
   async function handleBrandLogoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -368,251 +443,191 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <p className="section-copy dashboard-brand-copy-text">
-            Comece pelo que mais impacta a operação: agenda, documentos críticos e assinatura. O restante continua acessível, mas sem disputar atenção no primeiro olhar.
-          </p>
-
-          <div className="dashboard-brand-meta">
-            <span className={billing.className}>{billing.label}</span>
-            <span className={clinicStatus.className}>{clinicStatus.label}</span>
-            {criticalDocumentsCount ? (
-              <span className="badge badge-gold">{criticalDocumentsCount} alerta(s) documental(is)</span>
-            ) : null}
-          </div>
-
           <div className="dashboard-brand-actions">
             <button type="button" className="btn btn-outline btn-sm" onClick={openBrandingEditor}>
               <Icon name="camera" /> Personalizar marca
             </button>
-            <Link to="/assinatura" className="btn btn-ghost btn-sm">
-              <Icon name="dollar" /> Abrir assinatura
-            </Link>
           </div>
         </div>
       </section>
 
-      <div className="stats-grid stats-grid-adaptive">
-        <div className="stat-card gold">
-          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div className="stat-label">Receita do mês</div>
-              <div className="stat-value">{fmtBRL(data?.month?.revenue)}</div>
-              <div className="stat-sub">Somente pagamentos confirmados.</div>
-            </div>
-            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg className="progress-ring" width="60" height="60">
-                <circle className="progress-ring__circle-bg" stroke="rgba(182, 137, 77, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
-                <circle
-                  className="progress-ring__circle"
-                  stroke="var(--gold)"
-                  strokeWidth="4"
-                  fill="transparent"
-                  r="22"
-                  cx="30"
-                  cy="30"
-                  style={{
-                    strokeDasharray: `${2 * Math.PI * 22}`,
-                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.revenue || 0) / 50000))}`,
-                    transition: 'stroke-dashoffset 0.8s ease-in-out',
-                  }}
-                />
-              </svg>
-              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
-                {Math.round(Math.min(100, ((data?.month?.revenue || 0) / 50000) * 100))}%
-              </span>
-            </div>
+      <section className="dashboard-command-panel" aria-label="Resumo essencial do painel clínico">
+        <div className={`dashboard-command-main ${pendingActionCount ? 'has-alerts' : 'is-clear'}`}>
+          <div className="dashboard-command-kicker">
+            <span className="dashboard-command-icon" aria-hidden="true">
+              <Icon name={pendingActionCount ? 'sparkles' : 'shield'} size={18} />
+            </span>
+            <span className="eyebrow">Agora</span>
+            <span className={`dashboard-status-pill ${pendingActionCount ? 'is-alert' : 'is-clear'}`}>
+              {pendingActionCount ? 'Prioridade' : 'Estável'}
+            </span>
           </div>
-          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
-            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="gold-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--gold)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 20 Q 20 5, 40 18 T 80 8 T 100 12 L 100 25 L 0 25 Z" fill="url(#gold-gradient)" />
-              <path d="M 0 20 Q 20 5, 40 18 T 80 8 T 100 12" fill="none" stroke="var(--gold)" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+          <h2>{pendingActionCount ? `${pendingActionCount} ponto(s) precisam de revisão` : 'Operação sem alerta crítico'}</h2>
+          <p>
+            {pendingActionCount
+              ? 'Priorize os itens abaixo antes de abrir módulos secundários.'
+              : 'Agenda, documentos e operação estão sem sinal crítico no momento.'}
+          </p>
+
+          <div className="dashboard-command-actions">
+            <CommandLink to="/agendamentos" icon="calendar" label="Agenda" emphasis="primary" />
+            <CommandLink to="/documentos" icon="fileText" label="Documentos" emphasis={criticalDocumentsCount ? 'attention' : 'quiet'} />
+            <CommandLink to="/produtos-e-equipamentos" icon="box" label="Operação" emphasis={inventoryAlerts.length ? 'attention' : 'quiet'} />
           </div>
         </div>
-
-        <div className="stat-card green">
-          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div className="stat-label">Atendimentos</div>
-              <div className="stat-value">{data?.month?.totalAppointments ?? 0}</div>
-              <div className="stat-sub">Concluídos no mês vigente.</div>
-            </div>
-            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg className="progress-ring" width="60" height="60">
-                <circle className="progress-ring__circle-bg" stroke="rgba(63, 124, 103, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
-                <circle
-                  className="progress-ring__circle"
-                  stroke="var(--success)"
-                  strokeWidth="4"
-                  fill="transparent"
-                  r="22"
-                  cx="30"
-                  cy="30"
-                  style={{
-                    strokeDasharray: `${2 * Math.PI * 22}`,
-                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.totalAppointments || 0) / 100))}`,
-                    transition: 'stroke-dashoffset 0.8s ease-in-out',
-                  }}
-                />
-              </svg>
-              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
-                {Math.round(Math.min(100, ((data?.month?.totalAppointments || 0) / 100) * 100))}%
-              </span>
-            </div>
-          </div>
-          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
-            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="green-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--success)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--success)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 15 Q 15 22, 35 10 T 70 18 T 100 5 L 100 25 L 0 25 Z" fill="url(#green-gradient)" />
-              <path d="M 0 15 Q 15 22, 35 10 T 70 18 T 100 5" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="stat-card rose">
-          <div className="stat-content-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div className="stat-label">Clientes</div>
-              <div className="stat-value">{data?.month?.totalClients ?? 0}</div>
-              <div className="stat-sub">Base ativa e organizada.</div>
-            </div>
-            <div className="stat-ring-container" style={{ position: 'relative', width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg className="progress-ring" width="60" height="60">
-                <circle className="progress-ring__circle-bg" stroke="rgba(172, 118, 109, 0.1)" strokeWidth="4" fill="transparent" r="22" cx="30" cy="30" />
-                <circle
-                  className="progress-ring__circle"
-                  stroke="var(--rose)"
-                  strokeWidth="4"
-                  fill="transparent"
-                  r="22"
-                  cx="30"
-                  cy="30"
-                  style={{
-                    strokeDasharray: `${2 * Math.PI * 22}`,
-                    strokeDashoffset: `${2 * Math.PI * 22 * (1 - Math.min(1, (data?.month?.totalClients || 0) / 200))}`,
-                    transition: 'stroke-dashoffset 0.8s ease-in-out',
-                  }}
-                />
-              </svg>
-              <span className="stat-ring-percentage" style={{ position: 'absolute', fontSize: '0.72rem', fontWeight: '800', color: 'var(--ink)' }}>
-                {Math.round(Math.min(100, ((data?.month?.totalClients || 0) / 200) * 100))}%
-              </span>
-            </div>
-          </div>
-          <div className="stat-sparkline" style={{ marginTop: '14px', height: '28px', opacity: 0.85 }}>
-            <svg viewBox="0 0 100 25" width="100%" height="25" preserveAspectRatio="none" style={{ display: 'block' }}>
-              <defs>
-                <linearGradient id="rose-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--rose)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--rose)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 22 Q 25 12, 50 18 T 85 5 T 100 10 L 100 25 L 0 25 Z" fill="url(#rose-gradient)" />
-              <path d="M 0 22 Q 25 12, 50 18 T 85 5 T 100 10" fill="none" stroke="var(--rose)" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <section className="dashboard-focus-row" aria-label="Ações principais do painel clínico">
-        <Link to="/agendamentos" className="dashboard-focus-card">
-          <Icon name="calendar" />
-          <span>
-            <strong>Agenda</strong>
-            <p>Veja a próxima rotina da clínica.</p>
-          </span>
-        </Link>
-        <Link to="/documentos" className={`dashboard-focus-card ${criticalDocumentsCount ? 'attention' : ''}`}>
-          <Icon name="fileText" />
-          <span>
-            <strong>Documentos</strong>
-            <p>{criticalDocumentsCount ? `${criticalDocumentsCount} alerta(s) para revisar.` : 'Tudo visivel para auditoria.'}</p>
-          </span>
-        </Link>
-        <Link to="/assinatura" className="dashboard-focus-card finance">
-          <Icon name="dollar" />
-          <span>
-            <strong>Assinatura e contas</strong>
-            <p>Status, vencimentos e despesas em um lugar.</p>
-          </span>
-        </Link>
       </section>
 
-      <div className="overview-grid dashboard-overview-grid">
-        <section className="card section-card dashboard-section-card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-title">Conformidade documental</h2>
-              <p className="section-copy">Veja o que está em dia e o que precisa de ação imediata.</p>
-            </div>
+      <section className="dashboard-minimal-details" aria-label="Detalhes operacionais recolhidos">
+        <DashboardDisclosure title="Indicadores" value={`${pendingActionCount} pendência(s)`}>
+          <section className="dashboard-essential-strip" aria-label="Indicadores essenciais">
+            <EssentialMetric label="Receita" value={fmtBRL(data?.month?.revenue)} helper="Mês atual" />
+            <EssentialMetric label="Atendimentos" value={data?.month?.totalAppointments ?? 0} helper="Concluídos" />
+            <EssentialMetric label="Clientes" value={data?.month?.totalClients ?? 0} helper="Base ativa" />
+            <EssentialMetric
+              label="Pendências"
+              value={pendingActionCount}
+              helper="Documentos, operação e sinais"
+              tone={pendingActionCount ? 'attention' : 'neutral'}
+            />
+          </section>
+        </DashboardDisclosure>
 
-            <Link to="/documentos" className="btn btn-ghost btn-sm">
-              Abrir documentos
-            </Link>
-          </div>
+        <DashboardDisclosure
+          title="Itens para revisar"
+          value={pendingActionCount || 'Nenhum alerta'}
+        >
+          {!pendingActionCount ? (
+            <p className="text-muted">Nada crítico agora. Use os atalhos principais apenas quando precisar aprofundar.</p>
+          ) : null}
 
-          <div className="documents-summary-grid compact-docs-grid">
-            <div className="mini-stat-card">
-              <span>Total</span>
-              <strong>{documents?.total ?? 0}</strong>
-            </div>
-            <div className="mini-stat-card">
-              <span>Em dia</span>
-              <strong>{documents?.valid ?? 0}</strong>
-            </div>
-            <div className="mini-stat-card mini-stat-card-alert">
-              <span>Críticos</span>
-              <strong>{criticalDocumentsCount}</strong>
-            </div>
+          {criticalAlerts.slice(0, 3).map(alert => (
+            <AlertCard
+              key={alert.id}
+              title={alert.title}
+              subtitle={alert.documentType}
+              statusLabel={alert.statusLabel}
+              badgeClass={alert.status === 'EXPIRED' ? 'badge-red' : 'badge-gold'}
+              dateLabel={formatDate(alert.expiresAt)}
+            />
+          ))}
+
+          {inventoryAlerts.slice(0, 3).map(item => (
+            <AlertCard
+              key={`${item.assetType}-${item.id}`}
+              title={item.name}
+              subtitle={item.assetType === 'PRODUCT' ? 'Produto' : 'Equipamento'}
+              statusLabel={item.statusLabel}
+              badgeClass={item.status === 'OVERDUE' ? 'badge-red' : 'badge-gold'}
+              dateLabel={item.assetType === 'PRODUCT'
+                ? `Validade: ${formatDate(item.expiresAt)}`
+                : `Manutenção: ${formatDate(item.maintenanceDueAt)}`}
+            />
+          ))}
+
+          {clinicalInsightItems.slice(0, 2).map(insight => (
+            <AlertCard
+              key={insight.id}
+              title={insight.title}
+              subtitle={insight.description}
+              statusLabel={getInsightPriorityLabel(insight.priority)}
+              badgeClass={getInsightBadgeClass(insight.priority)}
+              dateLabel={insight.actionLabel}
+            />
+          ))}
+        </DashboardDisclosure>
+
+        <DashboardDisclosure title="Agenda" value={data?.upcoming?.length || 0}>
+          {!data?.upcoming?.length ? (
+            <p className="text-muted">Nenhum atendimento próximo agendado.</p>
+          ) : (
+            data.upcoming.slice(0, 4).map(appointment => (
+              <UpcomingCard key={appointment.id} appointment={appointment} />
+            ))
+          )}
+          <Link to="/agendamentos" className="btn btn-ghost btn-sm">Ver agenda completa</Link>
+        </DashboardDisclosure>
+
+        <DashboardDisclosure title="Documentos" value={criticalDocumentsCount ? `${criticalDocumentsCount} crítico(s)` : 'Em dia'}>
+          <div className="dashboard-module-stat-grid">
+            <ModuleStat label="Total" value={documents?.total ?? 0} />
+            <ModuleStat label="Em dia" value={documents?.valid ?? 0} />
+            <ModuleStat label="Críticos" value={criticalDocumentsCount} tone={criticalDocumentsCount ? 'attention' : 'neutral'} />
           </div>
 
           {!criticalAlerts.length ? (
-            <div className="empty empty-tight">
-              <div className="empty-icon">
-                <Icon name="fileText" size={24} />
-              </div>
-              <h3>Nenhum documento crítico agora</h3>
-              <p>Quando um anexo vencer ou estiver perto de vencer, o alerta aparece aqui.</p>
-            </div>
+            <p className="text-muted">Nenhum documento crítico agora.</p>
           ) : (
-            <div className="snapshot-card-list">
-              {criticalAlerts.map(alert => (
-                <AlertCard
-                  key={alert.id}
-                  title={alert.title}
-                  subtitle={alert.documentType}
-                  statusLabel={alert.statusLabel}
-                  badgeClass={alert.status === 'EXPIRED' ? 'badge-red' : 'badge-gold'}
-                  dateLabel={formatDate(alert.expiresAt)}
-                />
-              ))}
-            </div>
+            criticalAlerts.map(alert => (
+              <AlertCard
+                key={alert.id}
+                title={alert.title}
+                subtitle={alert.documentType}
+                statusLabel={alert.statusLabel}
+                badgeClass={alert.status === 'EXPIRED' ? 'badge-red' : 'badge-gold'}
+                dateLabel={formatDate(alert.expiresAt)}
+              />
+            ))
           )}
-        </section>
 
-        <section className="card section-card dashboard-section-card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-title">Assinatura e financeiro</h2>
-              <p className="section-copy">Controle simples da fase de cortesia, vencimento e bloqueio.</p>
-            </div>
+          <Link to="/documentos" className="btn btn-ghost btn-sm">Abrir documentos</Link>
+        </DashboardDisclosure>
 
-            <Link to="/assinatura" className="btn btn-ghost btn-sm">
-              Abrir assinatura
-            </Link>
+        <DashboardDisclosure title="Operação" value={inventoryAlerts.length ? `${inventoryAlerts.length} alerta(s)` : 'Estável'}>
+          <div className="dashboard-module-stat-grid">
+            <ModuleStat label="Produtos" value={inventory?.totalProducts ?? 0} />
+            <ModuleStat label="Equipamentos" value={inventory?.totalEquipment ?? 0} />
+            <ModuleStat label="Alertas" value={inventoryAlerts.length} tone={inventoryAlerts.length ? 'attention' : 'neutral'} />
           </div>
 
+          {!inventoryAlerts.length ? (
+            <p className="text-muted">Nenhum alerta de estoque ou equipamento.</p>
+          ) : (
+            inventoryAlerts.map(item => (
+              <AlertCard
+                key={`${item.assetType}-${item.id}`}
+                title={item.name}
+                subtitle={item.assetType === 'PRODUCT' ? 'Produto' : 'Equipamento'}
+                statusLabel={item.statusLabel}
+                badgeClass={item.status === 'OVERDUE' ? 'badge-red' : 'badge-gold'}
+                dateLabel={item.assetType === 'PRODUCT'
+                  ? `Validade: ${formatDate(item.expiresAt)}`
+                  : `Manutenção: ${formatDate(item.maintenanceDueAt)}`}
+              />
+            ))
+          )}
+
+          <Link to="/produtos-e-equipamentos" className="btn btn-ghost btn-sm">Abrir módulo</Link>
+        </DashboardDisclosure>
+
+        <DashboardDisclosure title="Inteligência operacional" value={clinicalCriticalCount ? `${clinicalCriticalCount} crítico(s)` : 'Sem crítico'}>
+          <div className="dashboard-module-stat-grid">
+            <ModuleStat label="Sinais" value={clinicalInsights?.total ?? 0} />
+            <ModuleStat label="Críticos" value={clinicalCriticalCount} tone={clinicalCriticalCount ? 'attention' : 'neutral'} />
+            <ModuleStat label="Modo" value={clinicalInsights?.externalAiEnabled ? 'IA' : 'Regras'} />
+          </div>
+
+          {!clinicalInsightItems.length ? (
+            <p className="text-muted">Nenhum sinal operacional agora.</p>
+          ) : (
+            clinicalInsightItems.slice(0, 3).map(insight => (
+              <AlertCard
+                key={insight.id}
+                title={insight.title}
+                subtitle={insight.description}
+                statusLabel={getInsightPriorityLabel(insight.priority)}
+                badgeClass={getInsightBadgeClass(insight.priority)}
+                dateLabel={insight.actionLabel}
+              />
+            ))
+          )}
+
+          <div className="inline-tip inline-tip-gold">
+            <Icon name="shield" />
+            {clinicalInsights?.readiness?.message || 'Leitura de apoio, sempre com revisão da profissional.'}
+          </div>
+        </DashboardDisclosure>
+
+        <DashboardDisclosure title="Financeiro" value={billing.label}>
           <div className="detail-list">
             <div className="detail-row">
               <span>Status atual</span>
@@ -635,155 +650,8 @@ export default function Dashboard() {
               <strong>{formatDate(billingSnapshot?.blockAt)}</strong>
             </div>
           </div>
-
-          <div className="inline-tip inline-tip-gold">
-            <Icon name="clock" />
-            {nextAppointment
-              ? `Próximo atendimento às ${format(new Date(nextAppointment.startAt), 'HH:mm')}.`
-              : 'Nenhum atendimento próximo agendado.'}
-          </div>
-        </section>
-      </div>
-
-      <div className="overview-grid dashboard-overview-grid">
-        <section className="card section-card dashboard-section-card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-title">Produtos e equipamentos</h2>
-              <p className="section-copy">Acompanhe validade de produtos e manutenção de equipamentos com alertas antes do vencimento.</p>
-            </div>
-
-            <Link to="/produtos-e-equipamentos" className="btn btn-ghost btn-sm">
-              Abrir módulo
-            </Link>
-          </div>
-
-          <div className="documents-summary-grid compact-docs-grid">
-            <div className="mini-stat-card">
-              <span>Produtos</span>
-              <strong>{inventory?.totalProducts ?? 0}</strong>
-            </div>
-            <div className="mini-stat-card">
-              <span>Equipamentos</span>
-              <strong>{inventory?.totalEquipment ?? 0}</strong>
-            </div>
-            <div className="mini-stat-card mini-stat-card-alert">
-              <span>Alertas</span>
-              <strong>{inventoryAlerts.length}</strong>
-            </div>
-          </div>
-
-          {!inventoryAlerts.length ? (
-            <div className="empty empty-tight">
-              <div className="empty-icon">
-                <Icon name="box" size={24} />
-              </div>
-              <h3>Nenhum alerta de estoque ou equipamento</h3>
-              <p>Quando um produto ou equipamento se aproximar do vencimento, o aviso aparece aqui.</p>
-            </div>
-          ) : (
-            <div className="snapshot-card-list">
-              {inventoryAlerts.map(item => (
-                <AlertCard
-                  key={`${item.assetType}-${item.id}`}
-                  title={item.name}
-                  subtitle={item.assetType === 'PRODUCT' ? 'Produto' : 'Equipamento'}
-                  statusLabel={item.statusLabel}
-                  badgeClass={item.status === 'OVERDUE' ? 'badge-red' : 'badge-gold'}
-                  dateLabel={item.assetType === 'PRODUCT'
-                    ? `Validade: ${formatDate(item.expiresAt)}`
-                    : `Manutenção: ${formatDate(item.maintenanceDueAt)}`}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="card section-card dashboard-section-card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-title">Inteligencia operacional</h2>
-              <p className="section-copy">Sinais de estoque, equipamentos e anamnese gerados por regras auditaveis.</p>
-            </div>
-
-            <span className={clinicalInsights?.externalAiEnabled ? 'badge badge-green' : 'badge badge-muted'}>
-              {clinicalInsights?.externalAiEnabled ? 'IA externa ativa' : 'Regras auditaveis'}
-            </span>
-          </div>
-
-          <div className="documents-summary-grid compact-docs-grid">
-            <div className="mini-stat-card">
-              <span>Sinais</span>
-              <strong>{clinicalInsights?.total ?? 0}</strong>
-            </div>
-            <div className="mini-stat-card mini-stat-card-alert">
-              <span>Criticos</span>
-              <strong>{clinicalCriticalCount}</strong>
-            </div>
-            <div className="mini-stat-card">
-              <span>Modo</span>
-              <strong>{clinicalInsights?.externalAiEnabled ? 'IA' : 'Regras'}</strong>
-            </div>
-          </div>
-
-          {!clinicalInsightItems.length ? (
-            <div className="empty empty-tight">
-              <div className="empty-icon">
-                <Icon name="sparkles" size={24} />
-              </div>
-              <h3>Nenhum sinal operacional agora</h3>
-              <p>Quando houver risco em anamnese, estoque ou equipamento, o painel destaca aqui sem gerar diagnostico automatico.</p>
-            </div>
-          ) : (
-            <div className="snapshot-card-list">
-              {clinicalInsightItems.slice(0, 3).map(insight => (
-                <AlertCard
-                  key={insight.id}
-                  title={insight.title}
-                  subtitle={insight.description}
-                  statusLabel={getInsightPriorityLabel(insight.priority)}
-                  badgeClass={getInsightBadgeClass(insight.priority)}
-                  dateLabel={insight.actionLabel}
-                />
-              ))}
-            </div>
-          )}
-
-          <div className="inline-tip inline-tip-gold">
-            <Icon name="shield" />
-            {clinicalInsights?.readiness?.message || 'Leitura de apoio, sempre com revisao da profissional.'}
-          </div>
-        </section>
-
-        <section className="card section-card dashboard-section-card">
-          <div className="section-head">
-            <div>
-              <h2 className="section-title">Próximos agendamentos</h2>
-              <p className="section-copy">Acompanhe os atendimentos mais próximos com leitura rápida.</p>
-            </div>
-
-            <Link to="/agendamentos" className="btn btn-ghost btn-sm">
-              Ver agenda completa
-            </Link>
-          </div>
-
-          {!data?.upcoming?.length ? (
-            <div className="empty empty-tight">
-              <div className="empty-icon">
-                <Icon name="calendar" size={24} />
-              </div>
-              <h3>Nenhum agendamento próximo</h3>
-              <p>Quando sua agenda receber novos atendimentos, eles aparecerão aqui.</p>
-            </div>
-          ) : (
-            <div className="snapshot-card-list">
-              {data.upcoming.slice(0, 4).map(appointment => (
-                <UpcomingCard key={appointment.id} appointment={appointment} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+        </DashboardDisclosure>
+      </section>
 
       {brandingOpen ? (
         <div className="modal-backdrop" onClick={event => event.target === event.currentTarget && setBrandingOpen(false)}>
