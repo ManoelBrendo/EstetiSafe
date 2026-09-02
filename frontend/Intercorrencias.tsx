@@ -167,6 +167,8 @@ export default function Intercorrencias() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [loadingDetailId, setLoadingDetailId] = useState<Identifier | null>(null)
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<Identifier>>(() => new Set())
 
   const metrics = useMemo(() => {
     const withEdits = items.filter(item => Number(item.editsCount || 0) > 0).length
@@ -316,6 +318,18 @@ export default function Intercorrencias() {
     setAppliedFilters(emptyFilters)
   }
 
+  function toggleExpanded(id: Identifier) {
+    setExpandedIds(current => {
+      const next = new Set(current)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="page intercurrences-page">
       <div className="page-header">
@@ -330,23 +344,6 @@ export default function Intercorrencias() {
         </button>
       </div>
 
-      <section className="intercurrences-hero card">
-        <div>
-          <span className="eyebrow">Histórico profissional seguro</span>
-          <h2 className="section-title">Registro clínico com rastreabilidade de edição.</h2>
-          <p className="section-copy">
-            Cada registro fica vinculado a cliente, procedimento e profissional responsável. Edições exigem justificativa e ficam salvas em histórico.
-          </p>
-        </div>
-        <div className="intercurrences-hero-lock">
-          <Icon name="shield" size={22} />
-          <div>
-            <strong>Sem exclusão rápida</strong>
-            <span>Intercorrências são documentos de histórico clínico e não possuem ação de apagar nesta tela.</span>
-          </div>
-        </div>
-      </section>
-
       <section className="intercurrences-overview" aria-label="Resumo de intercorrências">
         {metrics.map(metric => (
           <article className="intercurrence-metric" key={metric.label}>
@@ -360,10 +357,20 @@ export default function Intercorrencias() {
       <section className="card intercurrences-filter-card">
         <div className="section-head">
           <div>
-            <h2 className="section-title">Consulta posterior</h2>
-            <p className="section-copy">Busque por cliente, data, procedimento ou profissional responsável.</p>
+            <h2 className="section-title">Consulta</h2>
+            <p className="section-copy">Encontre registros por cliente, procedimento, conduta ou responsável.</p>
           </div>
-          {hasActiveFilters ? <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>Limpar filtros</button> : null}
+          <div className="intercurrences-filter-actions">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowAdvancedFilters(current => !current)}
+              aria-expanded={showAdvancedFilters}
+            >
+              <Icon name="search" /> Filtros avançados
+            </button>
+            {hasActiveFilters ? <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>Limpar</button> : null}
+          </div>
         </div>
 
         <form className="intercurrences-filter-panel" onSubmit={applyFilters}>
@@ -377,6 +384,7 @@ export default function Intercorrencias() {
             </button>
           </div>
 
+          {showAdvancedFilters ? (
           <div className="intercurrences-filter-secondary" aria-label="Filtros refinados de intercorrências">
             <label className="form-field">
               <span>Cliente</span>
@@ -405,6 +413,7 @@ export default function Intercorrencias() {
               <input type="date" name="dateTo" value={filters.dateTo} onChange={handleFilterChange} />
             </label>
           </div>
+          ) : null}
         </form>
       </section>
 
@@ -421,36 +430,66 @@ export default function Intercorrencias() {
           <div className="loading-page loading-page-inline"><span className="spinner" /> Carregando intercorrências...</div>
         ) : items.length ? (
           <div className="intercurrence-card-list">
-            {items.map(item => (
-              <article className="intercurrence-card" key={item.id}>
-                <div className="intercurrence-card-main">
-                  <div className="intercurrence-card-head">
-                    <div>
-                      <span className="intercurrence-date">{formatDateTime(item.occurredAt)}</span>
-                      <h3>{item.procedureName}</h3>
-                    </div>
+            {items.map(item => {
+              const isExpanded = expandedIds.has(item.id)
+              return (
+                <article className="intercurrence-card" key={item.id}>
+                  <div className="intercurrence-card-topline">
+                    <span className="intercurrence-date">{formatDateTime(item.occurredAt)}</span>
                     <span className={item.editsCount ? 'badge badge-gold' : 'badge badge-green'}>
-                      {item.editsCount ? pluralize(item.editsCount, 'edição registrada', 'edições registradas') : 'Registro original'}
+                      {item.editsCount ? pluralize(item.editsCount, 'edição', 'edições') : 'Original'}
                     </span>
                   </div>
-                  <div className="intercurrence-meta-row">
-                    <span><Icon name="users" size={14} /> {getClientName(item)}</span>
-                    <span><Icon name="person" size={14} /> {item.professionalName}</span>
-                    <span><Icon name="clock" size={14} /> Criado em {formatDateTime(item.createdAt)}</span>
+
+                  <div className="intercurrence-card-summary">
+                    <div className="intercurrence-card-title">
+                      <h3>{item.procedureName}</h3>
+                      <span>{getClientName(item)}</span>
+                    </div>
+                    <div className="intercurrence-card-owner">
+                      <Icon name="person" size={14} />
+                      <span>{item.professionalName}</span>
+                    </div>
                   </div>
-                  <p>{item.description}</p>
-                  <div className="intercurrence-conduct">
-                    <strong>Conduta adotada</strong>
-                    <span>{item.conduct}</span>
+
+                  <p className="intercurrence-description-preview">{item.description}</p>
+
+                  {isExpanded ? (
+                    <div className="intercurrence-detail-panel">
+                      <div className="intercurrence-detail-grid">
+                        <div>
+                          <strong>Conduta adotada</strong>
+                          <p>{item.conduct}</p>
+                        </div>
+                        <div>
+                          <strong>Observações</strong>
+                          <p>{item.notes?.trim() || 'Sem observações adicionais.'}</p>
+                        </div>
+                      </div>
+                      <div className="intercurrence-audit-line">
+                        <span><Icon name="clock" size={14} /> Criado em {formatDateTime(item.createdAt)}</span>
+                        <span>Atualizado em {formatDateTime(item.updatedAt || item.createdAt)}</span>
+                        <span>{item.createdByEmail || 'Responsável não informado'}</span>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="intercurrence-card-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm intercurrence-detail-toggle"
+                      onClick={() => toggleExpanded(item.id)}
+                      aria-expanded={isExpanded}
+                    >
+                      <Icon name="chevron" /> {isExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}
+                    </button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => void openEdit(item)} disabled={loadingDetailId === item.id}>
+                      {loadingDetailId === item.id ? <span className="spinner" /> : <><Icon name="edit" /> Editar com histórico</>}
+                    </button>
                   </div>
-                </div>
-                <div className="intercurrence-card-actions">
-                  <button type="button" className="btn btn-outline btn-sm" onClick={() => void openEdit(item)} disabled={loadingDetailId === item.id}>
-                    {loadingDetailId === item.id ? <span className="spinner" /> : <><Icon name="edit" /> Editar com histórico</>}
-                  </button>
-                </div>
-              </article>
-            ))}
+                </article>
+              )
+            })}
           </div>
         ) : (
           <div className="empty empty-tight">
@@ -558,7 +597,7 @@ export default function Intercorrencias() {
 
             <div className="inline-tip inline-tip-gold">
               <Icon name="shield" />
-              Intercorrências ficam vinculadas ao prontuário. Não há exclusão rápida, e edições exigem justificativa.
+              Registro vinculado ao prontuário, sem exclusão rápida e com justificativa obrigatória em edições.
             </div>
 
             <div className="modal-footer">

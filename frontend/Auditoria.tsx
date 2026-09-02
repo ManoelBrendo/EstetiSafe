@@ -969,7 +969,10 @@ function AuditProgressiveSection({
         </div>
         <div className="audit-progressive-summary-meta">
           {badge ? <span className={badgeClass}>{badge}</span> : null}
-          <span className="audit-progressive-toggle"><Icon name="chevron" size={16} /></span>
+          <span className="audit-progressive-action">
+            <span className="audit-progressive-action-text" aria-hidden="true" />
+            <span className="audit-progressive-toggle"><Icon name="chevron" size={16} /></span>
+          </span>
         </div>
       </summary>
       <div className="audit-progressive-body">
@@ -993,17 +996,23 @@ function AuditEvent({ log }: { log: AuditLogItem }) {
           </div>
           <span className={`audit-severity audit-severity-${severity.toLowerCase()}`}>{severityLabels[severity]}</span>
         </div>
-        <p>{formatAuditText(log.description) || 'Registro auditável criado para rastreabilidade da operação.'}</p>
         <div className="audit-event-meta">
           <span><Icon name="person" size={14} /> {formatActor(log)}</span>
           <span><Icon name="clock" size={14} /> {formatDateTime(log.createdAt)}</span>
           <span><Icon name="fileText" size={14} /> {log.entityType || 'Sistema'}{log.entityId ? ` #${log.entityId}` : ''}</span>
         </div>
-        {metadata.length ? (
-          <div className="audit-metadata-grid">
-            {metadata.map(item => <span key={`${log.id}-${item.key}`}><strong>{item.key}</strong>{item.value}</span>)}
-          </div>
-        ) : null}
+        <details className="audit-inline-details">
+          <summary>
+            <span>Ver contexto auditável</span>
+            <Icon name="chevron" size={14} />
+          </summary>
+          <p>{formatAuditText(log.description) || 'Registro auditável criado para rastreabilidade da operação.'}</p>
+          {metadata.length ? (
+            <div className="audit-metadata-grid">
+              {metadata.map(item => <span key={`${log.id}-${item.key}`}><strong>{item.key}</strong>{item.value}</span>)}
+            </div>
+          ) : null}
+        </details>
       </div>
     </article>
   )
@@ -1101,12 +1110,18 @@ function DocumentRow({ row, loadingFileId, onDownload }: {
             <span className={importance.className}>{importance.label}</span>
           </div>
         </div>
-        <p>{row.description}</p>
-        <div className="audit-document-meta">
-          <span><Icon name="clock" size={14} /> Atualizado: {formatDateTime(row.updatedAt)}</span>
-          <span><Icon name="calendar" size={14} /> Vencimento: {formatDate(row.expiresAt)}</span>
-          {row.fileName ? <span><Icon name="clip" size={14} /> {row.fileName}</span> : null}
-        </div>
+        <details className="audit-inline-details audit-document-inline-details">
+          <summary>
+            <span>Detalhes e validade</span>
+            <Icon name="chevron" size={14} />
+          </summary>
+          <p>{row.description}</p>
+          <div className="audit-document-meta">
+            <span><Icon name="clock" size={14} /> Atualizado: {formatDateTime(row.updatedAt)}</span>
+            <span><Icon name="calendar" size={14} /> Vencimento: {formatDate(row.expiresAt)}</span>
+            {row.fileName ? <span><Icon name="clip" size={14} /> {row.fileName}</span> : null}
+          </div>
+        </details>
       </div>
       <div className="audit-document-actions">
         {row.document ? (
@@ -1131,12 +1146,18 @@ function SensitiveCard({ item }: { item: ReturnType<typeof buildSensitiveCards>[
         <div className="audit-sensitive-icon"><Icon name={item.priority ? 'signature' : 'shield'} size={18} /></div>
         <div><span>{categoryLabel(item.category)}</span><h3>{item.title}</h3></div>
       </div>
-      <p>{item.description}</p>
       <div className="audit-sensitive-meta">
         <span className={status.className}>{item.statusLabel}</span>
         <span className={importance.className}>{importance.label}</span>
       </div>
-      <small>{item.evidence}</small>
+      <details className="audit-inline-details">
+        <summary>
+          <span>Ver evidência</span>
+          <Icon name="chevron" size={14} />
+        </summary>
+        <p>{item.description}</p>
+        <small>{item.evidence}</small>
+      </details>
     </article>
   )
 }
@@ -1236,7 +1257,6 @@ function AuditCorrectiveTaskCard({
       <div className="audit-corrective-main">
         <span>{task.domainTitle}</span>
         <strong>{task.label}</strong>
-        <small>{task.evidence}</small>
       </div>
       <div className="audit-corrective-meta">
         <span><Icon name="person" size={14} /> {task.owner}</span>
@@ -1246,6 +1266,13 @@ function AuditCorrectiveTaskCard({
         </span>
         <span className="audit-corrective-state"><Icon name={task.status === 'DONE' ? 'check' : 'clock'} size={14} /> {status.label}</span>
       </div>
+      <details className="audit-inline-details audit-corrective-evidence-details">
+        <summary>
+          <span>Justificativa e evidência esperada</span>
+          <Icon name="chevron" size={14} />
+        </summary>
+        <p>{task.evidence}</p>
+      </details>
       <div className="audit-corrective-actions">
         <button
           className="btn btn-outline btn-sm"
@@ -1985,8 +2012,8 @@ export default function Auditoria() {
 
     return next
   }, [correctiveLogs])
-  const primaryCorrectiveTasks = visibleCorrectiveTasks.slice(0, 3)
-  const secondaryCorrectiveTasks = visibleCorrectiveTasks.slice(3)
+  const primaryCorrectiveTasks = visibleCorrectiveTasks.slice(0, 2)
+  const secondaryCorrectiveTasks = visibleCorrectiveTasks.slice(2)
   const correctiveFilterOptions: Array<{ value: CorrectiveStatusFilter; label: string; count: number }> = [
     { value: 'ALL', label: 'Todas', count: correctiveTasks.length },
     { value: 'OPEN', label: 'Pendentes', count: openCorrectiveCount },
@@ -2018,6 +2045,11 @@ export default function Auditoria() {
     () => professionalDocsSummary.alerts.slice(0, 4),
     [professionalDocsSummary.alerts],
   )
+  const anvisaConformeCount = anvisaChecklistItems.filter(item => {
+    const action = auditCorrectiveActionByKey.get(item.id)
+    return !action || action.status === 'DONE' || action.status === 'DISMISSED'
+  }).length
+  const anvisaNonConformeCount = anvisaChecklistItems.length - anvisaConformeCount
 
   const metrics = [
     { label: 'Conformidade', value: `${executiveScore}%`, copy: 'Score executivo cruzando documentos, operação, equipe e pagamentos.', tone: 'gold' },
@@ -2300,89 +2332,75 @@ export default function Auditoria() {
     <div className="audit-page ux-compact-page">
       <section className="audit-hero-card audit-document-hero">
         <div className="audit-hero-copy">
-          <span className="eyebrow">Auditoria executiva da clínica</span>
-          <h1>Um radar único para regularidade, segurança e prontidão operacional.</h1>
-          <p>Documentos, consentimentos, produtos, equipamentos, equipe, serviços e pagamentos agora aparecem juntos para mostrar risco, prioridade e próxima ação.</p>
+          <h1>Regularidade, risco e próxima ação.</h1>
           <div className="audit-hero-actions">
             <Link className="btn btn-primary" to="/documentos"><Icon name="fileText" /> Gerenciar documentos</Link>
             <button className="btn btn-secondary" type="button" onClick={() => void loadAuditData()} disabled={loading}>{loading ? <span className="spinner" /> : <Icon name="refresh" size={16} />} Atualizar auditoria</button>
             <button className="btn btn-outline" type="button" onClick={handlePrintReport}><Icon name="download" /> Exportar relatório</button>
           </div>
         </div>
-        <div className="audit-hero-status audit-hero-visual audit-hero-score-card audit-control-panel" aria-label="Resumo visual da auditoria executiva">
-          <div className="audit-control-topline">
-            <div className="audit-control-brand">
-              <span className="audit-control-brand-mark"><img src={brandLogo} alt="Selo L'Appui" /></span>
-              <span>Controle executivo</span>
-            </div>
-            <span className={criticalDomainCount ? 'audit-control-state is-warning' : 'audit-control-state is-safe'}>
-              {loading ? 'Sincronizando' : criticalDomainCount ? 'Priorizar' : 'Em ordem'}
-            </span>
+        <aside className="audit-command-card" aria-label="Resumo executivo compacto da auditoria">
+          <div>
+            <span>Conformidade</span>
+            <strong>{executiveScore}%</strong>
           </div>
-
-          <div className="audit-control-main">
-            <span>Conformidade executiva</span>
-            <div className="audit-score-ring" style={{ '--score': `${executiveScore}%` } as React.CSSProperties}>
-              <strong>{executiveScore}%</strong>
-              <span>Geral</span>
-            </div>
-            <p style={{ marginTop: '16px' }}>{loading ? 'Buscando evidências da operação...' : priorityDomain ? `${priorityDomain.title}: ${priorityDomain.metric}.` : 'Nenhuma prioridade operacional agora.'}</p>
+          <span className={criticalDomainCount ? 'audit-control-state is-warning' : 'audit-control-state is-safe'}>
+            {loading ? 'Sincronizando' : criticalDomainCount ? 'Priorizar' : 'Em ordem'}
+          </span>
+          <div className="audit-command-stats" aria-label="Indicadores executivos rápidos">
+            <span><strong>{criticalDomainCount}</strong> Críticas</span>
+            <span><strong>{warningDomainCount}</strong> Atenção</span>
+            <span><strong>{okDomainCount}</strong> Em dia</span>
           </div>
-
-          <div className="audit-control-stats" aria-label="Indicadores executivos rápidos">
-            <div><strong>{criticalDomainCount}</strong><span>Críticas</span></div>
-            <div><strong>{warningDomainCount}</strong><span>Atenção</span></div>
-            <div><strong>{okDomainCount}</strong><span>Em dia</span></div>
-          </div>
-
-          <div className="audit-control-footer">
-            <Icon name="shield" size={16} />
-            <span>{criticalDomainCount ? 'Ações prioritárias organizadas abaixo.' : 'Sem urgências executivas no momento.'}</span>
-          </div>
-        </div>
-      </section>
-
-      <section className="audit-overview-strip audit-document-overview" aria-label="Resumo geral da auditoria">
-        {metrics.map(metric => <Metric key={metric.label} {...metric} />)}
+        </aside>
       </section>
 
       <section className="audit-executive-dossier card" aria-label="Dossiê executivo da auditoria">
         <div className="audit-executive-dossier-main">
           <div className="section-head">
             <div>
-              <span className="eyebrow">Dossiê executivo</span>
-              <h2 className="section-title">Prontidão, risco e comprovação em uma leitura</h2>
-              <p className="section-copy">Resumo para decisão da gestão, conectando prioridade operacional, plano corretivo, evidências anexadas e trilha auditável.</p>
+              <h2 className="section-title">Essencial para decisão</h2>
             </div>
             <span className={criticalDomainCount ? 'badge badge-red' : warningDomainCount ? 'badge badge-gold' : 'badge badge-green'}>
               {executiveDossierStatus}
             </span>
           </div>
 
-          <div className="audit-executive-dossier-grid">
-            {executiveDossierMetrics.map(item => (
-              <article className="audit-executive-dossier-metric" key={item.label}>
-                <span className="audit-executive-dossier-icon"><Icon name={item.icon} size={16} /></span>
-                <div>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  <small>{item.copy}</small>
-                </div>
-              </article>
-            ))}
-          </div>
+          <details className="audit-executive-metrics-details">
+            <summary>
+              <span>Indicadores do dossiê</span>
+              <strong>{executiveDossierMetrics.length}</strong>
+              <Icon name="chevron" size={14} />
+            </summary>
+            <div className="audit-executive-dossier-grid">
+              {executiveDossierMetrics.map(item => (
+                <article className="audit-executive-dossier-metric" key={item.label}>
+                  <span className="audit-executive-dossier-icon"><Icon name={item.icon} size={16} /></span>
+                  <div>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    <small>{item.copy}</small>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </details>
         </div>
 
         <aside className="audit-executive-next-card">
-          <span className="eyebrow">Próxima ação</span>
           {nextExecutiveTask ? (
             <>
               <h3>{nextExecutiveTask.label}</h3>
-              <p>{nextExecutiveTask.evidence}</p>
+              <details className="audit-inline-details">
+                <summary>
+                  <span>Por que agir</span>
+                  <Icon name="chevron" size={14} />
+                </summary>
+                <p>{nextExecutiveTask.evidence}</p>
+              </details>
               <div className="audit-executive-next-meta">
                 <span><Icon name="person" size={14} /> {nextExecutiveTask.owner}</span>
                 <span><Icon name="clock" size={14} /> {nextExecutiveTask.due}</span>
-                <span className={riskMeta[nextExecutiveTask.level].className}>{riskMeta[nextExecutiveTask.level].label}</span>
               </div>
               <div className="audit-executive-next-actions">
                 <a className="btn btn-primary btn-sm" href="#audit-corrective-plan">Ver plano</a>
@@ -2399,7 +2417,13 @@ export default function Auditoria() {
         </aside>
 
         {executiveDossierTasks.length ? (
-          <div className="audit-executive-action-strip" aria-label="Prioridades executivas">
+          <details className="audit-executive-priority-details">
+            <summary>
+              <span>Ver prioridades executivas</span>
+              <strong>{executiveDossierTasks.length}</strong>
+              <Icon name="chevron" size={14} />
+            </summary>
+            <div className="audit-executive-action-strip" aria-label="Prioridades executivas">
             {executiveDossierTasks.map(task => (
               <a className="audit-executive-action-item" href="#audit-corrective-plan" key={`dossier-task-${task.id}`}>
                 <span>{riskMeta[task.level].label}</span>
@@ -2407,7 +2431,8 @@ export default function Auditoria() {
                 <small>{task.owner} · {task.due}</small>
               </a>
             ))}
-          </div>
+            </div>
+          </details>
         ) : null}
       </section>
 
@@ -2636,18 +2661,14 @@ export default function Auditoria() {
         </section>
       </section>
 
-      <section className="audit-team-documents-card card" aria-label="Auditoria documental da equipe">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">Equipe e conformidade</span>
-            <h2 className="section-title">Documentos profissionais sob controle</h2>
-            <p className="section-copy">Leitura por profissional para priorizar contrato, certificação, conselho, treinamento e autorização sem abrir várias telas.</p>
-          </div>
-          <span className={professionalDocsSummary.missingCount || professionalDocsSummary.expired ? 'badge badge-rose' : 'badge badge-green'}>
-            {professionalDocsSummary.complianceScore || 0}% de cobertura
-          </span>
-        </div>
-
+      <AuditProgressiveSection
+        className="audit-team-documents-card"
+        eyebrow="Equipe e conformidade"
+        title="Documentos profissionais sob controle"
+        copy="Leitura por profissional para priorizar contrato, certificação, conselho, treinamento e autorização sem abrir várias telas."
+        badge={`${professionalDocsSummary.complianceScore || 0}% de cobertura`}
+        badgeClass={professionalDocsSummary.missingCount || professionalDocsSummary.expired ? 'badge badge-rose' : 'badge badge-green'}
+      >
         <div className="audit-team-document-status-grid">
           <div className={['audit-team-document-status', professionalDocumentBuckets.critical.length ? 'is-critical' : 'is-ok'].join(' ')}>
             <span>Prioridade alta</span>
@@ -2708,25 +2729,17 @@ export default function Auditoria() {
             ))}
           </div>
         ) : null}
-      </section>
+      </AuditProgressiveSection>
 
-      <section className="audit-checklist-card card" id="audit-anvisa-checklist">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">Conformidade Sanitária</span>
-            <h2 className="section-title">Checklist de Conformidade ANVISA</h2>
-            <p className="section-copy">
-              Controle de descarte de resíduos, higienização de cabines e rotina de esterilização. Itens não conformes geram tarefas corretivas automaticamente.
-            </p>
-          </div>
-          <span className="badge badge-muted">
-            {anvisaChecklistItems.filter(item => {
-              const action = auditCorrectiveActionByKey.get(item.id)
-              return !action || action.status === 'DONE' || action.status === 'DISMISSED'
-            }).length} de {anvisaChecklistItems.length} conformes
-          </span>
-        </div>
-
+      <AuditProgressiveSection
+        className="audit-checklist-card"
+        id="audit-anvisa-checklist"
+        eyebrow="Conformidade Sanitária"
+        title="Checklist de Conformidade ANVISA"
+        copy="Controle de descarte de resíduos, higienização de cabines e rotina de esterilização. Itens não conformes geram tarefas corretivas automaticamente."
+        badge={`${anvisaConformeCount} de ${anvisaChecklistItems.length} conformes`}
+        badgeClass={anvisaNonConformeCount ? 'badge badge-red' : 'badge badge-green'}
+      >
         <div className="audit-checklist-grid">
           {['Descarte de Resíduos', 'Higienização de Cabines', 'Rotina de Esterilização'].map(category => {
             const items = anvisaChecklistItems.filter(x => x.category === category)
@@ -2791,17 +2804,16 @@ export default function Auditoria() {
             )
           })}
         </div>
-      </section>
+      </AuditProgressiveSection>
 
-      <section className="audit-corrective-plan card" id="audit-corrective-plan">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">Plano corretivo</span>
-            <h2 className="section-title">Ações com responsável e prazo</h2>
-            <p className="section-copy">Resumo operacional das tarefas que nasceram do radar, priorizadas por risco e prontas para execução.</p>
-          </div>
-          <span className="badge badge-muted">{completedCorrectiveCount}/{correctiveTasks.length} concluída(s)</span>
-        </div>
+      <AuditProgressiveSection
+        className="audit-corrective-plan"
+        id="audit-corrective-plan"
+        eyebrow="Plano corretivo"
+        title="Ações com responsável e prazo"
+        copy="Resumo operacional das tarefas que nasceram do radar, priorizadas por risco e prontas para execução."
+        badge={`${completedCorrectiveCount}/${correctiveTasks.length} concluída(s)`}
+      >
         <div className="audit-corrective-toolbar" aria-label="Filtros do plano corretivo">
           {correctiveFilterOptions.map(option => (
             <button
@@ -2866,7 +2878,7 @@ export default function Auditoria() {
             </details>
           ) : null}
         </div>
-      </section>
+      </AuditProgressiveSection>
 
       <AuditProgressiveSection
         className="audit-executive-radar"
@@ -2962,14 +2974,6 @@ export default function Auditoria() {
         badge={`${logsTotal} eventos`}
       >
       <section className="audit-event-list" aria-live="polite">
-        <div className="section-head" style={{ borderBottom: '1px solid rgba(182, 137, 77, 0.1)', paddingBottom: '12px', marginBottom: '16px' }}>
-          <div>
-            <span className="eyebrow">Rastreabilidade</span>
-            <h2 className="section-title">Eventos recentes da auditoria</h2>
-            <p className="section-copy">Histórico técnico permanece disponível para comprovar acessos, geração de PDFs, consentimentos e ações sensíveis.</p>
-          </div>
-        </div>
-
         <div className="audit-logs-filter-bar card">
           <div className="form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
             <div className="form-group">
